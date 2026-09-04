@@ -1,13 +1,14 @@
 """
 Interactive curses-based terminal user interface (TUI) for:
 1. Device selection menu navigation.
-2. FZF-style live fuzzy song searching and interactive selection.
+2. FZF-style live fuzzy song searching and interactive selection with technical audio specs.
 """
 import sys
 import os
 import curses
 from typing import List, Dict, Any, Optional
 import fuzzy_matcher
+import audio_metadata
 
 def run_with_tty(func, *args, **kwargs):
     """
@@ -33,6 +34,7 @@ def run_with_tty(func, *args, **kwargs):
         if tty_fd is not None:
             tty_fd.close()
 
+
 def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]:
     """
     Interactive TUI menu for choosing an ADB device using arrow keys / Enter.
@@ -47,7 +49,6 @@ def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]
         stdscr.keypad(True)
         current_row = 0
 
-        # Color pairs
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN) # Highlight
         curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK) # Header
 
@@ -78,9 +79,9 @@ def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]
             stdscr.refresh()
 
             key = stdscr.getch()
-            if key == curses.KEY_UP or key == ord('k'):
+            if key in (curses.KEY_UP, ord('k')):
                 current_row = (current_row - 1) % len(devices)
-            elif key == curses.KEY_DOWN or key == ord('j'):
+            elif key in (curses.KEY_DOWN, ord('j')):
                 current_row = (current_row + 1) % len(devices)
             elif key in (10, 13): # Enter
                 return devices[current_row]
@@ -92,20 +93,19 @@ def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]
 
 def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected Device") -> Optional[Dict[str, Any]]:
     """
-    Interactive fzf-style song search UI with live fuzzy filtering, counter, and preview.
+    Interactive fzf-style song search UI with live fuzzy filtering, counter, technical metadata, and preview.
     """
     def _search(stdscr):
         curses.curs_set(1) # Show cursor for prompt
         stdscr.keypad(True)
 
-        # Enable color support
         curses.start_color()
         curses.use_default_colors()
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)   # Selected row
         curses.init_pair(2, curses.COLOR_YELLOW, -1)                # Header & prompt symbol
         curses.init_pair(3, curses.COLOR_GREEN, -1)                 # Song title
         curses.init_pair(4, curses.COLOR_CYAN, -1)                  # Artist
-        curses.init_pair(5, curses.COLOR_MAGENTA, -1)               # Duration / Details
+        curses.init_pair(5, curses.COLOR_MAGENTA, -1)               # Specs / Details
 
         query = ""
         filtered_songs = songs
@@ -116,7 +116,7 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
             stdscr.clear()
             height, width = stdscr.getmaxyx()
 
-            if height < 4 or width < 20:
+            if height < 6 or width < 20:
                 stdscr.addstr(0, 0, "Terminal window too small!")
                 stdscr.refresh()
                 key = stdscr.getch()
@@ -135,13 +135,14 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
             stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
             stdscr.addstr(1, 0, prompt)
             stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
-            
+
             query_display = query[:width - len(prompt) - 1]
             stdscr.addstr(1, len(prompt), query_display)
 
-            # Calculate printable list area (Row 3 to height-2)
+            # Calculate printable list area vs metadata preview bar
+            preview_height = 2
             list_start_y = 3
-            list_height = height - list_start_y - 1
+            list_height = height - list_start_y - preview_height - 1
 
             if list_height < 1:
                 list_height = 1
@@ -166,17 +167,36 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
                 album = song.get("album") or ""
                 duration = song.get("duration_formatted") or "00:00"
 
-                # Format line display
                 line_str = f"{item_idx + 1:4d}. {title} - {artist} [{album}] ({duration})"
                 line_str = line_str[:width - 2]
 
                 if item_idx == selected_idx:
-                    # Highlight selected row
                     stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
                     stdscr.addstr(row_y, 0, line_str.ljust(width - 1))
                     stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
                 else:
                     stdscr.addstr(row_y, 0, line_str)
+
+            # Draw Technical Audio Specs Preview Bar for selected item
+            if filtered_songs and 0 <= selected_idx < len(filtered_songs):
+                sel_song = filtered_songs[selected_idx]
+                data_path = sel_song.get("_data") or ""
+                mime = sel_song.get("mime_type") or "audio"
+                size = sel_song.get("size_formatted") or ""
+
+                # Extract local metadata if file is local
+                if data_path and os.path.exists(data_path):
+                    meta = audio_metadata.extract_audio_metadata(data_path)
+                    specs_line = f" [AUDIO SPECS] Codec: {meta['codec']} | Bitrate: {meta['bitrate']} | Sample Rate: {meta['sample_rate']} | {meta['channels']}"
+                else:
+                    specs_line = f" [TRACK SPECS] Format: {mime} | Size: {size} | Path: {data_path}"
+
+                preview_y = height - preview_height - 1
+                stdscr.attron(curses.color_pair(5))
+                stdscr.addstr(preview_y, 0, specs_line[:width-1].ljust(width-1))
+                if data_path:
+                    stdscr.addstr(preview_y + 1, 0, f" Path: {data_path}"[:width-1].ljust(width-1))
+                stdscr.attroff(curses.color_pair(5))
 
             # Footer / Status bar (Bottom row)
             footer = " [UP/DN] Navigate | [ENTER] Select | [ESC/Ctrl+C] Quit "
@@ -193,7 +213,6 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
 
             stdscr.refresh()
 
-            # Read user key input
             try:
                 key = stdscr.getch()
             except KeyboardInterrupt:
@@ -205,10 +224,10 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
                 if filtered_songs and 0 <= selected_idx < len(filtered_songs):
                     return filtered_songs[selected_idx]
                 return None
-            elif key in (curses.KEY_UP, 16): # Up arrow or Ctrl+P
+            elif key in (curses.KEY_UP, 16, ord('k')):
                 if selected_idx > 0:
                     selected_idx -= 1
-            elif key in (curses.KEY_DOWN, 14): # Down arrow or Ctrl+N
+            elif key in (curses.KEY_DOWN, 14, ord('j')):
                 if selected_idx < len(filtered_songs) - 1:
                     selected_idx += 1
             elif key == curses.KEY_PPAGE: # Page Up

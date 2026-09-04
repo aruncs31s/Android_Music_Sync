@@ -1,5 +1,6 @@
 """
-Reverse Synchronization Module (ADB Device -> Local Directory) with Redis caching and Ranger TUI support.
+Reverse Synchronization Module (ADB Device -> Local Directory) with Redis caching,
+SQLite Hide List database filtering, and Ranger TUI support.
 
 Queries songs present on connected ADB device, compares with local music folder (/home/aruncs/Music),
 identifies songs on the device that do not exist locally, and pulls them via ADB.
@@ -16,6 +17,7 @@ import syncer
 import fuzzy_matcher
 import redis_cache
 import ranger_reverse_sync_tui
+import hide_list_db
 
 
 def normalize_string(s: str) -> str:
@@ -47,12 +49,16 @@ def get_local_music_files(
 
 def compare_device_with_local(
     device_songs: List[Dict[str, Any]],
-    local_files: List[Dict[str, str]]
+    local_files: List[Dict[str, str]],
+    show_hidden: bool = False
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Compare device songs with local files.
+    Includes SQLite Hide List filtering.
     Returns: (already_local_list, missing_locally_list)
     """
+    hidden_set = hide_list_db.get_hidden_paths_set() if not show_hidden else set()
+
     local_norm_set = set()
     for f in local_files:
         local_norm_set.add(normalize_string(f["title_no_ext"]))
@@ -65,6 +71,11 @@ def compare_device_with_local(
         title = song.get("title") or ""
         display = song.get("_display_name") or ""
         remote_path = song.get("_data") or ""
+
+        # Skip if remote path or title is in SQLite hide list
+        if not show_hidden:
+            if remote_path in hidden_set or title in hidden_set or display in hidden_set:
+                continue
 
         norm_t = normalize_string(title)
         norm_d = normalize_string(display)
@@ -85,16 +96,18 @@ def run_reverse_sync_workflow(
     auto_confirm: bool = False,
     interactive: bool = False,
     redis_cfg: Optional[Dict[str, Any]] = None,
-    refresh_cache: bool = False
+    refresh_cache: bool = False,
+    show_hidden: bool = False
 ):
     """
     Main Reverse Sync workflow:
     1. Select ADB device.
     2. Query device MediaStore songs (fully cached in Redis).
     3. Scan local folder (/home/aruncs/Music) (fully cached in Redis).
-    4. Categorize songs into Already Local vs Missing Locally.
-    5. If interactive (-i), launch Ranger-style Dual-Pane Reverse Sync TUI.
-    6. Else, prompt and pull missing songs from device to local_dir.
+    4. Filter out SQLite hidden files unless show_hidden=True.
+    5. Categorize songs into Already Local vs Missing Locally.
+    6. If interactive (-i), launch Ranger-style Dual-Pane Reverse Sync TUI (with 'h' key SQLite hiding).
+    7. Else, prompt and pull missing songs from device to local_dir.
     """
     print(f"\n======================================================================", file=sys.stderr)
     print(f"               REVERSE SYNCHRONIZER (ADB -> Local)                   ", file=sys.stderr)
@@ -142,8 +155,8 @@ def run_reverse_sync_workflow(
     local_files = get_local_music_files(local_dir, audio_extensions, redis_cfg=redis_cfg, refresh_cache=refresh_cache)
     print(f"Found {len(local_files)} local audio files.", file=sys.stderr)
 
-    # Step 3: Compare device vs local
-    already_local, missing_locally = compare_device_with_local(device_songs, local_files)
+    # Step 3: Compare device vs local (with SQLite hide list filtering)
+    already_local, missing_locally = compare_device_with_local(device_songs, local_files, show_hidden=show_hidden)
 
     # Step 4: Check if Interactive Ranger TUI (-i) requested
     if interactive:
@@ -155,7 +168,7 @@ def run_reverse_sync_workflow(
             local_dir=local_dir,
             redis_cfg=redis_cfg
         )
-        print(f"\n[ReverseSync] Ranger Reverse Sync session finished. Pulled {len(res['pulled'])} files.", file=sys.stderr)
+        print(f"\n[ReverseSync] Ranger Reverse Sync session finished. Pulled {len(res['pulled'])} files, Hidden {len(res.get('hidden', []))} files.", file=sys.stderr)
         return
 
     # Step 5: Non-interactive display & CLI execution

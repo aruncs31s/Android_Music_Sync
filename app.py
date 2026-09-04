@@ -7,9 +7,10 @@ ADB Song Query, FZF Fuzzy Search, Spotify Downloader, Folder Sync, & Reverse Syn
 3. Download songs from Spotify links or search queries directly into songs/download/ directory.
 4. Synchronize local music folders (e.g. /home/aruncs/Music) with ADB device.
 5. Reverse Sync (ADB Device -> Local Folder /home/aruncs/Music) with Ranger Dual-Pane TUI.
-6. Interactive Ranger-style Dual-Pane TUI sync (-i).
-7. Main Interactive Navigation Menu TUI when launched with no arguments.
-8. Configurable via config.json with strict Redis caching (localhost:8998, pass: greenIsBest).
+6. Interactive Ranger-style Dual-Pane TUI sync (-i) with SQLite Hide List ('h' key).
+7. Persistent SQLite database (sync_hide_list.db) for hiding cumbersome files across runs.
+8. Main Interactive Navigation Menu TUI when launched with no arguments.
+9. Configurable via config.json with strict Redis caching (localhost:8998, pass: greenIsBest).
 """
 import sys
 import os
@@ -25,6 +26,7 @@ import config_manager
 import syncer
 import reverse_syncer
 import redis_cache
+import hide_list_db
 import main_menu_tui
 from downloader import DownloadManager
 
@@ -37,20 +39,20 @@ def parse_args():
   1. Interactive Ranger-style Dual-Pane Reverse Sync (ADB Device -> Local Folder):
      python app.py --reverse-sync -i
 
-  2. Reverse Sync non-interactively:
-     python app.py --reverse-sync
-
-  3. Interactive Ranger-style Dual-Pane Sync (Local Folder -> ADB Device):
+  2. Interactive Ranger-style Dual-Pane Sync (Local Folder -> ADB Device):
      python app.py --sync -i
 
-  4. Launch Interactive Main Menu:
+  3. List all files currently hidden in SQLite database:
+     python app.py --list-hidden
+
+  4. Unhide a file (or 'all') from SQLite database:
+     python app.py --unhide all
+
+  5. Include hidden files during sync:
+     python app.py --sync --show-hidden
+
+  6. Launch Interactive Main Menu:
      python app.py
-
-  5. Download song from Spotify link & push to ADB device:
-     python app.py -dl "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT" --push-adb
-
-  6. Search songs on connected device using FZF TUI:
-     python app.py -s "Arijit Singh"
 """
     )
     parser.add_argument(
@@ -72,6 +74,21 @@ def parse_args():
         "-i", "--interactive",
         action="store_true",
         help="Launch Ranger-style interactive dual-pane TUI during folder sync or reverse sync."
+    )
+    parser.add_argument(
+        "--show-hidden",
+        action="store_true",
+        help="Include files hidden in SQLite database during sync operations."
+    )
+    parser.add_argument(
+        "--list-hidden",
+        action="store_true",
+        help="List all files stored in the SQLite hide list database (sync_hide_list.db) and exit."
+    )
+    parser.add_argument(
+        "--unhide",
+        type=str,
+        help="Remove specified file path (or 'all') from the SQLite hide list database and exit."
     )
     parser.add_argument(
         "--sync-folder",
@@ -207,6 +224,24 @@ def output_songs(songs: List[Dict[str, Any]], fmt: str):
 def main():
     args = parse_args()
 
+    # Handle SQLite Hide List management CLI flags
+    if args.list_hidden:
+        records = hide_list_db.get_all_hidden_records()
+        if not records:
+            print("No hidden files in SQLite database (sync_hide_list.db).")
+        else:
+            print(f"Hidden Files in SQLite Database ({len(records)} entries):")
+            for r in records:
+                print(f"  [{r['id']}] {r['filename']} | Path: {r['filepath']} (Hidden at: {r['hidden_at']})")
+        return
+
+    if args.unhide:
+        if args.unhide.lower() == "all":
+            hide_list_db.clear_all_hidden()
+        else:
+            hide_list_db.remove_hidden_file(args.unhide)
+        return
+
     # Load settings from config.json
     cfg = config_manager.load_config(args.config)
 
@@ -228,7 +263,7 @@ def main():
             sys.exit(0)
 
         if choice == "search":
-            pass # proceed to default interactive FZF song search
+            pass
         elif choice == "sync":
             args.sync = True
             if sys.stdin.isatty() or os.isatty(0):
@@ -267,7 +302,8 @@ def main():
             auto_confirm=args.yes,
             interactive=args.interactive,
             redis_cfg=redis_cfg,
-            refresh_cache=args.refresh_cache
+            refresh_cache=args.refresh_cache,
+            show_hidden=args.show_hidden
         )
         sys.exit(0)
 
@@ -282,7 +318,8 @@ def main():
             auto_confirm=args.yes,
             interactive=args.interactive,
             redis_cfg=redis_cfg,
-            refresh_cache=args.refresh_cache
+            refresh_cache=args.refresh_cache,
+            show_hidden=args.show_hidden
         )
         sys.exit(0)
 

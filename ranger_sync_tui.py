@@ -2,11 +2,12 @@
 Ranger-Style Interactive Dual-Pane TUI for Music Folder Sync (-i).
 
 Left Pane: Local files to sync with spacebar checkboxes [X].
-Right Pane: Live fuzzy search results on connected ADB device for highlighted file.
+Right Pane: Live fuzzy search results on connected ADB device + technical Audio Metadata (Bit Rate, Sample Rate, Codec).
 
 Keybindings:
   Up / Down, k / j : Navigate file list
   Spacebar          : Toggle selection checkbox [X]
+  h                 : Hide current file (Persists in SQLite hide_list_db)
   s                 : Sync/upload selected file(s) (or current item) to device
   m / Enter         : Mark current file as matched with device (skip upload)
   q / ESC           : Exit interactive sync UI
@@ -19,6 +20,8 @@ from typing import List, Dict, Any, Optional
 import fuzzy_matcher
 import adb_pusher
 import fzf_tui
+import audio_metadata
+import hide_list_db
 
 
 def run_ranger_sync_tui(
@@ -30,11 +33,11 @@ def run_ranger_sync_tui(
 ) -> Dict[str, Any]:
     """
     Ranger-style interactive dual-pane TUI for song sync.
-    Returns summary dict of synced and skipped files.
+    Returns summary dict of synced, skipped, and hidden files.
     """
     if not to_sync_files:
         print("[RangerSync] No files to sync.", file=sys.stderr)
-        return {"synced": [], "skipped": []}
+        return {"synced": [], "skipped": [], "hidden": []}
 
     def _tui(stdscr):
         nonlocal to_sync_files
@@ -43,29 +46,27 @@ def run_ranger_sync_tui(
         curses.start_color()
         curses.use_default_colors()
 
-        # Color pairs
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)    # Highlight left
         curses.init_pair(2, curses.COLOR_YELLOW, -1)                 # Headers & badges
         curses.init_pair(3, curses.COLOR_GREEN, -1)                  # Selected [X] check
         curses.init_pair(4, curses.COLOR_CYAN, -1)                   # Device search match
-        curses.init_pair(5, curses.COLOR_MAGENTA, -1)                # File sizes
+        curses.init_pair(5, curses.COLOR_MAGENTA, -1)                # Technical metadata
 
         current_idx = 0
         scroll_offset = 0
 
-        # State tracking: selected indices for sync, and marked/skipped items
         selected_set = set()
         synced_list = []
         skipped_list = []
+        hidden_list = []
 
-        # Pre-cache search matches for each file to keep UI snappy
         match_cache = {}
 
         def get_device_matches(local_item: Dict[str, str]):
             fn = local_item["title_no_ext"]
             if fn not in match_cache:
                 matches = fuzzy_matcher.filter_and_rank_songs(fn, device_songs)
-                match_cache[fn] = matches[:8] # Top 8 matches
+                match_cache[fn] = matches[:6]
             return match_cache[fn]
 
         while True:
@@ -92,7 +93,7 @@ def run_ranger_sync_tui(
 
             # Pane Headers (Row 1)
             left_header = f" Local Files ({len(to_sync_files)}) [{len(selected_set)} selected] "
-            right_header = " Device Search Preview (Matches) "
+            right_header = " Technical Audio Specs & Device Matches "
             stdscr.addstr(1, 0, left_header[:left_width-1].ljust(left_width-1), curses.A_REVERSE)
             stdscr.addstr(1, right_x, right_header[:right_width-1].ljust(right_width-1), curses.A_REVERSE)
 
@@ -138,27 +139,42 @@ def run_ranger_sync_tui(
                     else:
                         stdscr.addstr(row_y, 0, line_str)
 
-            # --- RENDER RIGHT PANE (Live Device Search Results) ---
+            # --- RENDER RIGHT PANE (Audio Metadata & Device Search Results) ---
             if 0 <= current_idx < len(to_sync_files):
                 curr_item = to_sync_files[current_idx]
                 matches = get_device_matches(curr_item)
 
-                query_info = f"Query: {curr_item['title_no_ext']}"
+                meta = audio_metadata.extract_audio_metadata(curr_item["path"])
+
                 stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-                stdscr.addstr(2, right_x, query_info[:right_width-1])
+                stdscr.addstr(2, right_x, f"📁 File Specs: {curr_item['filename']}"[:right_width-1])
+                stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
+
+                spec_line_1 = f"   • Bit Rate   : {meta['bitrate']}   |   Sample Rate: {meta['sample_rate']}"
+                spec_line_2 = f"   • Codec      : {meta['codec']}   |   Channels   : {meta['channels']}"
+                spec_line_3 = f"   • Duration   : {meta['duration']}   |   File Size  : {meta['size']}"
+
+                stdscr.attron(curses.color_pair(5))
+                stdscr.addstr(3, right_x, spec_line_1[:right_width-1])
+                stdscr.addstr(4, right_x, spec_line_2[:right_width-1])
+                stdscr.addstr(5, right_x, spec_line_3[:right_width-1])
+                stdscr.attroff(curses.color_pair(5))
+
+                stdscr.addstr(6, right_x, "─" * (right_width - 1))
+
+                stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+                stdscr.addstr(7, right_x, f"Top Device Matches ({len(matches)} found):"[:right_width-1])
                 stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
                 if not matches:
-                    stdscr.addstr(4, right_x, "(No matching songs found on ADB device)", curses.A_DIM)
-                    stdscr.addstr(6, right_x, "Press 's' to sync/upload this track.")
+                    stdscr.addstr(9, right_x, "(No matching songs found on ADB device)", curses.A_DIM)
+                    stdscr.addstr(11, right_x, "Press 's' to sync/upload this track.")
                 else:
-                    stdscr.addstr(3, right_x, f"Top Device Matches ({len(matches)} found):", curses.A_UNDERLINE)
-                    for m_idx, song_match in enumerate(matches[:list_height - 3]):
-                        row_y = m_idx + 4
+                    for m_idx, song_match in enumerate(matches[:list_height - 9]):
+                        row_y = m_idx + 9
                         m_title = song_match.get("title") or song_match.get("_display_name") or "Unknown"
                         m_artist = song_match.get("artist") or "Unknown Artist"
                         m_dur = song_match.get("duration_formatted") or ""
-                        m_path = song_match.get("_data") or ""
 
                         m_line = f" {m_idx+1}. {m_title} - {m_artist} ({m_dur})"
                         m_line = m_line[:right_width - 1]
@@ -168,14 +184,13 @@ def run_ranger_sync_tui(
                         stdscr.attroff(curses.color_pair(4))
 
             # Bottom Keybinding Footer
-            footer = " [SPACE] Select/Unselect | [s] Sync Selected/Current | [m/ENTER] Mark Matched | [q] Quit "
+            footer = " [SPACE] Select | [s] Sync | [h] Hide (SQLite DB) | [m/ENTER] Mark | [q] Quit "
             stdscr.attron(curses.A_REVERSE)
             stdscr.addstr(height - 1, 0, footer[:width-1].ljust(width-1))
             stdscr.attroff(curses.A_REVERSE)
 
             stdscr.refresh()
 
-            # Input Handling
             try:
                 key = stdscr.getch()
             except KeyboardInterrupt:
@@ -196,6 +211,15 @@ def run_ranger_sync_tui(
                     selected_set.add(current_idx)
                 if current_idx < len(to_sync_files) - 1:
                     current_idx += 1
+            elif key == ord('h'): # Hide file and persist to SQLite DB
+                if 0 <= current_idx < len(to_sync_files):
+                    h_item = to_sync_files.pop(current_idx)
+                    hide_list_db.add_hidden_file(h_item["path"], h_item["filename"])
+                    hidden_list.append(h_item)
+                    if selected_set:
+                        selected_set = {idx - 1 if idx > current_idx else idx for idx in selected_set if idx != current_idx}
+                    if current_idx >= len(to_sync_files):
+                        current_idx = max(0, len(to_sync_files) - 1)
             elif key in (ord('m'), 10, 13): # Mark / Enter (Skip as already matched)
                 if 0 <= current_idx < len(to_sync_files):
                     skipped_item = to_sync_files.pop(current_idx)
@@ -229,6 +253,6 @@ def run_ranger_sync_tui(
                     input("\nPress ENTER to return to Ranger Sync UI...")
                     curses.reset_prog_mode()
 
-        return {"synced": synced_list, "skipped": skipped_list}
+        return {"synced": synced_list, "skipped": skipped_list, "hidden": hidden_list}
 
     return fzf_tui.run_with_tty(_tui)

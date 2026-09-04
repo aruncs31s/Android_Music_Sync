@@ -1,6 +1,6 @@
 """
 Music Folder Synchronizer module with high-performance indexing, live progress reporting,
-Redis caching, and Ranger-style Dual-Pane TUI (-i) support.
+Redis caching, SQLite Hide List database filtering, and Ranger-style Dual-Pane TUI (-i) support.
 
 Scans a local music directory, compares files with songs on an ADB device,
 separates already-present songs (skipped by default) from missing songs (to sync),
@@ -16,6 +16,7 @@ import adb_pusher
 import song_parser
 import fuzzy_matcher
 import ranger_sync_tui
+import hide_list_db
 
 DEFAULT_AUDIO_EXTENSIONS = [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"]
 
@@ -68,11 +69,12 @@ def compare_local_files_with_device(
     serial: str,
     remote_folder: str = "/storage/emulated/0/Music/ADB",
     redis_cfg: Optional[Dict[str, Any]] = None,
-    refresh_cache: bool = False
+    refresh_cache: bool = False,
+    show_hidden: bool = False
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     High-performance comparison of local music files with device contents.
-    Includes Redis caching, fast dictionary lookup, and live progress reporting.
+    Includes SQLite Hide List filtering, Redis caching, fast lookup, and live progress reporting.
     Returns: (already_present_list, to_sync_list, all_device_songs)
     """
     try:
@@ -81,6 +83,11 @@ def compare_local_files_with_device(
     except Exception as e:
         print(f"[Syncer] Warning: Failed to query device MediaStore: {e}", file=sys.stderr)
         device_songs = []
+
+    # SQLite Hide List filtering
+    if not show_hidden:
+        hidden_set = hide_list_db.get_hidden_paths_set()
+        local_files = [f for f in local_files if f["path"] not in hidden_set]
 
     device_norm_map: Dict[str, Dict[str, Any]] = {}
     for song in device_songs:
@@ -109,7 +116,7 @@ def compare_local_files_with_device(
         norm_file = normalize_string(filename)
 
         if idx % 25 == 0 or idx == total or idx == 1:
-            percent = (idx / total) * 100
+            percent = (idx / total) * 100 if total > 0 else 100.0
             sys.stderr.write(f"\r[Syncer] Checking duplicates: {idx}/{total} ({percent:.1f}%) | Processing: {filename[:40]}...")
             sys.stderr.flush()
 
@@ -148,15 +155,17 @@ def run_sync_workflow(
     auto_confirm: bool = False,
     interactive: bool = False,
     redis_cfg: Optional[Dict[str, Any]] = None,
-    refresh_cache: bool = False
+    refresh_cache: bool = False,
+    show_hidden: bool = False
 ):
     """
     Main Sync Folder workflow:
     1. Scan local folder with progress indication.
-    2. Query target ADB device (using Redis cache if available).
-    3. Categorize into (Already Present vs To Sync) with live progress bar.
-    4. If interactive (-i), launch Ranger-style Dual-Pane TUI.
-    5. Else, prompt or auto-upload missing files to remote_dir.
+    2. Filter out SQLite hidden files unless show_hidden=True.
+    3. Query target ADB device (using Redis cache if available).
+    4. Categorize into (Already Present vs To Sync) with live progress bar.
+    5. If interactive (-i), launch Ranger-style Dual-Pane TUI (with 'h' key SQLite hiding).
+    6. Else, prompt or auto-upload missing files to remote_dir.
     """
     print(f"\n======================================================================", file=sys.stderr)
     print(f"                     MUSIC FOLDER SYNCHRONIZER                        ", file=sys.stderr)
@@ -200,10 +209,10 @@ def run_sync_workflow(
         print(f"No audio files found in '{local_dir}'. Nothing to sync.", file=sys.stderr)
         return
 
-    # Step 2: Compare with device
+    # Step 2: Compare with device (with SQLite hide list filtering)
     print(f"Querying device music library & comparing local files...", file=sys.stderr)
     already_present, to_sync, device_songs = compare_local_files_with_device(
-        local_files, serial, remote_dir, redis_cfg=redis_cfg, refresh_cache=refresh_cache
+        local_files, serial, remote_dir, redis_cfg=redis_cfg, refresh_cache=refresh_cache, show_hidden=show_hidden
     )
 
     if force_sync:
@@ -221,7 +230,7 @@ def run_sync_workflow(
             remote_dir=remote_dir,
             redis_cfg=redis_cfg
         )
-        print(f"\n[Syncer] Ranger TUI session finished. Synced {len(res['synced'])} files.", file=sys.stderr)
+        print(f"\n[Syncer] Ranger TUI session finished. Synced {len(res['synced'])} files, Hidden {len(res.get('hidden', []))} files.", file=sys.stderr)
         return
 
     # Step 4: Non-interactive presentation & CLI sync

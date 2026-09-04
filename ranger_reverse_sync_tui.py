@@ -2,11 +2,12 @@
 Ranger-Style Interactive Dual-Pane TUI for Reverse Sync (ADB Device -> Local Folder).
 
 Left Pane: ADB Device songs missing locally with selection checkboxes [X].
-Right Pane: Live fuzzy search results in local music folder for highlighted device song.
+Right Pane: Detailed Device Song Metadata + Live local search matches with Bit Rate, Sample Rate, and Codec.
 
 Keybindings:
   Up / Down, k / j : Navigate device songs list
   Spacebar          : Toggle selection checkbox [X]
+  h                 : Hide current track (Persists in SQLite hide_list_db)
   s / p             : Pull/download selected song(s) (or current item) from device -> local folder
   m / Enter         : Mark current device song as matched with local file (skip pull)
   q / ESC           : Exit interactive reverse sync UI
@@ -19,6 +20,8 @@ from typing import List, Dict, Any, Optional
 
 import fuzzy_matcher
 import fzf_tui
+import audio_metadata
+import hide_list_db
 
 
 def run_ranger_reverse_sync_tui(
@@ -30,11 +33,11 @@ def run_ranger_reverse_sync_tui(
 ) -> Dict[str, Any]:
     """
     Ranger-style interactive dual-pane TUI for reverse sync (ADB -> Local).
-    Returns summary dict of pulled and skipped files.
+    Returns summary dict of pulled, skipped, and hidden files.
     """
     if not missing_songs:
         print("[RangerReverseSync] No missing songs to pull from device.", file=sys.stderr)
-        return {"pulled": [], "skipped": []}
+        return {"pulled": [], "skipped": [], "hidden": []}
 
     def _tui(stdscr):
         nonlocal missing_songs
@@ -47,6 +50,7 @@ def run_ranger_reverse_sync_tui(
         curses.init_pair(2, curses.COLOR_YELLOW, -1)                 # Headers & badges
         curses.init_pair(3, curses.COLOR_GREEN, -1)                  # Selected [X] check
         curses.init_pair(4, curses.COLOR_CYAN, -1)                   # Local search match
+        curses.init_pair(5, curses.COLOR_MAGENTA, -1)                # Technical metadata
 
         current_idx = 0
         scroll_offset = 0
@@ -54,6 +58,7 @@ def run_ranger_reverse_sync_tui(
         selected_set = set()
         pulled_list = []
         skipped_list = []
+        hidden_list = []
 
         match_cache = {}
 
@@ -65,9 +70,12 @@ def run_ranger_reverse_sync_tui(
                     title_no_ext = f["title_no_ext"]
                     m_matched, m_score, _ = fuzzy_matcher.fuzzy_subsequence_match(query_str, title_no_ext)
                     if m_matched:
-                        matches.append((m_score, f))
+                        meta = audio_metadata.extract_audio_metadata(f["path"])
+                        f_copy = dict(f)
+                        f_copy.update(meta)
+                        matches.append((m_score, f_copy))
                 matches.sort(key=lambda x: x[0], reverse=True)
-                match_cache[query_str] = [m[1] for m in matches[:8]]
+                match_cache[query_str] = [m[1] for m in matches[:6]]
             return match_cache[query_str]
 
         while True:
@@ -94,7 +102,7 @@ def run_ranger_reverse_sync_tui(
 
             # Pane Headers (Row 1)
             left_header = f" Device Songs Missing Locally ({len(missing_songs)}) [{len(selected_set)} selected] "
-            right_header = " Local Folder Search Preview (Matches) "
+            right_header = " Track Metadata & Local Matches "
             stdscr.addstr(1, 0, left_header[:left_width-1].ljust(left_width-1), curses.A_REVERSE)
             stdscr.addstr(1, right_x, right_header[:right_width-1].ljust(right_width-1), curses.A_REVERSE)
 
@@ -143,29 +151,51 @@ def run_ranger_reverse_sync_tui(
                     else:
                         stdscr.addstr(row_y, 0, line_str)
 
-            # --- RENDER RIGHT PANE (Live Local Search Results) ---
+            # --- RENDER RIGHT PANE (Track Metadata & Local Matches) ---
             if 0 <= current_idx < len(missing_songs):
                 curr_item = missing_songs[current_idx]
                 matches = get_local_matches(curr_item)
 
                 title_query = curr_item.get("title") or curr_item.get("_display_name") or ""
-                query_info = f"Query: {title_query}"
+                artist_val = curr_item.get("artist") or "Unknown Artist"
+                album_val = curr_item.get("album") or "Unknown Album"
+                dur_val = curr_item.get("duration_formatted") or "00:00"
+                size_val = curr_item.get("size_formatted") or "0 MB"
+                mime_val = curr_item.get("mime_type") or "audio/mpeg"
+
                 stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-                stdscr.addstr(2, right_x, query_info[:right_width-1])
+                stdscr.addstr(2, right_x, f"🎵 Device Track: {title_query}"[:right_width-1])
                 stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
+                spec_line_1 = f"   • Artist: {artist_val}   |   Album: {album_val}"
+                spec_line_2 = f"   • Duration: {dur_val}   |   Size: {size_val}   |   Format: {mime_val}"
                 remote_path = curr_item.get("_data") or ""
+
+                stdscr.attron(curses.color_pair(5))
+                stdscr.addstr(3, right_x, spec_line_1[:right_width-1])
+                stdscr.addstr(4, right_x, spec_line_2[:right_width-1])
                 if remote_path:
-                    stdscr.addstr(3, right_x, f"Remote Path: {remote_path}"[:right_width-1], curses.A_DIM)
+                    stdscr.addstr(5, right_x, f"   • Path: {remote_path}"[:right_width-1])
+                stdscr.attroff(curses.color_pair(5))
+
+                stdscr.addstr(6, right_x, "─" * (right_width - 1))
+
+                stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
+                stdscr.addstr(7, right_x, f"Top Local Matches ({len(matches)} found):"[:right_width-1])
+                stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
                 if not matches:
-                    stdscr.addstr(5, right_x, "(No matching files found in local music folder)", curses.A_DIM)
-                    stdscr.addstr(7, right_x, "Press 's' or 'p' to pull this track from ADB device.")
+                    stdscr.addstr(9, right_x, "(No matching files found in local music folder)", curses.A_DIM)
+                    stdscr.addstr(11, right_x, "Press 's' or 'p' to pull this track from ADB device.")
                 else:
-                    stdscr.addstr(5, right_x, f"Top Local Matches ({len(matches)} found):", curses.A_UNDERLINE)
-                    for m_idx, loc_match in enumerate(matches[:list_height - 5]):
-                        row_y = m_idx + 6
-                        m_line = f" {m_idx+1}. {loc_match['filename']} ({loc_match['size_formatted']})"
+                    for m_idx, loc_match in enumerate(matches[:list_height - 9]):
+                        row_y = m_idx + 9
+                        m_fn = loc_match["filename"]
+                        m_br = loc_match.get("bitrate", "Unknown")
+                        m_sr = loc_match.get("sample_rate", "Unknown")
+                        m_codec = loc_match.get("codec", "AUDIO")
+
+                        m_line = f" {m_idx+1}. {m_fn} [{m_codec} | {m_br} | {m_sr}]"
                         m_line = m_line[:right_width - 1]
 
                         stdscr.attron(curses.color_pair(4))
@@ -173,14 +203,13 @@ def run_ranger_reverse_sync_tui(
                         stdscr.attroff(curses.color_pair(4))
 
             # Bottom Keybinding Footer
-            footer = " [SPACE] Select/Unselect | [s/p] Pull Selected/Current | [m/ENTER] Mark Matched | [q] Quit "
+            footer = " [SPACE] Select | [s/p] Pull | [h] Hide (SQLite DB) | [m/ENTER] Mark | [q] Quit "
             stdscr.attron(curses.A_REVERSE)
             stdscr.addstr(height - 1, 0, footer[:width-1].ljust(width-1))
             stdscr.attroff(curses.A_REVERSE)
 
             stdscr.refresh()
 
-            # Input Handling
             try:
                 key = stdscr.getch()
             except KeyboardInterrupt:
@@ -201,6 +230,16 @@ def run_ranger_reverse_sync_tui(
                     selected_set.add(current_idx)
                 if current_idx < len(missing_songs) - 1:
                     current_idx += 1
+            elif key == ord('h'): # Hide track and persist to SQLite DB
+                if 0 <= current_idx < len(missing_songs):
+                    h_item = missing_songs.pop(current_idx)
+                    remote_path = h_item.get("_data") or h_item.get("title") or ""
+                    hide_list_db.add_hidden_file(remote_path, h_item.get("title") or h_item.get("_display_name") or "")
+                    hidden_list.append(h_item)
+                    if selected_set:
+                        selected_set = {idx - 1 if idx > current_idx else idx for idx in selected_set if idx != current_idx}
+                    if current_idx >= len(missing_songs):
+                        current_idx = max(0, len(missing_songs) - 1)
             elif key in (ord('m'), 10, 13): # Mark / Enter (Skip as already matched)
                 if 0 <= current_idx < len(missing_songs):
                     skipped_item = missing_songs.pop(current_idx)
@@ -246,6 +285,6 @@ def run_ranger_reverse_sync_tui(
                     input("\nPress ENTER to return to Ranger Reverse Sync UI...")
                     curses.reset_prog_mode()
 
-        return {"pulled": pulled_list, "skipped": skipped_list}
+        return {"pulled": pulled_list, "skipped": skipped_list, "hidden": hidden_list}
 
     return fzf_tui.run_with_tty(_tui)
