@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """
-ADB Song Query & FZF Fuzzy Search Tool
+ADB Song Query, FZF Fuzzy Search, & Spotify Downloader Tool
 
-Query songs from connected Android devices via ADB content query, or parse existing text file / stdin.
-Interactive device selection, fzf-like TUI search with lazy matching, and pipeline CLI integration.
+1. Query songs from connected Android devices via ADB content query, or parse existing text file / stdin.
+2. Interactive device selection & fzf-like TUI search with lazy matching.
+3. Download songs from Spotify links or search queries directly into songs/download/ directory.
+4. Duplicate checking & pushing downloaded tracks to /storage/emulated/0/Music/ADB.
 """
 import sys
 import os
@@ -15,31 +17,54 @@ import song_parser
 import fuzzy_matcher
 import adb_manager
 import fzf_tui
+from downloader import DownloadManager
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Query and fuzzy search songs from connected ADB devices or text input.",
+        description="Query, fuzzy search, download, and push songs from Spotify/ADB/files.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""Examples:
-  1. Interactive device selection & FZF song search:
+  1. Download song from Spotify link & push to ADB device:
+     python app.py -dl "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT" --push-adb
+
+  2. Download song by query to songs/download/ (interactively asks to push):
+     python app.py -dl "Arijit Singh Kesariya"
+
+  3. Interactive device selection & FZF song search:
      python app.py
 
-  2. Direct search on connected device:
+  4. Non-interactive search on connected ADB device:
      python app.py -s "Arijit Singh"
-
-  3. Search from existing file (e.g. songs.txt):
-     python app.py -f songs.txt -s "Kesariya"
-
-  4. Read from stdin pipe and fuzzy search:
-     cat songs.txt | python app.py -s "Mareez" --format path
-
-  5. Interactive FZF search on piped input:
-     cat songs.txt | python app.py
-
-  6. Specify device serial:
-     python app.py -d HA1DZEC9 -s "Heeriye"
 """
+    )
+    parser.add_argument(
+        "-dl", "--download",
+        type=str,
+        help="Spotify track/album URL or song query to download into songs/download/ directory."
+    )
+    parser.add_argument(
+        "--download-dir",
+        type=str,
+        default="songs/download",
+        help="Target folder for downloaded songs (default: songs/download)."
+    )
+    parser.add_argument(
+        "--use-telegram",
+        action="store_true",
+        help="Force using Telegram Deezload bot for Spotify link downloading."
+    )
+    parser.add_argument(
+        "--push-adb",
+        action="store_true",
+        default=None,
+        help="Automatically push downloaded song to /storage/emulated/0/Music/ADB on connected device."
+    )
+    parser.add_argument(
+        "--no-push-adb",
+        action="store_false",
+        dest="push_adb",
+        help="Skip pushing downloaded song to ADB device."
     )
     parser.add_argument(
         "-d", "--device",
@@ -83,7 +108,6 @@ def output_songs(songs: List[Dict[str, Any]], fmt: str):
         return
 
     if fmt == "json":
-        # Remove helper searchable_text for clean JSON output
         clean_songs = []
         for s in songs:
             s_copy = dict(s)
@@ -124,6 +148,20 @@ def output_songs(songs: List[Dict[str, Any]], fmt: str):
 def main():
     args = parse_args()
 
+    # Handle --download (-dl)
+    if args.download:
+        mgr = DownloadManager(
+            output_dir=args.download_dir,
+            use_telegram=args.use_telegram,
+            device_serial=args.device,
+            auto_push_adb=args.push_adb
+        )
+        downloaded_file = mgr.download(args.download)
+        if downloaded_file:
+            sys.exit(0)
+        else:
+            sys.exit(1)
+
     # Handle --list-devices
     if args.list_devices:
         try:
@@ -153,13 +191,11 @@ def main():
         source_name = f"File: {os.path.basename(args.file)}"
 
     elif not sys.stdin.isatty():
-        # Input piped via stdin (e.g., cat songs.txt | python app.py)
         content = sys.stdin.read()
         songs = song_parser.parse_songs(content)
         source_name = "Piped Stdin"
 
     else:
-        # Fetch directly from live ADB device
         try:
             devices = adb_manager.list_adb_devices()
         except Exception as e:
@@ -172,13 +208,11 @@ def main():
 
         target_device = None
 
-        # If user passed -d / --device argument
         if args.device:
             for dev in devices:
                 if dev["serial"] == args.device or dev["model"] == args.device:
                     target_device = dev
                     break
-            # Try index if integer passed
             if not target_device:
                 try:
                     idx = int(args.device)
@@ -188,16 +222,13 @@ def main():
                     pass
 
             if not target_device:
-                # Use serial string directly
                 target_device = {"serial": args.device, "model": args.device, "description": args.device}
         else:
-            # Device selection: check stdin input first if non-interactive, else launch TUI menu
             target_device = adb_manager.select_device_from_stdin(devices)
             if not target_device:
                 if len(devices) == 1:
                     target_device = devices[0]
                 else:
-                    # Select interactively via TUI menu
                     target_device = fzf_tui.select_device_tui(devices)
 
         if not target_device:
@@ -221,13 +252,11 @@ def main():
 
     # Step 2: Search or Interactive Selection
     if args.search is not None:
-        # Non-interactive fuzzy match mode
         results = fuzzy_matcher.filter_and_rank_songs(args.search, songs)
         if args.limit and args.limit > 0:
             results = results[:args.limit]
         output_songs(results, args.format)
     else:
-        # Interactive fzf-style TUI search
         selected = fzf_tui.search_songs_tui(songs, device_info=source_name)
         if selected:
             output_songs([selected], args.format)

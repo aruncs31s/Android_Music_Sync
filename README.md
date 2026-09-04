@@ -1,6 +1,6 @@
-# ADB Song Query & FZF Fuzzy Search Tool
+# ADB Song Query, FZF Fuzzy Search, & Spotify Downloader Tool
 
-A Python command-line application and interactive Terminal User Interface (TUI) that queries audio tracks from connected Android devices via ADB (`adb shell content query`) or parses song lists from text files / stdin. Features real-time FZF-style fuzzy matching with lazy match scoring.
+A Python command-line application and interactive Terminal User Interface (TUI) that queries audio tracks from connected Android devices via ADB (`adb shell content query`) or parses song lists from text files / stdin. Features real-time FZF-style fuzzy matching with lazy match scoring, Spotify/query song downloading, duplicate detection, and post-download pushing to Android devices.
 
 ## Features
 
@@ -20,10 +20,15 @@ A Python command-line application and interactive Terminal User Interface (TUI) 
    - Smart relevance ranking based on word boundaries, consecutive character matches, prefix matches, and exact substrings.
    - Multi-token search queries (e.g. `"arijit kesariya"` matches items containing both tokens).
 
-4. **Pipeline & Stdin Support**:
-   - Supports piping song list data via stdin (`cat songs.txt | python app.py`).
-   - Supports non-interactive search mode with `-s "song query"`.
-   - Flexible output formats: `text`, `json`, `path` (for piping filepaths to media players like `mpv` or `vlc`), and `csv`.
+4. **Spotify & Song Downloader (`downloader/`)**:
+   - Downloads Spotify track/album links or search queries directly into `songs/download/`.
+   - Supports direct engine (`yt-dlp`) and Telegram Deezload bot automation (`@DeezloadBot`).
+
+5. **ADB Post-Download Push & Duplicate Detection (`adb_pusher.py`)**:
+   - Checks if a downloaded song already exists on the connected device before pushing, issuing a `[NOTICE]` warning if a duplicate is found.
+   - Interactively asks: `"Push it to ADB device? [y/N]"`.
+   - Verifies and automatically creates `/storage/emulated/0/Music/ADB` on the device if missing (notifies user if manual creation is required).
+   - Triggers Android MediaStore scan broadcast so music player apps detect the new file immediately.
 
 ---
 
@@ -31,76 +36,56 @@ A Python command-line application and interactive Terminal User Interface (TUI) 
 
 - **Python**: 3.8+ (uses standard library `curses`, `argparse`, `re`, `subprocess`, `json`).
 - **Android Platform Tools**: `adb` command installed and available in system PATH.
-- **Android Device**: USB or Wireless Debugging enabled on connected device.
+- **Audio Downloader**: `yt-dlp` installed (`/usr/bin/yt-dlp`).
 
 ---
 
 ## Usage Examples
 
-### 1. Interactive Device Selection & FZF Song Search
+### 1. Download Song from Spotify Link / Query & Push to ADB Device
+```bash
+python app.py -dl "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT" --push-adb
+```
+Or search and download by song name (prompts `Push it to ADB device? [y/N]` interactively):
+```bash
+python app.py -dl "Kesariya Arijit Singh"
+```
+
+### 2. Download using Telegram Deezload Bot
+```bash
+python app.py -dl "https://open.spotify.com/track/..." --use-telegram
+```
+
+### 3. Interactive Device Selection & FZF Song Search
 Launch interactive search on your connected Android device:
 ```bash
 python app.py
 ```
-If multiple ADB devices are connected, an interactive menu will pop up allowing you to pick a device using arrow keys.
 
-### 2. Direct Search on Connected Device (Non-Interactive)
-Search for a song directly using fuzzy matching:
+### 4. Direct Non-Interactive Search on Connected Device
 ```bash
 python app.py -s "Arijit Singh"
 ```
 
-### 3. Target Specific ADB Device Serial
-Specify device serial explicitly:
+### 5. Target Specific ADB Device Serial
 ```bash
 python app.py -d HA1DZEC9 -s "Heeriye"
 ```
 
-### 4. Parse from Text File instead of ADB
-If you saved ADB content query output to a text file:
+### 6. Parse from Text File or Pipe Stdin
 ```bash
 python app.py -f songs.txt -s "Kesariya"
-```
-
-### 5. Stdin Piping Support
-Pipe input from another command:
-```bash
 cat songs.txt | python app.py -s "Mareez" --format path
-```
-
-You can also run interactive FZF search on piped input:
-```bash
-cat songs.txt | python app.py
-```
-
-### 6. Pipe Selected File Path to Media Player
-Output raw audio file paths (`--format path`) and pipe directly to `vlc` or `mpv`:
-```bash
-python app.py -s "Khairiyat" --format path | xargs -d '\n' mpv
-```
-
----
-
-## Command Line Arguments
-
-```
-options:
-  -h, --help            show this help message and exit
-  -d, --device DEVICE   ADB device serial number or index.
-  -s, --search SEARCH   Non-interactive search query (lazy fuzzy match).
-  -f, --file FILE       Path to file containing ADB content query data.
-  --format {text,json,path,csv}
-                        Output format (default: text).
-  -l, --list-devices    List connected ADB devices and exit.
-  -n, --limit LIMIT     Limit number of search results printed in non-interactive mode.
 ```
 
 ---
 
 ## Project Structure
 
-- `app.py`: Main CLI entry point and CLI argument handler.
-- `adb_manager.py`: Handles ADB device discovery, device selection, and running content provider queries.
+- `app.py`: Main CLI entry point.
+- `adb_manager.py`: Handles ADB device discovery, interactive device selection, and running content provider queries.
 - `song_parser.py`: Robust parser for ADB MediaStore `content query` format.
 - `fuzzy_matcher.py`: Subsequence lazy matching engine and relevance scoring algorithm.
 - `fzf_tui.py`: Curses-based interactive terminal user interface for device picker & fzf song search.
+- `adb_pusher.py`: Duplicate detection, remote folder verification (`/storage/emulated/0/Music/ADB`), and file pushing via ADB.
+- `downloader/`: Package for downloading songs to `songs/download/` via direct engine or Telegram Deezload bot.
