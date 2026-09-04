@@ -6,7 +6,7 @@ ADB Song Query, FZF Fuzzy Search, Spotify Downloader, Folder Sync, & Reverse Syn
 2. Interactive device selection & fzf-like TUI search with lazy matching.
 3. Download songs from Spotify links or search queries directly into songs/download/ directory.
 4. Synchronize local music folders (e.g. /home/aruncs/Music) with ADB device.
-5. Reverse Sync (ADB Device -> Local Folder /home/aruncs/Music).
+5. Reverse Sync (ADB Device -> Local Folder /home/aruncs/Music) with Ranger Dual-Pane TUI.
 6. Interactive Ranger-style Dual-Pane TUI sync (-i).
 7. Main Interactive Navigation Menu TUI when launched with no arguments.
 8. Configurable via config.json with strict Redis caching (localhost:8998, pass: greenIsBest).
@@ -34,17 +34,17 @@ def parse_args():
         description="Query, fuzzy search, download, sync, and reverse-sync songs with ADB devices.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""Examples:
-  1. Launch Interactive Main Menu:
-     python app.py
+  1. Interactive Ranger-style Dual-Pane Reverse Sync (ADB Device -> Local Folder):
+     python app.py --reverse-sync -i
 
-  2. Reverse Sync (Pull missing songs from ADB device -> /home/aruncs/Music):
+  2. Reverse Sync non-interactively:
      python app.py --reverse-sync
 
-  3. Interactive Ranger-style Dual-Pane TUI sync:
+  3. Interactive Ranger-style Dual-Pane Sync (Local Folder -> ADB Device):
      python app.py --sync -i
 
-  4. Synchronize local music folder (/home/aruncs/Music) with connected ADB device:
-     python app.py --sync
+  4. Launch Interactive Main Menu:
+     python app.py
 
   5. Download song from Spotify link & push to ADB device:
      python app.py -dl "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT" --push-adb
@@ -71,7 +71,7 @@ def parse_args():
     parser.add_argument(
         "-i", "--interactive",
         action="store_true",
-        help="Launch Ranger-style interactive dual-pane TUI during folder sync."
+        help="Launch Ranger-style interactive dual-pane TUI during folder sync or reverse sync."
     )
     parser.add_argument(
         "--sync-folder",
@@ -226,7 +226,7 @@ def main():
         if not choice:
             print("Exiting.", file=sys.stderr)
             sys.exit(0)
-        
+
         if choice == "search":
             pass # proceed to default interactive FZF song search
         elif choice == "sync":
@@ -250,6 +250,13 @@ def main():
             print("\nRefreshing Redis cache...", file=sys.stderr)
         elif choice == "reverse_sync":
             args.reverse_sync = True
+            if sys.stdin.isatty() or os.isatty(0):
+                try:
+                    ans = input("\nLaunch Ranger-Style Interactive Reverse Sync TUI (-i)? [Y/n]: ").strip().lower()
+                    if ans in ("", "y", "yes"):
+                        args.interactive = True
+                except (KeyboardInterrupt, EOFError):
+                    pass
 
     # Handle --reverse-sync mode
     if args.reverse_sync:
@@ -258,6 +265,7 @@ def main():
             device_serial=target_device_serial,
             audio_extensions=audio_extensions,
             auto_confirm=args.yes,
+            interactive=args.interactive,
             redis_cfg=redis_cfg,
             refresh_cache=args.refresh_cache
         )

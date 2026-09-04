@@ -1,5 +1,5 @@
 """
-Reverse Synchronization Module (ADB Device -> Local Directory).
+Reverse Synchronization Module (ADB Device -> Local Directory) with Redis caching and Ranger TUI support.
 
 Queries songs present on connected ADB device, compares with local music folder (/home/aruncs/Music),
 identifies songs on the device that do not exist locally, and pulls them via ADB.
@@ -14,10 +14,35 @@ import adb_manager
 import song_parser
 import syncer
 import fuzzy_matcher
+import redis_cache
+import ranger_reverse_sync_tui
+
 
 def normalize_string(s: str) -> str:
     """Normalize string for fast comparison (lowercase, alphanumeric only)."""
     return re.sub(r"[^a-zA-Z0-9]", "", s.lower())
+
+
+def get_local_music_files(
+    local_dir: str,
+    audio_extensions: List[str] = None,
+    redis_cfg: Optional[Dict[str, Any]] = None,
+    refresh_cache: bool = False
+) -> List[Dict[str, str]]:
+    """
+    Get local music files using Redis cache if available, falling back to disk scan.
+    """
+    if not refresh_cache and redis_cfg:
+        cached_files = redis_cache.get_cached_local_index(local_dir, redis_cfg)
+        if cached_files is not None:
+            return cached_files
+
+    local_files = syncer.scan_local_music_folder(local_dir, audio_extensions)
+
+    if redis_cfg and local_files:
+        redis_cache.set_cached_local_index(local_dir, local_files, redis_cfg)
+
+    return local_files
 
 
 def compare_device_with_local(
@@ -28,7 +53,6 @@ def compare_device_with_local(
     Compare device songs with local files.
     Returns: (already_local_list, missing_locally_list)
     """
-    # Build fast lookup map of local file titles and filenames
     local_norm_set = set()
     for f in local_files:
         local_norm_set.add(normalize_string(f["title_no_ext"]))
@@ -59,16 +83,18 @@ def run_reverse_sync_workflow(
     device_serial: Optional[str] = None,
     audio_extensions: List[str] = None,
     auto_confirm: bool = False,
+    interactive: bool = False,
     redis_cfg: Optional[Dict[str, Any]] = None,
     refresh_cache: bool = False
 ):
     """
     Main Reverse Sync workflow:
     1. Select ADB device.
-    2. Query device MediaStore songs.
-    3. Scan local folder (/home/aruncs/Music).
+    2. Query device MediaStore songs (fully cached in Redis).
+    3. Scan local folder (/home/aruncs/Music) (fully cached in Redis).
     4. Categorize songs into Already Local vs Missing Locally.
-    5. Pull missing songs from device to local_dir.
+    5. If interactive (-i), launch Ranger-style Dual-Pane Reverse Sync TUI.
+    6. Else, prompt and pull missing songs from device to local_dir.
     """
     print(f"\n======================================================================", file=sys.stderr)
     print(f"               REVERSE SYNCHRONIZER (ADB -> Local)                   ", file=sys.stderr)
@@ -77,7 +103,6 @@ def run_reverse_sync_workflow(
 
     os.makedirs(local_dir, exist_ok=True)
 
-    # Select target device
     try:
         devices = adb_manager.list_adb_devices()
     except Exception as e:
@@ -101,7 +126,7 @@ def run_reverse_sync_workflow(
     print(f" Source ADB Device        : {target_device['description']}", file=sys.stderr)
     print(f"======================================================================\n", file=sys.stderr)
 
-    # Step 1: Query device songs
+    # Step 1: Query device songs (cached)
     print(f"Querying music library on ADB device [{serial}]...", file=sys.stderr)
     try:
         raw_songs = adb_manager.query_songs_from_device(serial, redis_cfg=redis_cfg, refresh_cache=refresh_cache)
@@ -112,15 +137,28 @@ def run_reverse_sync_workflow(
 
     print(f"Found {len(device_songs)} songs on ADB device.", file=sys.stderr)
 
-    # Step 2: Scan local folder
+    # Step 2: Get local files (cached)
     print(f"Scanning local music folder '{local_dir}'...", file=sys.stderr)
-    local_files = syncer.scan_local_music_folder(local_dir, audio_extensions)
+    local_files = get_local_music_files(local_dir, audio_extensions, redis_cfg=redis_cfg, refresh_cache=refresh_cache)
     print(f"Found {len(local_files)} local audio files.", file=sys.stderr)
 
     # Step 3: Compare device vs local
     already_local, missing_locally = compare_device_with_local(device_songs, local_files)
 
-    # Step 4: Display Summary
+    # Step 4: Check if Interactive Ranger TUI (-i) requested
+    if interactive:
+        print("\n[ReverseSync] Launching Ranger-Style Interactive Reverse Sync TUI (-i)...", file=sys.stderr)
+        res = ranger_reverse_sync_tui.run_ranger_reverse_sync_tui(
+            missing_songs=missing_locally,
+            local_files=local_files,
+            device_serial=serial,
+            local_dir=local_dir,
+            redis_cfg=redis_cfg
+        )
+        print(f"\n[ReverseSync] Ranger Reverse Sync session finished. Pulled {len(res['pulled'])} files.", file=sys.stderr)
+        return
+
+    # Step 5: Non-interactive display & CLI execution
     print(f"\n----------------------------------------------------------------------", file=sys.stderr)
     print(f" [SECTION 1] Already Present Locally (Skipped - {len(already_local)} tracks):", file=sys.stderr)
     print(f"----------------------------------------------------------------------", file=sys.stderr)
@@ -154,7 +192,6 @@ def run_reverse_sync_workflow(
 
     print(f"======================================================================\n", file=sys.stderr)
 
-    # Step 5: Confirmation & Execution
     should_pull = auto_confirm
     if not should_pull:
         if sys.stdin.isatty() or os.isatty(0):

@@ -1,10 +1,12 @@
 """
-Redis caching module for ADB song query results.
-Caches device content query outputs in Redis if configured in config.json.
+Redis caching module for ADB song query results and local music directory indexes.
+Caches query outputs and local folder file indexes in Redis if configured in config.json.
 If Redis is enabled in config.json but fails to connect, CRASHES THE APP immediately.
 """
 import sys
-from typing import Optional, Dict, Any
+import json
+import os
+from typing import Optional, Dict, Any, List
 
 REDIS_AVAILABLE = False
 try:
@@ -92,3 +94,38 @@ def invalidate_cache(serial: str, redis_cfg: Optional[Dict[str, Any]]):
         print(f"[RedisCache] Cleared cached songs for [{serial}].", file=sys.stderr)
     except Exception as e:
         print(f"[RedisCache] Delete error: {e}", file=sys.stderr)
+
+
+def get_cached_local_index(local_dir: str, redis_cfg: Optional[Dict[str, Any]]) -> Optional[List[Dict[str, str]]]:
+    """Retrieve cached local folder music index from Redis."""
+    client = _get_redis_client(redis_cfg)
+    if not client:
+        return None
+
+    key = f"local_music_index:{os.path.abspath(local_dir)}"
+    try:
+        cached_bytes = client.get(key)
+        if cached_bytes:
+            print(f"[RedisCache] Hit! Retrieved cached local file index for '{local_dir}' from Redis.", file=sys.stderr)
+            return json.loads(cached_bytes.decode("utf-8"))
+    except Exception as e:
+        print(f"[RedisCache] Read local index error: {e}", file=sys.stderr)
+
+    return None
+
+
+def set_cached_local_index(local_dir: str, files_data: List[Dict[str, str]], redis_cfg: Optional[Dict[str, Any]]):
+    """Cache local folder music index in Redis."""
+    client = _get_redis_client(redis_cfg)
+    if not client or not files_data:
+        return
+
+    key = f"local_music_index:{os.path.abspath(local_dir)}"
+    ttl = int(redis_cfg.get("ttl_seconds", 3600))
+
+    try:
+        json_data = json.dumps(files_data)
+        client.setex(key, ttl, json_data)
+        print(f"[RedisCache] Saved local file index for '{local_dir}' in Redis (TTL: {ttl}s).", file=sys.stderr)
+    except Exception as e:
+        print(f"[RedisCache] Write local index error: {e}", file=sys.stderr)
