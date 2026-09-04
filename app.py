@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """
-ADB Song Query, FZF Fuzzy Search, & Spotify Downloader Tool
+ADB Song Query, FZF Fuzzy Search, Spotify Downloader, & Folder Sync Tool
 
 1. Query songs from connected Android devices via ADB content query, or parse existing text file / stdin.
 2. Interactive device selection & fzf-like TUI search with lazy matching.
 3. Download songs from Spotify links or search queries directly into songs/download/ directory.
-4. Duplicate checking & pushing downloaded tracks to /storage/emulated/0/Music/ADB.
+4. Synchronize local music folders (e.g. /home/aruncs/Music) with ADB device.
+5. Interactive Ranger-style Dual-Pane TUI sync (-i).
+6. All settings configurable via config.json with Redis caching (host: localhost, port: 8998, pass: greenIsBest).
 """
 import sys
 import os
@@ -17,26 +19,72 @@ import song_parser
 import fuzzy_matcher
 import adb_manager
 import fzf_tui
+import config_manager
+import syncer
+import redis_cache
 from downloader import DownloadManager
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Query, fuzzy search, download, and push songs from Spotify/ADB/files.",
+        description="Query, fuzzy search, download, and sync songs with ADB devices.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""Examples:
-  1. Download song from Spotify link & push to ADB device:
+  1. Interactive Ranger-style Dual-Pane TUI sync:
+     python app.py --sync -i
+
+  2. Synchronize local music folder (/home/aruncs/Music) with connected ADB device:
+     python app.py --sync
+
+  3. Download song from Spotify link & push to ADB device:
      python app.py -dl "https://open.spotify.com/track/4cOdK2wGLETKBW3PvgPWqT" --push-adb
 
-  2. Download song by query to songs/download/ (interactively asks to push):
+  4. Download song by query to songs/download/:
      python app.py -dl "Arijit Singh Kesariya"
 
-  3. Interactive device selection & FZF song search:
+  5. Interactive device selection & FZF song search:
      python app.py
-
-  4. Non-interactive search on connected ADB device:
-     python app.py -s "Arijit Singh"
 """
+    )
+    parser.add_argument(
+        "--config",
+        type=str,
+        help="Path to custom config.json file."
+    )
+    parser.add_argument(
+        "--sync",
+        action="store_true",
+        help="Synchronize local music folder with ADB device."
+    )
+    parser.add_argument(
+        "-i", "--interactive",
+        action="store_true",
+        help="Launch Ranger-style interactive dual-pane TUI during folder sync."
+    )
+    parser.add_argument(
+        "--sync-folder",
+        type=str,
+        help="Local music folder to sync (overrides config.json local_sync_folder)."
+    )
+    parser.add_argument(
+        "--remote-dir",
+        type=str,
+        help="Target folder on ADB device (overrides config.json remote_adb_folder)."
+    )
+    parser.add_argument(
+        "--force-sync",
+        action="store_true",
+        help="Include songs already present on device in sync upload list."
+    )
+    parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Automatically confirm sync and push operations without prompting."
+    )
+    parser.add_argument(
+        "--refresh-cache",
+        action="store_true",
+        help="Bypass Redis cache and re-query live ADB device."
     )
     parser.add_argument(
         "-dl", "--download",
@@ -46,8 +94,7 @@ def parse_args():
     parser.add_argument(
         "--download-dir",
         type=str,
-        default="songs/download",
-        help="Target folder for downloaded songs (default: songs/download)."
+        help="Target folder for downloaded songs (overrides config.json download_folder)."
     )
     parser.add_argument(
         "--use-telegram",
@@ -58,7 +105,7 @@ def parse_args():
         "--push-adb",
         action="store_true",
         default=None,
-        help="Automatically push downloaded song to /storage/emulated/0/Music/ADB on connected device."
+        help="Automatically push downloaded song to ADB device."
     )
     parser.add_argument(
         "--no-push-adb",
@@ -148,13 +195,41 @@ def output_songs(songs: List[Dict[str, Any]], fmt: str):
 def main():
     args = parse_args()
 
+    # Load settings from config.json
+    cfg = config_manager.load_config(args.config)
+
+    # Merge configuration defaults with CLI overrides
+    target_device_serial = args.device or cfg.get("default_device_serial")
+    local_sync_dir = args.sync_folder or cfg.get("local_sync_folder", "/home/aruncs/Music")
+    remote_adb_dir = args.remote_dir or cfg.get("remote_adb_folder", "/storage/emulated/0/Music/ADB")
+    download_dir = args.download_dir or cfg.get("download_folder", "songs/download")
+    use_telegram = args.use_telegram or cfg.get("use_telegram", False)
+    push_adb_setting = args.push_adb if args.push_adb is not None else cfg.get("auto_push_adb", None)
+    audio_extensions = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus"])
+    redis_cfg = cfg.get("redis")
+
+    # Handle --sync mode
+    if args.sync or args.interactive:
+        syncer.run_sync_workflow(
+            local_dir=local_sync_dir,
+            device_serial=target_device_serial,
+            remote_dir=remote_adb_dir,
+            audio_extensions=audio_extensions,
+            force_sync=args.force_sync,
+            auto_confirm=args.yes,
+            interactive=args.interactive,
+            redis_cfg=redis_cfg,
+            refresh_cache=args.refresh_cache
+        )
+        sys.exit(0)
+
     # Handle --download (-dl)
     if args.download:
         mgr = DownloadManager(
-            output_dir=args.download_dir,
-            use_telegram=args.use_telegram,
-            device_serial=args.device,
-            auto_push_adb=args.push_adb
+            output_dir=download_dir,
+            use_telegram=use_telegram,
+            device_serial=target_device_serial,
+            auto_push_adb=push_adb_setting
         )
         downloaded_file = mgr.download(args.download)
         if downloaded_file:
@@ -203,26 +278,26 @@ def main():
             sys.exit(1)
 
         if not devices:
-            print("Error: No ADB devices connected. Please connect a device via USB/Wi-Fi with USB debugging enabled.", file=sys.stderr)
+            print("Error: No ADB devices connected. Please connect an Android device via USB/Wi-Fi.", file=sys.stderr)
             sys.exit(1)
 
         target_device = None
 
-        if args.device:
+        if target_device_serial:
             for dev in devices:
-                if dev["serial"] == args.device or dev["model"] == args.device:
+                if dev["serial"] == target_device_serial or dev["model"] == target_device_serial:
                     target_device = dev
                     break
             if not target_device:
                 try:
-                    idx = int(args.device)
+                    idx = int(target_device_serial)
                     if 1 <= idx <= len(devices):
                         target_device = devices[idx - 1]
                 except ValueError:
                     pass
 
             if not target_device:
-                target_device = {"serial": args.device, "model": args.device, "description": args.device}
+                target_device = {"serial": target_device_serial, "model": target_device_serial, "description": target_device_serial}
         else:
             target_device = adb_manager.select_device_from_stdin(devices)
             if not target_device:
@@ -237,7 +312,9 @@ def main():
 
         print(f"Querying songs from ADB device {target_device['description']}...", file=sys.stderr)
         try:
-            raw_output = adb_manager.query_songs_from_device(target_device["serial"])
+            raw_output = adb_manager.query_songs_from_device(
+                target_device["serial"], redis_cfg=redis_cfg, refresh_cache=args.refresh_cache
+            )
             songs = song_parser.parse_songs(raw_output)
             source_name = f"ADB: {target_device['serial']}"
         except Exception as e:

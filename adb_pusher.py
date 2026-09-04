@@ -12,6 +12,7 @@ from typing import Optional, Dict, Any, List
 import adb_manager
 import song_parser
 import fuzzy_matcher
+import redis_cache
 
 TARGET_REMOTE_DIR = "/storage/emulated/0/Music/ADB"
 
@@ -43,18 +44,20 @@ def ensure_remote_folder(serial: str, remote_dir: str = TARGET_REMOTE_DIR) -> bo
     except subprocess.CalledProcessError as e:
         print(f"[ADB Pusher] Failed to create directory '{remote_dir}' on device: {e.stderr}", file=sys.stderr)
 
-    # Re-check existence
     if check_remote_folder_exists(serial, remote_dir):
         print(f"[ADB Pusher] Successfully created folder '{remote_dir}' on device.", file=sys.stderr)
         return True
 
-    # Alert user to manually create folder if creation failed
     print(f"\n[ERROR] Unable to create folder '{remote_dir}' on device automatically.", file=sys.stderr)
     print(f"[ACTION REQUIRED] Please manually create the folder '{remote_dir}' on your Android device and try again.\n", file=sys.stderr)
     return False
 
 
-def find_duplicate_song(serial: str, local_filepath: str) -> Optional[Dict[str, Any]]:
+def find_duplicate_song(
+    serial: str,
+    local_filepath: str,
+    redis_cfg: Optional[Dict[str, Any]] = None
+) -> Optional[Dict[str, Any]]:
     """
     Check if a matching song already exists on the target ADB device.
     Checks MediaStore content query and existing files in remote target directory.
@@ -64,22 +67,19 @@ def find_duplicate_song(serial: str, local_filepath: str) -> Optional[Dict[str, 
     filename_no_ext = os.path.splitext(filename)[0]
 
     try:
-        raw_songs = adb_manager.query_songs_from_device(serial)
+        raw_songs = adb_manager.query_songs_from_device(serial, redis_cfg=redis_cfg)
         existing_songs = song_parser.parse_songs(raw_songs)
     except Exception:
         existing_songs = []
 
-    # 1. Fuzzy search existing songs for exact/close title or filename match
     matches = fuzzy_matcher.filter_and_rank_songs(filename_no_ext, existing_songs)
     if matches:
         top_match = matches[0]
         match_title = top_match.get("title") or ""
         match_display = top_match.get("_display_name") or ""
-        # Check if match is sufficiently close
         if filename_no_ext.lower() in match_title.lower() or filename_no_ext.lower() in match_display.lower():
             return top_match
 
-    # 2. Check if file with exact filename already exists in TARGET_REMOTE_DIR
     cmd = ["adb", "-s", serial, "shell", f"test -f '{TARGET_REMOTE_DIR}/{filename}' && echo 1 || echo 0"]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -98,10 +98,11 @@ def find_duplicate_song(serial: str, local_filepath: str) -> Optional[Dict[str, 
 def push_song_to_device(
     serial: str,
     local_filepath: str,
-    remote_dir: str = TARGET_REMOTE_DIR
+    remote_dir: str = TARGET_REMOTE_DIR,
+    redis_cfg: Optional[Dict[str, Any]] = None
 ) -> bool:
     """
-    Push a local audio file to the target ADB directory and trigger media scan.
+    Push a local audio file to target ADB directory, trigger media scan, and evict Redis cache.
     """
     if not os.path.exists(local_filepath):
         print(f"[ADB Pusher] Local file '{local_filepath}' not found.", file=sys.stderr)
@@ -123,7 +124,7 @@ def push_song_to_device(
         print(f"[ADB Pusher] ADB push failed: {e.stderr or e.stdout}", file=sys.stderr)
         return False
 
-    # Trigger Android Media Scanner broadcast so music player registers the track
+    # Trigger Android Media Scanner broadcast
     print(f"[ADB Pusher] Triggering media scanner for '{remote_path}'...", file=sys.stderr)
     scan_cmd = [
         "adb", "-s", serial, "shell", "am", "broadcast",
@@ -135,6 +136,10 @@ def push_song_to_device(
     except Exception:
         pass
 
+    # Evict cached Redis song list so next query fetches fresh MediaStore state
+    if redis_cfg:
+        redis_cache.invalidate_cache(serial, redis_cfg)
+
     print(f"[ADB Pusher] Successfully pushed to device: {remote_path}", file=sys.stderr)
     return True
 
@@ -142,7 +147,8 @@ def push_song_to_device(
 def handle_post_download_adb_workflow(
     local_filepath: str,
     device_serial: Optional[str] = None,
-    auto_confirm: Optional[bool] = None
+    auto_confirm: Optional[bool] = None,
+    redis_cfg: Optional[Dict[str, Any]] = None
 ):
     """
     Main post-download workflow:
@@ -150,7 +156,7 @@ def handle_post_download_adb_workflow(
     2. Check for duplicate song match on device & notify user.
     3. Ask user 'push it to adb?'.
     4. Check/create remote folder '/storage/emulated/0/Music/ADB'.
-    5. Push file to device.
+    5. Push file to device and clear cache.
     """
     try:
         devices = adb_manager.list_adb_devices()
@@ -161,7 +167,6 @@ def handle_post_download_adb_workflow(
         print("\n[ADB Pusher] No ADB devices connected. File saved locally.", file=sys.stderr)
         return
 
-    # Select target device
     target_device = None
     if device_serial:
         for dev in devices:
@@ -175,22 +180,19 @@ def handle_post_download_adb_workflow(
     print(f"\n==================================================", file=sys.stderr)
     print(f"[ADB Pusher] Checking device: {target_device['description']}", file=sys.stderr)
 
-    # Step 1: Duplicate check
-    duplicate = find_duplicate_song(serial, local_filepath)
+    duplicate = find_duplicate_song(serial, local_filepath, redis_cfg=redis_cfg)
     if duplicate:
         print(f"\n[NOTICE] A matching song was found on your device!", file=sys.stderr)
         print(f"         Existing Title : {duplicate.get('title', 'Unknown')}", file=sys.stderr)
         print(f"         Existing Path  : {duplicate.get('_data', 'Unknown')}", file=sys.stderr)
         print(f"         Downloaded File: {os.path.basename(local_filepath)}\n", file=sys.stderr)
 
-    # Step 2: Ask user "push it to adb ?"
     should_push = False
     if auto_confirm is True:
         should_push = True
     elif auto_confirm is False:
         should_push = False
     else:
-        # Prompt user interactively if tty is available
         if sys.stdin.isatty() or os.isatty(0):
             try:
                 response = input("Push it to ADB device? [y/N]: ").strip().lower()
@@ -198,11 +200,9 @@ def handle_post_download_adb_workflow(
             except (KeyboardInterrupt, EOFError):
                 should_push = False
         else:
-            # Non-interactive default (notify and prompt choice)
             print("Run with --push-adb to automatically push downloaded songs to your ADB device.", file=sys.stderr)
 
-    # Step 3: Push if confirmed
     if should_push:
-        push_song_to_device(serial, local_filepath)
+        push_song_to_device(serial, local_filepath, redis_cfg=redis_cfg)
     else:
         print("[ADB Pusher] Skipped pushing to ADB device.", file=sys.stderr)

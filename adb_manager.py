@@ -1,12 +1,13 @@
 """
 ADB device connection & MediaStore content provider manager.
 Handles discovering ADB devices, selecting devices interactively or via stdin/args,
-and querying songs from device media content provider.
+and querying songs from device media content provider with optional Redis caching.
 """
 import sys
 import subprocess
 import shutil
 from typing import List, Dict, Any, Optional
+import redis_cache
 
 MEDIA_URI = "content://media/external/audio/media"
 MEDIA_PROJECTION = "_id:_display_name:title:artist:album:album_artist:composer:track:year:duration:mime_type:_size:_data"
@@ -43,7 +44,6 @@ def list_adb_devices() -> List[Dict[str, str]]:
         serial = parts[0]
         state = parts[1]
 
-        # Extract extra info like model:Lenovo_TB_X306X product:...
         extra_info = {}
         for token in parts[2:]:
             if ":" in token:
@@ -74,12 +74,10 @@ def select_device_from_stdin(devices: List[Dict[str, str]]) -> Optional[Dict[str
     if not line:
         return None
 
-    # Check if line matches a serial directly
     for dev in devices:
         if dev["serial"] == line:
             return dev
 
-    # Check if line is 1-based or 0-based index
     try:
         idx = int(line)
         if 1 <= idx <= len(devices):
@@ -91,11 +89,22 @@ def select_device_from_stdin(devices: List[Dict[str, str]]) -> Optional[Dict[str
 
     return None
 
-def query_songs_from_device(serial: str) -> str:
+def query_songs_from_device(
+    serial: str,
+    redis_cfg: Optional[Dict[str, Any]] = None,
+    refresh_cache: bool = False
+) -> str:
     """
-    Execute 'adb shell content query ...' on the target device serial.
-    Returns the stdout output string containing song records.
+    Execute 'adb shell content query ...' on target device serial.
+    Checks Redis cache first if redis_cfg is provided and refresh_cache is False.
     """
+    # 1. Check Redis cache if enabled and not refreshing
+    if not refresh_cache and redis_cfg:
+        cached_output = redis_cache.get_cached_songs(serial, redis_cfg)
+        if cached_output:
+            return cached_output
+
+    # 2. Query live ADB device
     cmd = [
         "adb", "-s", serial, "shell", "content", "query",
         "--uri", MEDIA_URI,
@@ -104,6 +113,12 @@ def query_songs_from_device(serial: str) -> str:
     ]
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return res.stdout
+        output = res.stdout
+
+        # 3. Store result in Redis cache if enabled
+        if redis_cfg:
+            redis_cache.set_cached_songs(serial, output, redis_cfg)
+
+        return output
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Error querying songs from device {serial}: {e.stderr or e.stdout}")
