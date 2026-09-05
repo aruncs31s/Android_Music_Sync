@@ -9,6 +9,9 @@ import datetime
 from typing import List, Dict, Any
 
 import audio_metadata
+from utils import get_logger
+
+logger = get_logger()
 
 
 def format_mtime(ts: float) -> str:
@@ -35,12 +38,16 @@ def scan_songs_from_paths(
     songs: List[Dict[str, Any]] = []
 
     seen_paths = set()
+    logger.info(f"Starting song library scan across {len(folder_paths)} configured paths...")
 
     for folder in folder_paths:
         if not folder or not os.path.exists(folder):
+            logger.warning(f"Scan path skipped (does not exist): '{folder}'")
             continue
 
         folder_abs = os.path.abspath(folder)
+        logger.info(f"Scanning directory: '{folder_abs}'...")
+        scanned_in_folder = 0
 
         for root, _, files in os.walk(folder_abs):
             for file in files:
@@ -55,7 +62,8 @@ def scan_songs_from_paths(
                         st = os.stat(full_path)
                         mtime = st.st_mtime
                         size = st.st_size
-                    except OSError:
+                    except OSError as err:
+                        logger.error(f"Failed stat for file '{full_path}': {err}")
                         mtime = 0.0
                         size = 0
 
@@ -87,6 +95,9 @@ def scan_songs_from_paths(
                         "searchable_text": f"{title} {artist} {album} {filename}".lower()
                     }
                     songs.append(song)
+                    scanned_in_folder += 1
+
+        logger.info(f"Finished scanning '{folder_abs}': Found {scanned_in_folder} audio files.")
 
     # Sort songs by mtime descending (newest modified files first)
     songs.sort(key=lambda s: s.get("mtime", 0.0), reverse=True)
@@ -95,4 +106,5 @@ def scan_songs_from_paths(
     for idx, s in enumerate(songs, 1):
         s["_id"] = idx
 
+    logger.info(f"Scan complete. Total songs loaded & sorted by mtime: {len(songs)}")
     return songs

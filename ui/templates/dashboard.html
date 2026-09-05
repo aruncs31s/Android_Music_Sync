@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity Music Manager & Web Dashboard</title>
+  <link rel="stylesheet" href="/static/dashboard.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Header & Navigation -->
+  <header class="header">
+    <div class="logo">
+      <span>🎵</span>
+      <span>Antigravity Music Dashboard</span>
+    </div>
+    <nav class="nav-tabs">
+      <button class="tab-btn active" data-tab="tab-overview">Overview</button>
+      <button class="tab-btn" data-tab="tab-devices">Available Devices</button>
+      <button class="tab-btn" data-tab="tab-library">Music Library</button>
+      <button class="tab-btn" data-tab="tab-duplicates">Duplicates</button>
+      <button class="tab-btn" data-tab="tab-synced">Synced Tracks</button>
+      <button class="tab-btn" data-tab="tab-hidden">Hidden Files</button>
+    </nav>
+  </header>
+
+  <div class="container">
+
+    <!-- Overview Tab -->
+    <div id="tab-overview" class="tab-content" style="display: block;">
+      
+      <!-- Metrics Grid -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-header">
+            <span>Total Local Songs</span>
+            <span class="metric-icon">🎧</span>
+          </div>
+          <div class="metric-value" id="stat-total-songs">0</div>
+          <div class="metric-desc">Across configured local music folders</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-header">
+            <span>Synced Tracks</span>
+            <span class="metric-icon">🔄</span>
+          </div>
+          <div class="metric-value" id="stat-synced-count">0</div>
+          <div class="metric-desc">Recorded in SQLite ui/db.db</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-header">
+            <span>Hidden Songs</span>
+            <span class="metric-icon">🙈</span>
+          </div>
+          <div class="metric-value" id="stat-hidden-count">0</div>
+          <div class="metric-desc">Files hidden from sync lists</div>
+        </div>
+
+        <div class="metric-card">
+          <div class="metric-header">
+            <span>Duplicates</span>
+            <span class="metric-icon">⚠️</span>
+          </div>
+          <div class="metric-value" id="stat-duplicates-count">0</div>
+          <div class="metric-desc">Duplicate audio files detected</div>
+        </div>
+      </div>
+
+      <!-- Device Breakdown Panel -->
+      <div class="panel">
+        <div class="panel-title">
+          <span>Connected Devices & Storage Breakdown</span>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn" onclick="scanAdbDevices()">🔍 Scan ADB Device</button>
+            <button class="btn btn-secondary" onclick="scanIpHosts()">🌐 Scan Over-IP Peers</button>
+            <button class="btn btn-secondary" onclick="loadDashboardStats()">↻ Refresh Stats</button>
+          </div>
+        </div>
+        <div id="device-list">
+          <p class="text-muted">Loading device counts...</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Available Devices Tab -->
+    <div id="tab-devices" class="tab-content" style="display: none;">
+      <div class="panel">
+        <div class="panel-title">
+          <span>Available Devices & Device Scanners</span>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn" onclick="scanAdbDevices()">🔍 Scan ADB Devices</button>
+            <button class="btn btn-secondary" onclick="scanIpHosts()">🌐 Ping Over-IP Devices</button>
+          </div>
+        </div>
+
+        <!-- Add Over-IP Device Form -->
+        <div style="background: rgba(15, 23, 42, 0.5); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+          <h4 style="margin-bottom: 0.75rem;">🌐 Add & Ping New Over-IP Peer Device</h4>
+          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+            <input type="text" id="input-ip-addr" class="search-bar" placeholder="IP Address (e.g. 192.168.1.50)" style="max-width: 250px;">
+            <input type="number" id="input-ip-port" class="search-bar" value="5000" style="max-width: 100px;">
+            <button class="btn" onclick="addOverIpDevice()">+ Add & Ping Device</button>
+          </div>
+          <small id="ip-add-status" class="text-muted" style="margin-top: 0.5rem; display: block;"></small>
+        </div>
+
+        <!-- Unified Devices Table -->
+        <div id="devices-full-list">
+          <p class="text-muted">Loading available devices...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Music Library Tab -->
+    <div id="tab-library" class="tab-content" style="display: none;">
+      <div class="panel">
+        <div class="panel-title">
+          <span>Local Music Library</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Track & Details</th>
+              <th>Duration</th>
+              <th>Size</th>
+              <th>Bitrate</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="songs-tbody">
+            <tr><td colspan="6" class="text-muted">Loading music library...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Duplicates Tab -->
+    <div id="tab-duplicates" class="tab-content" style="display: none;">
+      <div class="panel">
+        <div class="panel-title">
+          <span>Duplicate Song Clusters</span>
+          <button class="btn btn-secondary" onclick="loadDuplicates()">↻ Re-scan Duplicates</button>
+        </div>
+        <div id="duplicates-container">
+          <p class="text-muted">Analyzing duplicate audio tracks...</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Synced Tracks Tab -->
+    <div id="tab-synced" class="tab-content" style="display: none;">
+      <div class="panel">
+        <div class="panel-title">
+          <span>Synced Tracks History (ui/db.db)</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Filename</th>
+              <th>Target Device</th>
+              <th>Remote Path</th>
+              <th>Synced At</th>
+            </tr>
+          </thead>
+          <tbody id="synced-tbody">
+            <tr><td colspan="5" class="text-muted">Loading synced history...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Hidden Files Tab -->
+    <div id="tab-hidden" class="tab-content" style="display: none;">
+      <div class="panel">
+        <div class="panel-title">
+          <span>Hidden Files (ui/db.db)</span>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Filename</th>
+              <th>Filepath</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="hidden-tbody">
+            <tr><td colspan="4" class="text-muted">Loading hide list...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Audio Player Footer -->
+  <div id="audio-player-bar" class="audio-player-bar" style="display: none;">
+    <div class="player-info">
+      <span style="font-size: 1.5rem;">🎵</span>
+      <div>
+        <div class="now-playing-title" id="player-title">Track Title</div>
+        <div class="now-playing-artist" id="player-artist">Artist</div>
+      </div>
+    </div>
+    <audio id="audio-player" controls autoplay></audio>
+  </div>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
