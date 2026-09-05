@@ -1,6 +1,6 @@
 """
 Music Folder Synchronizer module with high-performance indexing, live progress reporting,
-Redis caching, SQLite Hide List database filtering, and Ranger-style Dual-Pane TUI (-i) support.
+Redis caching, SQLite Hide List & Synced History database filtering, and Ranger-style Dual-Pane TUI (-i) support.
 
 Scans a local music directory, compares files with songs on an ADB device,
 separates already-present songs (skipped by default) from missing songs (to sync),
@@ -74,7 +74,7 @@ def compare_local_files_with_device(
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     High-performance comparison of local music files with device contents.
-    Includes SQLite Hide List filtering, Redis caching, fast lookup, and live progress reporting.
+    Includes SQLite Synced History & Hide List filtering, Redis caching, fast lookup, and live progress.
     Returns: (already_present_list, to_sync_list, all_device_songs)
     """
     try:
@@ -88,6 +88,9 @@ def compare_local_files_with_device(
     if not show_hidden:
         hidden_set = hide_list_db.get_hidden_paths_set()
         local_files = [f for f in local_files if f["path"] not in hidden_set]
+
+    # SQLite Synced Tracks History for this specific device serial
+    synced_history_set = hide_list_db.get_synced_paths_set(serial)
 
     device_norm_map: Dict[str, Dict[str, Any]] = {}
     for song in device_songs:
@@ -112,6 +115,7 @@ def compare_local_files_with_device(
     for idx, item in enumerate(local_files, 1):
         filename = item["filename"]
         title_no_ext = item["title_no_ext"]
+        full_path = item["path"]
         norm_name = normalize_string(title_no_ext)
         norm_file = normalize_string(filename)
 
@@ -120,6 +124,16 @@ def compare_local_files_with_device(
             sys.stderr.write(f"\r[Syncer] Checking duplicates: {idx}/{total} ({percent:.1f}%) | Processing: {filename[:40]}...")
             sys.stderr.flush()
 
+        # 1. Check SQLite Synced History first
+        if full_path in synced_history_set:
+            already_present.append({
+                "local": item,
+                "device_match": {"title": title_no_ext, "_display_name": filename},
+                "match_reason": f"Recorded in SQLite synced history for device [{serial}]"
+            })
+            continue
+
+        # 2. Check Device Songs Index & Fuzzy Match
         match_found = device_norm_map.get(norm_name) or device_norm_map.get(norm_file)
 
         if not match_found and len(title_no_ext) > 3:
@@ -161,11 +175,12 @@ def run_sync_workflow(
     """
     Main Sync Folder workflow:
     1. Scan local folder with progress indication.
-    2. Filter out SQLite hidden files unless show_hidden=True.
+    2. Filter out SQLite hidden files & check SQLite synced tracks history for device serial.
     3. Query target ADB device (using Redis cache if available).
     4. Categorize into (Already Present vs To Sync) with live progress bar.
-    5. If interactive (-i), launch Ranger-style Dual-Pane TUI (with 'h' key SQLite hiding).
+    5. If interactive (-i), launch Ranger-style Dual-Pane TUI.
     6. Else, prompt or auto-upload missing files to remote_dir.
+    7. Broadcast MediaScanner refresh on remote directory.
     """
     print(f"\n======================================================================", file=sys.stderr)
     print(f"                     MUSIC FOLDER SYNCHRONIZER                        ", file=sys.stderr)
@@ -200,7 +215,6 @@ def run_sync_workflow(
     print(f" Target ADB Device : {target_device['description']}", file=sys.stderr)
     print(f"======================================================================\n", file=sys.stderr)
 
-    # Step 1: Scan local files
     print(f"Scanning local music files in '{local_dir}'...", file=sys.stderr)
     local_files = scan_local_music_folder(local_dir, audio_extensions)
     print(f"Found {len(local_files)} local audio files.", file=sys.stderr)
@@ -209,7 +223,6 @@ def run_sync_workflow(
         print(f"No audio files found in '{local_dir}'. Nothing to sync.", file=sys.stderr)
         return
 
-    # Step 2: Compare with device (with SQLite hide list filtering)
     print(f"Querying device music library & comparing local files...", file=sys.stderr)
     already_present, to_sync, device_songs = compare_local_files_with_device(
         local_files, serial, remote_dir, redis_cfg=redis_cfg, refresh_cache=refresh_cache, show_hidden=show_hidden
@@ -220,7 +233,6 @@ def run_sync_workflow(
     else:
         to_sync_final = to_sync
 
-    # Step 3: Check if Interactive Ranger TUI (-i) requested
     if interactive:
         print("\n[Syncer] Launching Ranger-Style Interactive Sync TUI (-i)...", file=sys.stderr)
         res = ranger_sync_tui.run_ranger_sync_tui(
@@ -231,11 +243,11 @@ def run_sync_workflow(
             redis_cfg=redis_cfg
         )
         print(f"\n[Syncer] Ranger TUI session finished. Synced {len(res['synced'])} files, Hidden {len(res.get('hidden', []))} files.", file=sys.stderr)
+        adb_pusher.refresh_device_media_scanner(serial, remote_dir)
         return
 
-    # Step 4: Non-interactive presentation & CLI sync
     print(f"\n----------------------------------------------------------------------", file=sys.stderr)
-    print(f" [SECTION 1] Already Present on Device (Skipped by default - {len(already_present)} files):", file=sys.stderr)
+    print(f" [SECTION 1] Already Present / Synced on Device (Skipped by default - {len(already_present)} files):", file=sys.stderr)
     print(f"----------------------------------------------------------------------", file=sys.stderr)
     if not already_present:
         print("  (None found)", file=sys.stderr)
@@ -247,13 +259,13 @@ def run_sync_workflow(
             print(f"  {idx:3d}. {loc['filename']} ({loc['size_formatted']})", file=sys.stderr)
             print(f"       -> {reason}", file=sys.stderr)
         if len(already_present) > display_limit:
-            print(f"  ... and {len(already_present) - display_limit} more files already present on device.", file=sys.stderr)
+            print(f"  ... and {len(already_present) - display_limit} more files already present/synced on device.", file=sys.stderr)
 
     print(f"\n----------------------------------------------------------------------", file=sys.stderr)
     print(f" [SECTION 2] To Sync / Upload ({len(to_sync_final)} files):", file=sys.stderr)
     print(f"----------------------------------------------------------------------", file=sys.stderr)
     if not to_sync_final:
-        print("  (No missing files to sync. All local files are already present on device!)", file=sys.stderr)
+        print("  (No missing files to sync. All local files are already present/synced on device!)", file=sys.stderr)
         print(f"======================================================================\n", file=sys.stderr)
         return
 
@@ -294,6 +306,8 @@ def run_sync_workflow(
         pushed = adb_pusher.push_song_to_device(serial, item["path"], remote_dir, redis_cfg=redis_cfg)
         if pushed:
             success_count += 1
+
+    adb_pusher.refresh_device_media_scanner(serial, remote_dir)
 
     print(f"\n======================================================================", file=sys.stderr)
     print(f" Sync Complete: {success_count}/{len(to_sync_final)} files uploaded successfully.", file=sys.stderr)

@@ -129,3 +129,34 @@ def set_cached_local_index(local_dir: str, files_data: List[Dict[str, str]], red
         print(f"[RedisCache] Saved local file index for '{local_dir}' in Redis (TTL: {ttl}s).", file=sys.stderr)
     except Exception as e:
         print(f"[RedisCache] Write local index error: {e}", file=sys.stderr)
+
+
+def get_cache(redis_cfg: Optional[Dict[str, Any]], key: str) -> Optional[str]:
+    """Retrieve raw cached string value from Redis by key."""
+    client = _get_redis_client(redis_cfg)
+    if not client:
+        return None
+
+    try:
+        val = client.get(key)
+        if val:
+            return val.decode("utf-8", errors="replace")
+    except Exception as e:
+        print(f"[RedisCache] get_cache error for '{key}': {e}", file=sys.stderr)
+    return None
+
+
+def set_cache(redis_cfg: Optional[Dict[str, Any]], key: str, value: str, ttl_seconds: Optional[int] = None):
+    """Save raw string value in Redis by key with optional TTL."""
+    client = _get_redis_client(redis_cfg)
+    if not client or not value:
+        return
+
+    if ttl_seconds is None:
+        ttl_seconds = int(redis_cfg.get("ttl_seconds", 3600))
+
+    try:
+        client.setex(key, ttl_seconds, value)
+    except Exception as e:
+        print(f"[RedisCache] set_cache error for '{key}': {e}", file=sys.stderr)
+

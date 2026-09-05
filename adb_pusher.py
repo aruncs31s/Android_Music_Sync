@@ -2,7 +2,8 @@
 ADB File Pusher & Duplicate Detection Module.
 
 Handles checking for duplicate songs on ADB device, verifying/creating remote directory
-(/storage/emulated/0/Music/ADB), prompting the user, pushing files, and triggering media scan.
+(/storage/emulated/0/Music/ADB), prompting the user, pushing files, recording synced tracks in SQLite DB,
+and triggering media scanner refresh broadcasts.
 """
 import sys
 import os
@@ -13,6 +14,7 @@ import adb_manager
 import song_parser
 import fuzzy_matcher
 import redis_cache
+import hide_list_db
 
 TARGET_REMOTE_DIR = "/storage/emulated/0/Music/ADB"
 
@@ -53,6 +55,33 @@ def ensure_remote_folder(serial: str, remote_dir: str = TARGET_REMOTE_DIR) -> bo
     return False
 
 
+def refresh_device_media_scanner(serial: str, remote_path: str) -> bool:
+    """
+    Trigger Android MediaScanner broadcast scan for file or directory path.
+    Example: file:///storage/emulated/0/Music/ADB
+    """
+    if not remote_path.startswith("file://"):
+        file_uri = f"file://{remote_path}"
+    else:
+        file_uri = remote_path
+
+    cmd = [
+        "adb", "-s", serial, "shell", "am", "broadcast",
+        "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
+        "-d", file_uri
+    ]
+    try:
+        print(f"[MediaScanner] Refreshing media library on device [{serial}] for '{file_uri}'...", file=sys.stderr)
+        res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+        output = res.stdout.strip()
+        if output:
+            print(f"  {output}", file=sys.stderr)
+        return True
+    except Exception as e:
+        print(f"[MediaScanner] Broadcast warning: {e}", file=sys.stderr)
+        return False
+
+
 def find_duplicate_song(
     serial: str,
     local_filepath: str,
@@ -60,11 +89,20 @@ def find_duplicate_song(
 ) -> Optional[Dict[str, Any]]:
     """
     Check if a matching song already exists on the target ADB device.
-    Checks MediaStore content query and existing files in remote target directory.
+    Checks SQLite synced_files history, MediaStore content query, and remote folder files.
     Returns details of duplicate song if found, else None.
     """
     filename = os.path.basename(local_filepath)
     filename_no_ext = os.path.splitext(filename)[0]
+
+    # Check SQLite synced_files history for this device serial
+    synced_set = hide_list_db.get_synced_paths_set(serial)
+    if local_filepath in synced_set:
+        return {
+            "title": filename_no_ext,
+            "_display_name": filename,
+            "_data": f"Recorded in SQLite synced_files database for [{serial}]"
+        }
 
     try:
         raw_songs = adb_manager.query_songs_from_device(serial, redis_cfg=redis_cfg)
@@ -102,7 +140,7 @@ def push_song_to_device(
     redis_cfg: Optional[Dict[str, Any]] = None
 ) -> bool:
     """
-    Push a local audio file to target ADB directory, trigger media scan, and evict Redis cache.
+    Push a local audio file to target ADB directory, record in SQLite DB, trigger media scan, and evict Redis cache.
     """
     if not os.path.exists(local_filepath):
         print(f"[ADB Pusher] Local file '{local_filepath}' not found.", file=sys.stderr)
@@ -124,17 +162,11 @@ def push_song_to_device(
         print(f"[ADB Pusher] ADB push failed: {e.stderr or e.stdout}", file=sys.stderr)
         return False
 
-    # Trigger Android Media Scanner broadcast
-    print(f"[ADB Pusher] Triggering media scanner for '{remote_path}'...", file=sys.stderr)
-    scan_cmd = [
-        "adb", "-s", serial, "shell", "am", "broadcast",
-        "-a", "android.intent.action.MEDIA_SCANNER_SCAN_FILE",
-        "-d", f"file://{remote_path}"
-    ]
-    try:
-        subprocess.run(scan_cmd, capture_output=True, text=True, check=False)
-    except Exception:
-        pass
+    # Record pushed track in SQLite synced_files table for this device serial
+    hide_list_db.add_synced_file(local_filepath, filename, serial, remote_dir)
+
+    # Trigger Android Media Scanner broadcast for pushed file
+    refresh_device_media_scanner(serial, remote_path)
 
     # Evict cached Redis song list so next query fetches fresh MediaStore state
     if redis_cfg:
@@ -156,7 +188,7 @@ def handle_post_download_adb_workflow(
     2. Check for duplicate song match on device & notify user.
     3. Ask user 'push it to adb?'.
     4. Check/create remote folder '/storage/emulated/0/Music/ADB'.
-    5. Push file to device and clear cache.
+    5. Push file to device, record in SQLite, refresh media scanner, and clear cache.
     """
     try:
         devices = adb_manager.list_adb_devices()
@@ -204,5 +236,6 @@ def handle_post_download_adb_workflow(
 
     if should_push:
         push_song_to_device(serial, local_filepath, redis_cfg=redis_cfg)
+        refresh_device_media_scanner(serial, TARGET_REMOTE_DIR)
     else:
         print("[ADB Pusher] Skipped pushing to ADB device.", file=sys.stderr)

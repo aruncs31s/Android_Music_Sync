@@ -15,6 +15,7 @@ MENU_OPTIONS = [
     ("3", "Download", "Download Song from Spotify Link or Query"),
     ("4", "Cache Refresh", "Clear & Re-populate Redis Song Cache"),
     ("5", "Reverse Sync", "Reverse Sync: Pull missing songs from ADB Device -> Local Folder"),
+    ("6", "Over-IP Sync", "Over-IP Sync: Sync music across devices over HTTP IP"),
     ("Q", "Exit", "Quit Application")
 ]
 
@@ -109,6 +110,8 @@ def show_main_menu_tui() -> Optional[str]:
                     return "cache_refresh"
                 elif selected_num == "5":
                     return "reverse_sync"
+                elif selected_num == "6":
+                    return "over_ip"
                 else:
                     return None
             elif key == ord('1'):
@@ -121,6 +124,8 @@ def show_main_menu_tui() -> Optional[str]:
                 return "cache_refresh"
             elif key == ord('5'):
                 return "reverse_sync"
+            elif key == ord('6'):
+                return "over_ip"
             elif key in (27, ord('q'), ord('Q'), ord('0')):
                 return None
 
