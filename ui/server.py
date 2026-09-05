@@ -184,6 +184,20 @@ def delete_song():
         # Clean up database references
         ui_db.remove_hidden_file(abs_path)
         hide_list_db.remove_hidden_file(abs_path)
+        
+        # Clear in-memory metadata cache
+        audio_metadata.METADATA_CACHE.pop(abs_path, None)
+
+        # Clear Redis cache if active
+        cfg = config_manager.load_config()
+        redis_cfg = cfg.get("redis")
+        if redis_cfg:
+            try:
+                import redis_cache
+                redis_cache.set_cache(redis_cfg, f"over_ip_songs:{socket.gethostname()}", "")
+            except Exception:
+                pass
+
         print(f"[Web UI] Deleted file from disk: {abs_path}", file=sys.stderr)
         return jsonify({"status": "success", "message": f"Successfully deleted {os.path.basename(abs_path)}"})
     except Exception as e:

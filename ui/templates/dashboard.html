@@ -14,16 +14,44 @@
   <!-- Header & Navigation -->
   <header class="header">
     <div class="logo">
-      <span>🎵</span>
+      <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="url(#logo-grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <defs>
+          <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#6366f1"/>
+            <stop offset="100%" stop-color="#8b5cf6"/>
+          </linearGradient>
+        </defs>
+        <path d="M9 18V5l12-2v13"/>
+        <circle cx="6" cy="18" r="3"/>
+        <circle cx="18" cy="16" r="3"/>
+      </svg>
       <span>Antigravity Music Dashboard</span>
     </div>
     <nav class="nav-tabs">
-      <button class="tab-btn active" data-tab="tab-overview">Overview</button>
-      <button class="tab-btn" data-tab="tab-devices">Available Devices</button>
-      <button class="tab-btn" data-tab="tab-library">Music Library</button>
-      <button class="tab-btn" data-tab="tab-duplicates">Duplicates</button>
-      <button class="tab-btn" data-tab="tab-synced">Synced Tracks</button>
-      <button class="tab-btn" data-tab="tab-hidden">Hidden Files</button>
+      <button class="tab-btn active" data-tab="tab-overview">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Overview
+      </button>
+      <button class="tab-btn" data-tab="tab-devices">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+        Available Devices
+      </button>
+      <button class="tab-btn" data-tab="tab-library">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        Music Library
+      </button>
+      <button class="tab-btn" data-tab="tab-duplicates">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Duplicates
+      </button>
+      <button class="tab-btn" data-tab="tab-synced">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Synced Tracks
+      </button>
+      <button class="tab-btn" data-tab="tab-hidden">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+        Hidden Files
+      </button>
     </nav>
   </header>
 
@@ -37,7 +65,9 @@
         <div class="metric-card">
           <div class="metric-header">
             <span>Total Local Songs</span>
-            <span class="metric-icon">🎧</span>
+            <span class="metric-icon">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+            </span>
           </div>
           <div class="metric-value" id="stat-total-songs">0</div>
           <div class="metric-desc">Across configured local music folders</div>
@@ -46,7 +76,9 @@
         <div class="metric-card">
           <div class="metric-header">
             <span>Synced Tracks</span>
-            <span class="metric-icon">🔄</span>
+            <span class="metric-icon">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            </span>
           </div>
           <div class="metric-value" id="stat-synced-count">0</div>
           <div class="metric-desc">Recorded in SQLite ui/db.db</div>
@@ -55,7 +87,9 @@
         <div class="metric-card">
           <div class="metric-header">
             <span>Hidden Songs</span>
-            <span class="metric-icon">🙈</span>
+            <span class="metric-icon">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </span>
           </div>
           <div class="metric-value" id="stat-hidden-count">0</div>
           <div class="metric-desc">Files hidden from sync lists</div>
@@ -64,7 +98,9 @@
         <div class="metric-card">
           <div class="metric-header">
             <span>Duplicates</span>
-            <span class="metric-icon">⚠️</span>
+            <span class="metric-icon">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            </span>
           </div>
           <div class="metric-value" id="stat-duplicates-count">0</div>
           <div class="metric-desc">Duplicate audio files detected</div>
@@ -76,9 +112,18 @@
         <div class="panel-title">
           <span>Connected Devices & Storage Breakdown</span>
           <div style="display: flex; gap: 0.5rem;">
-            <button class="btn" onclick="scanAdbDevices()">🔍 Scan ADB Device</button>
-            <button class="btn btn-secondary" onclick="scanIpHosts()">🌐 Scan Over-IP Peers</button>
-            <button class="btn btn-secondary" onclick="loadDashboardStats()">↻ Refresh Stats</button>
+            <button class="btn" onclick="scanAdbDevices()">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Scan ADB Device
+            </button>
+            <button class="btn btn-secondary" onclick="scanIpHosts()">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              Scan Over-IP Peers
+            </button>
+            <button class="btn btn-secondary" onclick="loadDashboardStats()">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Refresh Stats
+            </button>
           </div>
         </div>
         <div id="device-list">
@@ -94,14 +139,14 @@
         <div class="panel-title">
           <span>Available Devices & Device Scanners</span>
           <div style="display: flex; gap: 0.5rem;">
-            <button class="btn" onclick="scanAdbDevices()">🔍 Scan ADB Devices</button>
-            <button class="btn btn-secondary" onclick="scanIpHosts()">🌐 Ping Over-IP Devices</button>
+            <button class="btn" onclick="scanAdbDevices()">Scan ADB Devices</button>
+            <button class="btn btn-secondary" onclick="scanIpHosts()">Ping Over-IP Devices</button>
           </div>
         </div>
 
         <!-- Add Over-IP Device Form -->
         <div style="background: rgba(15, 23, 42, 0.5); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
-          <h4 style="margin-bottom: 0.75rem;">🌐 Add & Ping New Over-IP Peer Device</h4>
+          <h4 style="margin-bottom: 0.75rem;">Add & Ping New Over-IP Peer Device</h4>
           <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
             <input type="text" id="input-ip-addr" class="search-bar" placeholder="IP Address (e.g. 192.168.1.50)" style="max-width: 250px;">
             <input type="number" id="input-ip-port" class="search-bar" value="5000" style="max-width: 100px;">
@@ -122,6 +167,7 @@
       <div class="panel">
         <div class="panel-title">
           <span>Local Music Library</span>
+          <input type="text" id="library-search" class="search-bar" placeholder="Search songs by title, artist, album..." oninput="onLibrarySearchInput()">
         </div>
         <table>
           <thead>
@@ -138,6 +184,16 @@
             <tr><td colspan="6" class="text-muted">Loading music library...</td></tr>
           </tbody>
         </table>
+        
+        <!-- Pagination Controls -->
+        <div class="pagination-bar" id="library-pagination">
+          <div>Showing <span id="library-showing-start">0</span> - <span id="library-showing-end">0</span> of <span id="library-total-count">0</span> tracks</div>
+          <div class="pagination-controls">
+            <button class="page-btn" id="lib-prev-btn" onclick="changeLibraryPage(-1)">← Previous</button>
+            <span class="page-info" id="lib-page-info">Page 1 of 1</span>
+            <button class="page-btn" id="lib-next-btn" onclick="changeLibraryPage(1)">Next →</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -146,10 +202,26 @@
       <div class="panel">
         <div class="panel-title">
           <span>Duplicate Song Clusters</span>
-          <button class="btn btn-secondary" onclick="loadDuplicates()">↻ Re-scan Duplicates</button>
+          <div style="display: flex; gap: 0.75rem; align-items: center;">
+            <input type="text" id="duplicates-search" class="search-bar" placeholder="Search duplicate clusters or files..." oninput="onDuplicatesSearchInput()">
+            <button class="btn btn-secondary" onclick="loadDuplicates()">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Re-scan Duplicates
+            </button>
+          </div>
         </div>
         <div id="duplicates-container">
           <p class="text-muted">Analyzing duplicate audio tracks...</p>
+        </div>
+
+        <!-- Duplicates Pagination Bar -->
+        <div class="pagination-bar" id="duplicates-pagination">
+          <div>Showing clusters <span id="dup-showing-start">0</span> - <span id="dup-showing-end">0</span> of <span id="dup-total-count">0</span></div>
+          <div class="pagination-controls">
+            <button class="page-btn" id="dup-prev-btn" onclick="changeDuplicatesPage(-1)">← Previous</button>
+            <span class="page-info" id="dup-page-info">Page 1 of 1</span>
+            <button class="page-btn" id="dup-next-btn" onclick="changeDuplicatesPage(1)">Next →</button>
+          </div>
         </div>
       </div>
     </div>
@@ -158,7 +230,7 @@
     <div id="tab-synced" class="tab-content" style="display: none;">
       <div class="panel">
         <div class="panel-title">
-          <span>Synced Tracks History (ui/db.db)</span>
+          <span>Synced Tracks History (database/db.db)</span>
         </div>
         <table>
           <thead>
@@ -181,7 +253,7 @@
     <div id="tab-hidden" class="tab-content" style="display: none;">
       <div class="panel">
         <div class="panel-title">
-          <span>Hidden Files (ui/db.db)</span>
+          <span>Hidden Files (database/db.db)</span>
         </div>
         <table>
           <thead>
@@ -204,7 +276,9 @@
   <!-- Audio Player Footer -->
   <div id="audio-player-bar" class="audio-player-bar" style="display: none;">
     <div class="player-info">
-      <span style="font-size: 1.5rem;">🎵</span>
+      <span class="metric-icon" style="background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.3);">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </span>
       <div>
         <div class="now-playing-title" id="player-title">Track Title</div>
         <div class="now-playing-artist" id="player-artist">Artist</div>
