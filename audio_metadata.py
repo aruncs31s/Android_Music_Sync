@@ -18,6 +18,9 @@ def extract_audio_metadata(filepath: str) -> Dict[str, Any]:
     Returns dictionary with bitrate, sample_rate, channels, codec, duration, size.
     """
     if not filepath or not os.path.exists(filepath):
+        abs_p = os.path.abspath(filepath) if filepath else ""
+        if abs_p in METADATA_CACHE:
+            del METADATA_CACHE[abs_p]
         return {
             "bitrate": "Unknown",
             "sample_rate": "Unknown",
