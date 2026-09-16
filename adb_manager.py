@@ -10,7 +10,7 @@ from typing import List, Dict, Any, Optional
 import redis_cache
 
 MEDIA_URI = "content://media/external/audio/media"
-MEDIA_PROJECTION = "_id:_display_name:title:artist:album:album_artist:composer:track:year:duration:mime_type:_size:_data"
+MEDIA_PROJECTION = "_id:_display_name:title:artist:album:album_artist:composer:track:year:duration:mime_type:_size:_data:date_added:date_modified"
 MEDIA_WHERE = "is_music=1"
 
 def is_adb_available() -> bool:
@@ -122,3 +122,80 @@ def query_songs_from_device(
         return output
     except subprocess.CalledProcessError as e:
         raise RuntimeError(f"Error querying songs from device {serial}: {e.stderr or e.stdout}")
+
+
+def delete_song_from_device(
+    serial: str,
+    filepath: str,
+    song_id: Optional[str] = None,
+    redis_cfg: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
+    """
+    Permanently delete an audio file from an Android ADB device.
+    1. Removes the physical file using 'adb -s <serial> shell rm -f <quoted_path>'
+    2. Deletes the MediaStore record via 'adb -s <serial> shell content delete ...'
+    3. Triggers media scanner broadcast to refresh Android's media indexing.
+    4. Invalidates Redis cache for this device.
+    """
+    import os
+    import shlex
+
+    if not is_adb_available():
+        raise RuntimeError("ADB binary not found. Please install Android Platform Tools.")
+
+    if not filepath or not filepath.strip():
+        raise ValueError("Filepath cannot be empty.")
+
+    clean_path = filepath.strip()
+    quoted_path = shlex.quote(clean_path)
+
+    # 1. Delete physical file via adb shell rm -f
+    cmd_rm = ["adb", "-s", serial, "shell", f"rm -f {quoted_path}"]
+    try:
+        subprocess.run(cmd_rm, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"ADB rm error on device {serial}: {e.stderr or e.stdout}")
+
+    # 2. Delete from Android MediaStore database
+    try:
+        if song_id and str(song_id).isdigit():
+            cmd_content = [
+                "adb", "-s", serial, "shell", "content", "delete",
+                "--uri", MEDIA_URI,
+                "--where", f"_id={song_id}"
+            ]
+            subprocess.run(cmd_content, capture_output=True, text=True)
+
+        # Also attempt cleanup by _data
+        cmd_content_path = [
+            "adb", "-s", serial, "shell", "content", "delete",
+            "--uri", MEDIA_URI,
+            "--where", f"_data={quoted_path}"
+        ]
+        subprocess.run(cmd_content_path, capture_output=True, text=True)
+    except Exception:
+        pass
+
+    # 3. Notify Android MediaScanner about the removal
+    try:
+        cmd_scan = [
+            "adb", "-s", serial, "shell",
+            f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{quoted_path}"
+        ]
+        subprocess.run(cmd_scan, capture_output=True, text=True)
+    except Exception:
+        pass
+
+    # 4. Invalidate Redis cache
+    if redis_cfg:
+        redis_cache.invalidate_cache(serial, redis_cfg)
+        redis_cache.delete_cache(redis_cfg, f"cache:device_songs:adb_{serial}")
+        redis_cache.delete_cache(redis_cfg, f"cache:device_songs:adb:{serial}")
+        redis_cache.delete_cache(redis_cfg, "cache:devices:summary")
+        redis_cache.delete_cache(redis_cfg, "cache:dashboard:stats")
+
+    return {
+        "status": "success",
+        "message": f"Successfully deleted '{os.path.basename(clean_path)}' from ADB device [{serial}]."
+    }
+

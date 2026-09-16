@@ -1,11 +1,19 @@
 {
-  "local_sync_folder": "/home/aruncs/Music",
+  "local_sync_folder": "/home/aruncs/Music/",
   "remote_adb_folder": "/storage/emulated/0/Music/ADB",
   "download_folder": "songs/download",
   "default_device_serial": null,
   "use_telegram": false,
   "auto_push_adb": false,
-  "audio_extensions": [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"],
+  "audio_extensions": [
+    ".mp3",
+    ".m4a",
+    ".flac",
+    ".wav",
+    ".ogg",
+    ".opus",
+    ".aac"
+  ],
   "redis": {
     "enabled": true,
     "host": "localhost",

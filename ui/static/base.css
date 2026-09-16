@@ -1,0 +1,389 @@
+/* ==========================================================================
+   Base CSS - OM Theme (Default Dracula Italic)
+   Universal design tokens, resets, typography, and component primitives
+   ========================================================================== */
+
+:root {
+  /* Dracula Official / OM Theme Palette */
+  --dracula-bg: #22212c;
+  --dracula-current-line: #44475a;
+  --dracula-selection: #44475a;
+  --dracula-fg: #f8f8f2;
+  --dracula-comment: #6272a4;
+  --dracula-cyan: #8be9fd;
+  --dracula-green: #50fa7b;
+  --dracula-orange: #ffb86c;
+  --dracula-pink: #ff79c6;
+  --dracula-purple: #bd93f9;
+  --dracula-red: #ff5555;
+  --dracula-yellow: #f1fa8c;
+
+  /* Theme semantic mappings */
+  --bg-dark: #22212c;
+  --bg-mantle: #191a21;
+  --bg-crust: #15151e;
+  --bg-card: rgba(34, 33, 44, 0.85);
+  --bg-card-hover: rgba(68, 71, 90, 0.55);
+  --border-color: rgba(98, 114, 164, 0.24);
+  --border-glow: rgba(255, 121, 198, 0.35);
+
+  --primary-color: #ff79c6;
+  --secondary-color: #bd93f9;
+  --primary-gradient: #ff79c6;
+  --secondary-gradient: #bd93f9;
+  --accent-gradient-green: #50fa7b;
+
+  --accent-pink: #ff79c6;
+  --accent-purple: #bd93f9;
+  --accent-cyan: #8be9fd;
+  --accent-green: #50fa7b;
+  --accent-yellow: #f1fa8c;
+  --accent-orange: #ffb86c;
+  --accent-red: #ff5555;
+
+  --accent-glow: rgba(255, 121, 198, 0.35);
+  --accent-pink-alpha: rgba(255, 121, 198, 0.16);
+  --accent-purple-alpha: rgba(189, 147, 249, 0.16);
+  --accent-green-alpha: rgba(80, 250, 123, 0.16);
+  --accent-red-alpha: rgba(255, 85, 85, 0.16);
+
+  --text-main: #f8f8f2;
+  --text-muted: #959fc2;
+  --text-comment: #6272a4;
+  --status-online: #50fa7b;
+  --status-offline: #ff5555;
+
+  /* Backward-compatible mappings for Catppuccin and legacy tokens */
+  --ctp-mauve: #ff79c6;
+  --ctp-lavender: #bd93f9;
+  --ctp-pink: #ff79c6;
+  --ctp-blue: #8be9fd;
+  --ctp-green: #50fa7b;
+  --ctp-peach: #ffb86c;
+  --ctp-yellow: #f1fa8c;
+  --ctp-red: #ff5555;
+  --ctp-rosewater: #f8f8f2;
+  --ctp-flamingo: #ff79c6;
+  --ctp-maroon: #ff5555;
+  --ctp-teal: #50fa7b;
+  --ctp-sky: #8be9fd;
+  --ctp-sapphire: #bd93f9;
+  --ctp-text: #f8f8f2;
+  --ctp-subtext0: #959fc2;
+  --ctp-subtext1: #bd93f9;
+  --ctp-overlay0: #6272a4;
+  --ctp-overlay1: #7986b5;
+  --ctp-overlay2: #959fc2;
+  --ctp-surface0: #282a36;
+  --ctp-surface1: #44475a;
+  --ctp-surface2: #6272a4;
+  --ctp-crust: #15151e;
+  --ctp-mantle: #191a21;
+  --ctp-base: #22212c;
+
+  --accent-mauve: #ff79c6;
+  --accent-lavender: #bd93f9;
+  --accent-blue: #8be9fd;
+  --accent-orange: #ffb86c;
+  --accent-amber: #f1fa8c;
+}
+
+/* Global Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-crust);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--dracula-current-line);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--dracula-comment);
+}
+
+/* Base Typography */
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-main);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+p {
+  margin-bottom: 0.5rem;
+}
+
+code, kbd, samp, pre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.85em;
+  background: rgba(21, 21, 30, 0.7);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
+}
+
+/* SVG Icon Styling */
+.icon-svg {
+  width: 1.1em;
+  height: 1.1em;
+  vertical-align: -0.15em;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Base Buttons */
+.btn {
+  background: var(--accent-pink);
+  color: #15151e;
+  border: none;
+  padding: 0.45rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  line-height: 1;
+  transition: opacity 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+  box-shadow: 0 4px 15px rgba(255, 121, 198, 0.3);
+}
+
+.btn:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(255, 121, 198, 0.45);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: none;
+}
+
+.btn-secondary {
+  background: #282a36;
+  border: 1px solid #44475a;
+  color: var(--text-main);
+  box-shadow: none;
+}
+
+.btn-secondary:hover {
+  background: #44475a;
+  border-color: var(--accent-pink);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(255, 121, 198, 0.15);
+}
+
+.btn-danger {
+  background: rgba(255, 85, 85, 0.16) !important;
+  color: #ff5555 !important;
+  border: 1px solid rgba(255, 85, 85, 0.35) !important;
+  box-shadow: none;
+}
+
+.btn-danger:hover {
+  background: rgba(255, 85, 85, 0.28) !important;
+  border-color: #ff5555 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(255, 85, 85, 0.25) !important;
+}
+
+.btn-sm {
+  padding: 0.3rem 0.6rem;
+  font-size: 0.78rem;
+  border-radius: 6px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  line-height: 1;
+}
+
+.btn-sm .icon-svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin-right: 0.15rem;
+}
+
+.action-btn-group {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+/* Badges */
+.badge {
+  padding: 0.25rem 0.6rem;
+  border-radius: 20px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  letter-spacing: 0.02em;
+}
+
+.badge-online {
+  background: rgba(80, 250, 123, 0.16);
+  color: #50fa7b;
+  border: 1px solid rgba(80, 250, 123, 0.35);
+}
+
+.badge-offline {
+  background: rgba(255, 85, 85, 0.16);
+  color: #ff5555;
+  border: 1px solid rgba(255, 85, 85, 0.35);
+}
+
+.badge-purple {
+  background: rgba(189, 147, 249, 0.16);
+  color: #bd93f9;
+  border: 1px solid rgba(189, 147, 249, 0.35);
+}
+
+.badge-pink {
+  background: rgba(255, 121, 198, 0.16);
+  color: #ff79c6;
+  border: 1px solid rgba(255, 121, 198, 0.35);
+}
+
+.badge-peach {
+  background: rgba(255, 184, 108, 0.16);
+  color: #ffb86c;
+  border: 1px solid rgba(255, 184, 108, 0.35);
+}
+
+.badge-blue {
+  background: rgba(139, 233, 253, 0.16);
+  color: #8be9fd;
+  border: 1px solid rgba(139, 233, 253, 0.35);
+}
+
+/* Base Form Inputs */
+.search-bar {
+  width: 100%;
+  max-width: 400px;
+  padding: 0.55rem 0.95rem;
+  background: #191a21;
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  color: var(--text-main);
+  font-size: 0.88rem;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.search-bar:focus {
+  border-color: var(--accent-pink);
+  box-shadow: 0 0 12px rgba(255, 121, 198, 0.3);
+}
+
+/* Base Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1rem;
+}
+
+th, td {
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid rgba(98, 114, 164, 0.15);
+  font-size: 0.88rem;
+}
+
+th {
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+tr:hover {
+  background: rgba(255, 121, 198, 0.04);
+}
+
+.col-center {
+  text-align: center !important;
+}
+
+.col-right {
+  text-align: right !important;
+}
+
+.text-tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+}
+
+/* Modals */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(21, 21, 30, 0.82);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+
+.modal-card {
+  background: #22212c;
+  border: 1px solid rgba(98, 114, 164, 0.3);
+  border-radius: 16px;
+  padding: 1.75rem;
+  width: 90%;
+  max-width: 450px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.65), 0 0 25px rgba(255, 121, 198, 0.14);
+}

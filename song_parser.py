@@ -1,7 +1,9 @@
 """
 Module for parsing ADB MediaStore content query outputs into structured Python dictionaries.
 """
+import os
 import re
+import datetime
 from typing import List, Dict, Any, Optional
 
 PROJECTION_KEYS = [
@@ -17,13 +19,29 @@ PROJECTION_KEYS = [
     "duration",
     "mime_type",
     "_size",
-    "_data"
+    "_data",
+    "date_added",
+    "date_modified",
+    "bitrate"
 ]
 
 # Regex pattern matching ', key=' where key is one of the known projection keys
 FIELD_SPLIT_PATTERN = re.compile(
     r", (?=(?:" + "|".join(re.escape(k) for k in PROJECTION_KEYS) + r")=)"
 )
+
+def format_timestamp(ts_val: Any) -> str:
+    """Format Unix timestamp in seconds to YYYY-MM-DD HH:MM:SS format."""
+    if not ts_val or str(ts_val).strip() in ("NULL", "None", ""):
+        return "Unknown"
+    try:
+        ts = int(float(ts_val))
+        if ts <= 0:
+            return "Unknown"
+        dt = datetime.datetime.fromtimestamp(ts)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception:
+        return "Unknown"
 
 def format_duration(ms_str: Optional[str]) -> str:
     """Format duration in milliseconds to MM:SS or HH:MM:SS format."""
@@ -106,6 +124,61 @@ def parse_song_line(line: str) -> Optional[Dict[str, Any]]:
     # Add formatted helper fields
     song["duration_formatted"] = format_duration(song.get("duration"))
     song["size_formatted"] = format_size(song.get("_size"))
+
+    # Filepath and Filename
+    data_path = song.get("_data") or ""
+    display_name = song.get("_display_name") or ""
+    song["filepath"] = data_path
+    song["filename"] = display_name or os.path.basename(data_path)
+
+    # Modification Time (mtime) and Creation/Added Time (ctime)
+    date_mod_raw = song.get("date_modified")
+    date_add_raw = song.get("date_added")
+
+    mtime = 0.0
+    try:
+        if date_mod_raw and str(date_mod_raw).strip() not in ("NULL", "None", ""):
+            mtime = float(date_mod_raw)
+    except (ValueError, TypeError):
+        pass
+
+    ctime = 0.0
+    try:
+        if date_add_raw and str(date_add_raw).strip() not in ("NULL", "None", ""):
+            ctime = float(date_add_raw)
+    except (ValueError, TypeError):
+        pass
+
+    song["mtime"] = mtime
+    song["mtime_str"] = format_timestamp(mtime) if mtime > 0 else "Unknown"
+    song["ctime"] = ctime
+    song["ctime_str"] = format_timestamp(ctime) if ctime > 0 else "Unknown"
+
+    # Bitrate
+    bitrate_val = 0
+    bitrate_kbps = "Unknown"
+    if song.get("bitrate") and str(song.get("bitrate")).strip() not in ("NULL", "None", ""):
+        try:
+            bps = int(float(song.get("bitrate")))
+            if bps > 0:
+                bitrate_val = bps // 1000
+                bitrate_kbps = f"{bitrate_val} kbps"
+        except Exception:
+            pass
+
+    if bitrate_val == 0:
+        try:
+            dur_ms = int(float(song.get("duration", 0) or 0))
+            dur_sec = dur_ms / 1000.0
+            sz_bytes = int(float(song.get("_size", 0) or 0))
+            if dur_sec > 0 and sz_bytes > 0:
+                bitrate_val = int((sz_bytes * 8) / (dur_sec * 1000))
+                bitrate_kbps = f"{bitrate_val} kbps"
+        except Exception:
+            pass
+
+    song["bitrate_val"] = bitrate_val
+    song["bitrate_kbps"] = bitrate_kbps
 
     # Combined searchable string for fast fuzzy matching
     searchable_parts = [

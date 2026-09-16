@@ -68,3 +68,17 @@ def save_config(config_data: Dict[str, Any], config_path: str = None):
             json.dump(config_data, f, indent=2)
     except Exception as e:
         print(f"[ConfigManager] Error writing config to {config_path}: {e}", file=sys.stderr)
+
+
+def get_local_sync_folders(cfg: Dict[str, Any]) -> list[str]:
+    """
+    Return local_sync_folder as a list of valid directory paths.
+    Supports both a single string path or a list of string paths in config.json.
+    """
+    val = cfg.get("local_sync_folder", "/home/aruncs/Music")
+    if isinstance(val, list):
+        return [os.path.expanduser(p) for p in val if p]
+    elif isinstance(val, str):
+        return [os.path.expanduser(val)]
+    return ["/home/aruncs/Music"]
+

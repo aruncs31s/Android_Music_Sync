@@ -28,27 +28,39 @@ import reverse_syncer
 import redis_cache
 import hide_list_db
 import main_menu_tui
+import over_ip.workflow as over_ip_workflow
+import over_ip.server as over_ip_server
+import ui.server as ui_server
 from downloader import DownloadManager
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Query, fuzzy search, download, sync, and reverse-sync songs with ADB devices.",
+        description="Query, fuzzy search, download, sync, reverse-sync, Over-IP sync, and Web Dashboard.",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog="""Examples:
-  1. Interactive Ranger-style Dual-Pane Reverse Sync (ADB Device -> Local Folder):
+  1. Launch Web Dashboard Interface:
+     python app.py --web
+
+  2. Over-IP Sync across devices over HTTP:
+     python app.py --ip
+
+  3. Launch Over-IP Flask REST API server:
+     python app.py --serve-ip
+
+  4. Interactive Ranger-style Dual-Pane Reverse Sync (ADB Device -> Local Folder):
      python app.py --reverse-sync -i
 
-  2. Interactive Ranger-style Dual-Pane Sync (Local Folder -> ADB Device):
+  5. Interactive Ranger-style Dual-Pane Sync (Local Folder -> ADB Device):
      python app.py --sync -i
 
-  3. List all files currently hidden in SQLite database:
+  6. List all files currently hidden in SQLite database:
      python app.py --list-hidden
 
-  4. Unhide a file (or 'all') from SQLite database:
+  7. Unhide a file (or 'all') from SQLite database:
      python app.py --unhide all
 
-  5. Include hidden files during sync:
+  8. Include hidden files during sync:
      python app.py --sync --show-hidden
 
   6. Launch Interactive Main Menu:
@@ -59,6 +71,23 @@ def parse_args():
         "--config",
         type=str,
         help="Path to custom config.json file."
+    )
+    parser.add_argument(
+        "--web",
+        action="store_true",
+        help="Launch Flask Web Dashboard Interface on http://localhost:5000."
+    )
+    parser.add_argument(
+        "--ip",
+        nargs="?",
+        const="",
+        type=str,
+        help="Sync music across devices over HTTP IP address (e.g. --ip 192.168.1.50)."
+    )
+    parser.add_argument(
+        "--serve-ip",
+        action="store_true",
+        help="Start Flask REST API server to serve local music library over HTTP."
     )
     parser.add_argument(
         "--sync",
@@ -84,6 +113,11 @@ def parse_args():
         "--list-hidden",
         action="store_true",
         help="List all files stored in the SQLite hide list database (sync_hide_list.db) and exit."
+    )
+    parser.add_argument(
+        "--list-synced",
+        action="store_true",
+        help="List all files recorded in the SQLite synced history database (sync_hide_list.db) and exit."
     )
     parser.add_argument(
         "--unhide",
@@ -255,6 +289,40 @@ def main():
     audio_extensions = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus"])
     redis_cfg = cfg.get("redis")
 
+    if args.list_synced:
+        records = hide_list_db.get_all_synced_records(device_serial=target_device_serial)
+        if not records:
+            dev_str = f" for device [{target_device_serial}]" if target_device_serial else ""
+            print(f"No synced track history found{dev_str} in SQLite database (sync_hide_list.db).")
+        else:
+            header = f"Synced Tracks History{f' for [{target_device_serial}]' if target_device_serial else ''} ({len(records)} entries):"
+            print(header)
+            for r in records:
+                print(f"  [{r['id']}] {r['filename']} | Device: {r['device_serial']} | Remote: {r['remote_dir']} (Synced: {r['synced_at']})")
+        return
+
+    # Handle --web Flask Web Interface & Dashboard
+    if args.web:
+        ui_server.start_server(host="0.0.0.0", port=5000)
+        sys.exit(0)
+
+    # Handle --serve-ip Flask API Server
+    if args.serve_ip:
+        ui_server.start_server(host="0.0.0.0", port=5000)
+        sys.exit(0)
+
+    # Handle --ip Over-IP HTTP Synchronization Workflow
+    if args.ip is not None:
+        over_ip_workflow.run_over_ip_workflow(
+            target_ip=args.ip if args.ip else None,
+            interactive=True,
+            config_path=args.config,
+            redis_cfg=redis_cfg,
+            refresh_cache=args.refresh_cache,
+            show_hidden=args.show_hidden
+        )
+        sys.exit(0)
+
     # If no flags passed in terminal TTY mode, show Interactive Main Menu
     if len(sys.argv) == 1 and (sys.stdin.isatty() or os.isatty(0)):
         choice = main_menu_tui.show_main_menu_tui()
@@ -292,6 +360,17 @@ def main():
                         args.interactive = True
                 except (KeyboardInterrupt, EOFError):
                     pass
+        elif choice == "over_ip":
+            args.ip = ""
+            over_ip_workflow.run_over_ip_workflow(
+                target_ip=None,
+                interactive=True,
+                config_path=args.config,
+                redis_cfg=redis_cfg,
+                refresh_cache=args.refresh_cache,
+                show_hidden=args.show_hidden
+            )
+            sys.exit(0)
 
     # Handle --reverse-sync mode
     if args.reverse_sync:
