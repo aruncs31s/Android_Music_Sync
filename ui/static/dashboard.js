@@ -219,7 +219,7 @@ async function loadDeviceSongs(deviceId = 'local', forceRefresh = false) {
   } catch (err) {
     console.error('Error loading device songs:', err);
     if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="color: #f87171 !important;">Failed to load songs from device.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="color: var(--status-offline) !important;">Failed to load songs from device.</td></tr>';
     }
   }
 }
@@ -349,13 +349,13 @@ function renderLibraryPage() {
         <button class="btn btn-secondary" onclick="openSyncSongModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', '${escapeJs(s.duration_formatted || '')}', '${escapeJs(s.size_formatted || '')}', '${escapeJs(s.bitrate_kbps || '')}', '${escapeJs(s.album || '')}')" title="Sync to target device">${SVG_SYNC} Sync</button>
         <button class="btn btn-secondary" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')">${SVG_PLUS} Playlist</button>
         <button class="btn btn-secondary" onclick="hideSong('${escapeJs(s.filepath)}')">${SVG_HIDE} Hide</button>
-        <button class="btn btn-secondary" style="background: rgba(244, 63, 94, 0.2); color: #f87171; border-color: rgba(244, 63, 94, 0.3);" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')">${SVG_TRASH} Delete</button>
+        <button class="btn btn-secondary btn-danger" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')">${SVG_TRASH} Delete</button>
       `;
     } else {
       actionButtons = `
         <button class="btn btn-secondary" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')">${SVG_PLUS} Playlist</button>
         <button class="btn btn-secondary" onclick="alert('File: ${escapeJs(s.filepath || s.filename)}')">Details</button>
-        <button class="btn btn-secondary" style="background: rgba(244, 63, 94, 0.2); color: #f87171; border-color: rgba(244, 63, 94, 0.3);" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')">${SVG_TRASH} Delete</button>
+        <button class="btn btn-secondary btn-danger" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')">${SVG_TRASH} Delete</button>
       `;
     }
 
@@ -461,7 +461,7 @@ function renderDuplicatesPage() {
           </div>
           <div style="display: flex; gap: 0.4rem;">
             <button class="btn btn-secondary" style="padding: 0.3rem 0.75rem; font-size: 0.75rem;" onclick="playAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}')">${SVG_PLAY} Play</button>
-            <button class="btn btn-secondary" style="padding: 0.3rem 0.75rem; font-size: 0.75rem; background: rgba(244, 63, 94, 0.25); color: #f87171; border-color: rgba(244, 63, 94, 0.4);" onclick="deleteSong('${escapeJs(s.filepath)}', event)">${SVG_TRASH} Delete</button>
+            <button class="btn btn-secondary btn-danger" style="padding: 0.3rem 0.75rem; font-size: 0.75rem;" onclick="deleteSong('${escapeJs(s.filepath)}', event)">${SVG_TRASH} Delete</button>
           </div>
         </li>
       `;
@@ -1199,7 +1199,7 @@ function renderPlaylistTracks() {
         <td>${escapeHtml(s.size_formatted || 'N/A')}</td>
         <td>
           <button class="btn btn-secondary" onclick="playPlaylistFromTrack(${idx})">${playBtnIcon} ${playBtnText}</button>
-          <button class="btn btn-secondary" style="background: rgba(244, 63, 94, 0.2); color: #f87171; border-color: rgba(244, 63, 94, 0.3);" onclick="removeTrackFromPlaylist(${selectedPlaylist.id}, '${escapeJs(s.filepath)}')">${SVG_TRASH} Remove</button>
+          <button class="btn btn-secondary btn-danger" onclick="removeTrackFromPlaylist(${selectedPlaylist.id}, '${escapeJs(s.filepath)}')">${SVG_TRASH} Remove</button>
         </td>
       </tr>
     `;
@@ -1544,9 +1544,9 @@ async function onSyncDestinationDeviceChange() {
     if (data.status === 'error') {
       if (bannerEl) {
         bannerEl.className = '';
-        bannerEl.style.background = 'rgba(244, 63, 94, 0.15)';
-        bannerEl.style.border = '1px solid rgba(244, 63, 94, 0.4)';
-        bannerEl.style.color = '#f87171';
+        bannerEl.style.background = 'rgba(243, 139, 168, 0.15)';
+        bannerEl.style.border = '1px solid rgba(243, 139, 168, 0.4)';
+        bannerEl.style.color = '#f38ba8';
         bannerEl.innerHTML = `<strong>Error checking device:</strong> ${escapeHtml(data.message || 'Device offline or unreachable')}`;
       }
       return;
@@ -1556,18 +1556,18 @@ async function onSyncDestinationDeviceChange() {
     if (data.exact_match && data.exact_match.found) {
       const em = data.exact_match.device_song || {};
       if (bannerEl) {
-        bannerEl.style.background = 'rgba(245, 158, 11, 0.15)';
-        bannerEl.style.border = '1px solid rgba(245, 158, 11, 0.4)';
-        bannerEl.style.color = '#fbbf24';
+        bannerEl.style.background = 'rgba(249, 226, 175, 0.15)';
+        bannerEl.style.border = '1px solid rgba(249, 226, 175, 0.4)';
+        bannerEl.style.color = '#f9e2af';
         bannerEl.innerHTML = `
           <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">⚠️ Song Already Exists on ${escapeHtml(data.device_name)}</div>
-          <div style="color: #fef08a; font-size: 0.8rem;">${escapeHtml(data.exact_match.match_reason || 'Match found')}</div>
+          <div style="color: #f9e2af; font-size: 0.8rem;">${escapeHtml(data.exact_match.match_reason || 'Match found')}</div>
           <div style="display: flex; gap: 0.6rem; margin-top: 0.4rem; font-size: 0.75rem; flex-wrap: wrap;">
             <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.duration_formatted || '00:00')}</span>
             <span class="badge badge-purple">${escapeHtml(em.bitrate_kbps ? `${em.bitrate_kbps} kbps` : 'Bitrate Unknown')}</span>
             <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.size_formatted || '')}</span>
           </div>
-          <div style="font-family: monospace; font-size: 0.72rem; color: #cbd5e1; margin-top: 0.35rem; word-break: break-all;">
+          <div style="font-family: monospace; font-size: 0.72rem; color: #a6adc8; margin-top: 0.35rem; word-break: break-all;">
             Path: ${escapeHtml(em.filepath || em.filename || '')}
           </div>
         `;
@@ -1575,12 +1575,12 @@ async function onSyncDestinationDeviceChange() {
       if (syncBtnText) syncBtnText.textContent = 'Overwrite & Force Sync';
     } else {
       if (bannerEl) {
-        bannerEl.style.background = 'rgba(16, 185, 129, 0.15)';
-        bannerEl.style.border = '1px solid rgba(16, 185, 129, 0.4)';
-        bannerEl.style.color = '#34d399';
+        bannerEl.style.background = 'rgba(166, 227, 161, 0.15)';
+        bannerEl.style.border = '1px solid rgba(166, 227, 161, 0.4)';
+        bannerEl.style.color = '#a6e3a1';
         bannerEl.innerHTML = `
           <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">✅ Not Present on Destination Device</div>
-          <div style="color: #a7f3d0; font-size: 0.8rem;">This track does not currently exist on ${escapeHtml(data.device_name)}. Ready to sync!</div>
+          <div style="color: #a6e3a1; font-size: 0.8rem;">This track does not currently exist on ${escapeHtml(data.device_name)}. Ready to sync!</div>
         `;
       }
       if (syncBtnText) syncBtnText.textContent = 'Sync to Device';
@@ -1597,14 +1597,14 @@ async function onSyncDestinationDeviceChange() {
         let simHtml = '';
         similar.forEach(s => {
           simHtml += `
-            <div style="background: rgba(20, 20, 26, 0.85); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+            <div style="background: rgba(24, 24, 37, 0.85); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
               <div style="min-width: 0; flex: 1;">
                 <div style="font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(s.title || 'Unknown')}</div>
                 <div class="text-muted" style="font-size: 0.75rem;">${escapeHtml(s.artist || 'Unknown')} &bull; ${escapeHtml(s.duration_formatted || '')} &bull; <span class="badge badge-purple" style="font-size: 0.7rem;">${escapeHtml(s.bitrate_kbps ? `${s.bitrate_kbps} kbps` : '')}</span></div>
-                ${s.comparison_note ? `<div style="font-size: 0.72rem; color: #fb923c; margin-top: 0.2rem;">${escapeHtml(s.comparison_note)}</div>` : ''}
+                ${s.comparison_note ? `<div style="font-size: 0.72rem; color: #fab387; margin-top: 0.2rem;">${escapeHtml(s.comparison_note)}</div>` : ''}
               </div>
               <div style="text-align: right; flex-shrink: 0;">
-                <span class="badge" style="background: rgba(255, 140, 0, 0.18); color: var(--accent-orange); font-size: 0.75rem; font-weight: 700;">
+                <span class="badge" style="background: rgba(203, 166, 247, 0.18); color: var(--ctp-mauve); font-size: 0.75rem; font-weight: 700;">
                   ${s.similarity_score}% Match
                 </span>
               </div>
@@ -1661,7 +1661,7 @@ async function submitSyncSongToDevice() {
       syncBtn.disabled = false;
       syncBtnText.textContent = 'Retry Sync';
       if (statusEl) {
-        statusEl.innerHTML = `<span style="color: #f87171; font-weight: 600;">Error: ${escapeHtml(data.error || data.message || 'Sync failed')}</span>`;
+        statusEl.innerHTML = `<span style="color: var(--status-offline); font-weight: 600;">Error: ${escapeHtml(data.error || data.message || 'Sync failed')}</span>`;
       }
     }
   } catch (err) {
@@ -1669,7 +1669,7 @@ async function submitSyncSongToDevice() {
     syncBtn.disabled = false;
     syncBtnText.textContent = 'Retry Sync';
     if (statusEl) {
-      statusEl.innerHTML = '<span style="color: #f87171; font-weight: 600;">Connection error while syncing song.</span>';
+      statusEl.innerHTML = '<span style="color: var(--status-offline); font-weight: 600;">Connection error while syncing song.</span>';
     }
   }
 }
