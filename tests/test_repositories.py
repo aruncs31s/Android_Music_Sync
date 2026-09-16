@@ -203,6 +203,36 @@ class TestRepositories(unittest.TestCase):
         self.assertEqual(res.get("status"), "error")
         self.assertEqual(res.get("code"), 404)
 
+    def test_delete_songs_batch(self):
+        p1 = self._make_audio_file("batch_one.mp3")
+        p2 = self._make_audio_file("batch_two.mp3")
+        p3 = self._make_audio_file("batch_three.mp3")
+
+        res = song_repo.delete_songs_batch([p1, p2, "/tmp/missing_fake.mp3"])
+        self.assertEqual(res.get("status"), "success")
+        self.assertEqual(res.get("deleted_count"), 2)
+        self.assertEqual(len(res.get("failed", [])), 1)
+
+        self.assertFalse(os.path.exists(p1))
+        self.assertFalse(os.path.exists(p2))
+        self.assertTrue(os.path.exists(p3))
+
+        records = deleted_repo.get_deleted_songs()
+        self.assertEqual(len(records), 2)
+
+        # Clean up p3
+        song_repo.delete_song(p3)
+
+    def test_device_repo_batch_delete_local(self):
+        p1 = self._make_audio_file("dev_batch_one.mp3")
+        p2 = self._make_audio_file("dev_batch_two.mp3")
+
+        res = device_repo.delete_device_songs_batch("local", [p1, p2])
+        self.assertEqual(res.get("status"), "success")
+        self.assertEqual(res.get("deleted_count"), 2)
+        self.assertFalse(os.path.exists(p1))
+        self.assertFalse(os.path.exists(p2))
+
 
 if __name__ == "__main__":
     unittest.main()

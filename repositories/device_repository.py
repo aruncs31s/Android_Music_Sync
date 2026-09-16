@@ -246,6 +246,35 @@ class DeviceRepository(BaseRepository):
 
         return {"status": "error", "message": f"Unsupported device: {device_id}", "code": 400}
 
+    def delete_device_songs_batch(
+        self,
+        device_id: str,
+        filepaths: List[str]
+    ) -> Dict[str, Any]:
+        """
+        Delete multiple audio files from a connected device in batch.
+        """
+        if not device_id or device_id == "local":
+            from repositories import song_repo
+            return song_repo.delete_songs_batch(filepaths)
+
+        # For ADB or Over-IP devices, delete iteratively
+        deleted_count = 0
+        failed = []
+        for fp in filepaths:
+            res = self.delete_device_song(device_id=device_id, filepath=fp)
+            if res.get("status") == "success":
+                deleted_count += 1
+            else:
+                failed.append({"filepath": fp, "error": res.get("message", "Failed to delete")})
+
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+            "failed": failed,
+            "message": f"Deleted {deleted_count} files from {device_id}"
+        }
+
     def push_song_to_device(
         self,
         device_id: str,

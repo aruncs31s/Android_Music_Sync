@@ -124,11 +124,11 @@ function renderDeviceBreakdown(devices) {
     <table>
       <thead>
         <tr>
-          <th>Device / Source</th>
-          <th>Type</th>
-          <th>Song Count</th>
-          <th>Status</th>
-          <th>Action</th>
+          <th style="min-width: 220px;">Device / Source</th>
+          <th style="width: 130px;">Type</th>
+          <th style="width: 140px;" class="col-center">Song Count</th>
+          <th style="width: 120px;" class="col-center">Status</th>
+          <th style="width: 150px;" class="col-right">Action</th>
         </tr>
       </thead>
       <tbody>
@@ -143,14 +143,14 @@ function renderDeviceBreakdown(devices) {
     html += `
       <tr onclick="openDeviceLibrary('${escapeJs(d.id)}', '${escapeJs(d.name)}')" style="cursor: pointer;" title="Click to open ${escapeHtml(d.name)} Song Library">
         <td>
-          <strong style="color: var(--accent-orange); font-size: 0.95rem;">${escapeHtml(d.name)}</strong>
+          <strong style="color: var(--accent-orange); font-size: 0.92rem;">${escapeHtml(d.name)}</strong>
           <br><small class="text-muted">${escapeHtml(d.details || d.serial || '')}</small>
         </td>
-        <td>${escapeHtml(d.type)}</td>
-        <td><strong>${d.count}</strong> songs</td>
-        <td>${statusBadge}</td>
-        <td>
-          <button class="btn btn-secondary" onclick="event.stopPropagation(); openDeviceLibrary('${escapeJs(d.id)}', '${escapeJs(d.name)}')" title="View Library">
+        <td><span class="badge badge-purple">${escapeHtml(d.type)}</span></td>
+        <td class="col-center text-tabular"><strong>${d.count}</strong> songs</td>
+        <td class="col-center">${statusBadge}</td>
+        <td class="col-right">
+          <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); openDeviceLibrary('${escapeJs(d.id)}', '${escapeJs(d.name)}')" title="View Library">
             View Library ${SVG_CHEVRON_RIGHT}
           </button>
         </td>
@@ -345,17 +345,21 @@ function renderLibraryPage() {
     let actionButtons = '';
     if (isLocalStorage) {
       actionButtons = `
-        <button class="btn btn-secondary" onclick="playOrToggleAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}')">${playBtnIcon} ${playBtnText}</button>
-        <button class="btn btn-secondary" onclick="openSyncSongModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', '${escapeJs(s.duration_formatted || '')}', '${escapeJs(s.size_formatted || '')}', '${escapeJs(s.bitrate_kbps || '')}', '${escapeJs(s.album || '')}')" title="Sync to target device">${SVG_SYNC} Sync</button>
-        <button class="btn btn-secondary" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')">${SVG_PLUS} Playlist</button>
-        <button class="btn btn-secondary" onclick="hideSong('${escapeJs(s.filepath)}')">${SVG_HIDE} Hide</button>
-        <button class="btn btn-secondary btn-danger" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')">${SVG_TRASH} Delete</button>
+        <div class="action-btn-group">
+          <button class="btn btn-secondary btn-sm" onclick="playOrToggleAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}')" title="${playBtnText}">${playBtnIcon} ${playBtnText}</button>
+          <button class="btn btn-secondary btn-sm" onclick="openSyncSongModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', '${escapeJs(s.duration_formatted || '')}', '${escapeJs(s.size_formatted || '')}', '${escapeJs(s.bitrate_kbps || '')}', '${escapeJs(s.album || '')}')" title="Sync to target device">${SVG_SYNC} Sync</button>
+          <button class="btn btn-secondary btn-sm" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} Playlist</button>
+          <button class="btn btn-secondary btn-sm" onclick="hideSong('${escapeJs(s.filepath)}')" title="Hide song">${SVG_HIDE}</button>
+          <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
+        </div>
       `;
     } else {
       actionButtons = `
-        <button class="btn btn-secondary" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')">${SVG_PLUS} Playlist</button>
-        <button class="btn btn-secondary" onclick="alert('File: ${escapeJs(s.filepath || s.filename)}')">Details</button>
-        <button class="btn btn-secondary btn-danger" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')">${SVG_TRASH} Delete</button>
+        <div class="action-btn-group">
+          <button class="btn btn-secondary btn-sm" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} Playlist</button>
+          <button class="btn btn-secondary btn-sm" onclick="alert('File: ${escapeJs(s.filepath || s.filename)}')" title="View Details">Details</button>
+          <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
+        </div>
       `;
     }
 
@@ -363,17 +367,19 @@ function renderLibraryPage() {
 
     html += `
       <tr ${rowClass}>
-        <td>${globalIdx}</td>
+        <td class="col-center text-tabular">${globalIdx}</td>
         <td ${clickToSyncAttr}>
-          <strong style="color: var(--text-main);">${escapeHtml(s.title || 'Unknown')}</strong>
-          <br><small class="text-muted">${escapeHtml(s.artist || 'Unknown')} | ${escapeHtml(s.album || 'Unknown')}</small>
+          <div class="track-meta-cell">
+            <span class="track-title" title="${escapeHtml(s.title || 'Unknown')}">${escapeHtml(s.title || 'Unknown')}</span>
+            <span class="track-subtitle" title="${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}">${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}</span>
+          </div>
         </td>
-        <td>${escapeHtml(s.duration_formatted || '00:00')}</td>
-        <td>${escapeHtml(s.size_formatted || '')}</td>
-        <td><span class="badge badge-purple">${escapeHtml(s.bitrate_kbps || 'Unknown')}</span></td>
-        <td><small class="text-muted">${escapeHtml(s.ctime_str || 'Unknown')}</small></td>
-        <td><small class="text-muted">${escapeHtml(s.mtime_str || 'Unknown')}</small></td>
-        <td>${actionButtons}</td>
+        <td class="col-center text-tabular">${escapeHtml(s.duration_formatted || '00:00')}</td>
+        <td class="col-center text-tabular">${escapeHtml(s.size_formatted || '—')}</td>
+        <td class="col-center"><span class="badge badge-purple text-tabular">${escapeHtml(s.bitrate_kbps || 'Unknown')}</span></td>
+        <td class="col-center text-tabular"><small class="text-muted">${escapeHtml(s.ctime_str || '—')}</small></td>
+        <td class="col-center text-tabular"><small class="text-muted">${escapeHtml(s.mtime_str || '—')}</small></td>
+        <td class="col-right">${actionButtons}</td>
       </tr>
     `;
   });
@@ -392,7 +398,33 @@ function updateLibraryPaginationInfo(start, end, total, totalPages) {
   document.getElementById('lib-next-btn').disabled = (libPage >= totalPages);
 }
 
-// --- DUPLICATES SEARCH & PAGINATION ---
+// --- DUPLICATES SEARCH, SELECTION & PAGINATION ---
+
+let selectedDuplicatePaths = new Set();
+let currentDupKeepStrategy = 'best_quality';
+
+function findKeeperInCluster(cluster, strategy = 'best_quality') {
+  if (!cluster || !cluster.songs || cluster.songs.length === 0) return null;
+  const songsCopy = [...cluster.songs];
+
+  if (strategy === 'newest') {
+    songsCopy.sort((a, b) => (b.mtime || 0) - (a.mtime || 0) || (b.size || 0) - (a.size || 0));
+  } else if (strategy === 'oldest') {
+    songsCopy.sort((a, b) => (a.mtime || 0) - (b.mtime || 0) || (b.size || 0) - (a.size || 0));
+  } else {
+    // Default: best quality / size
+    songsCopy.sort((a, b) => {
+      const bitA = a.bitrate_val || 0;
+      const bitB = b.bitrate_val || 0;
+      if (bitB !== bitA) return bitB - bitA;
+      const sizeA = a.size || 0;
+      const sizeB = b.size || 0;
+      if (sizeB !== sizeA) return sizeB - sizeA;
+      return (b.mtime || 0) - (a.mtime || 0);
+    });
+  }
+  return songsCopy[0];
+}
 
 async function loadDuplicates() {
   const container = document.getElementById('duplicates-container');
@@ -404,6 +436,15 @@ async function loadDuplicates() {
     allClusters = data.clusters || [];
     filteredClusters = [...allClusters];
     dupPage = 1;
+
+    // Clean up any selected paths that no longer exist in clusters
+    const validPaths = new Set();
+    allClusters.forEach(c => (c.songs || []).forEach(s => validPaths.add(s.filepath)));
+    for (const p of selectedDuplicatePaths) {
+      if (!validPaths.has(p)) selectedDuplicatePaths.delete(p);
+    }
+
+    updateDuplicatesSelectionUI();
     renderDuplicatesPage();
   } catch (err) {
     console.error('Error loading duplicates:', err);
@@ -424,6 +465,101 @@ function onDuplicatesSearchInput() {
   renderDuplicatesPage();
 }
 
+function onDuplicateStrategyChange() {
+  const sel = document.getElementById('dup-keep-strategy');
+  if (sel) {
+    currentDupKeepStrategy = sel.value || 'best_quality';
+  }
+  // Re-evaluate current selections if user has already selected
+  if (selectedDuplicatePaths.size > 0) {
+    selectAllDuplicates();
+  } else {
+    renderDuplicatesPage();
+  }
+}
+
+function selectAllDuplicates() {
+  if (!allClusters || allClusters.length === 0) return;
+  selectedDuplicatePaths.clear();
+
+  allClusters.forEach(c => {
+    const keeper = findKeeperInCluster(c, currentDupKeepStrategy);
+    if (!keeper) return;
+    (c.songs || []).forEach(s => {
+      if (s.filepath !== keeper.filepath) {
+        selectedDuplicatePaths.add(s.filepath);
+      }
+    });
+  });
+
+  updateDuplicatesSelectionUI();
+  renderDuplicatesPage();
+}
+
+function deselectAllDuplicates() {
+  selectedDuplicatePaths.clear();
+  updateDuplicatesSelectionUI();
+  renderDuplicatesPage();
+}
+
+function autoSelectClusterDuplicates(clusterIndex) {
+  const cluster = filteredClusters[clusterIndex];
+  if (!cluster || !cluster.songs) return;
+
+  const keeper = findKeeperInCluster(cluster, currentDupKeepStrategy);
+  if (!keeper) return;
+
+  cluster.songs.forEach(s => {
+    if (s.filepath === keeper.filepath) {
+      selectedDuplicatePaths.delete(s.filepath);
+    } else {
+      selectedDuplicatePaths.add(s.filepath);
+    }
+  });
+
+  updateDuplicatesSelectionUI();
+  renderDuplicatesPage();
+}
+
+function onDuplicateCheckboxChange(filepath, isChecked, clusterIndex) {
+  const cluster = filteredClusters[clusterIndex];
+  if (isChecked) {
+    // Safety safeguard: Ensure at least one copy is kept in this cluster!
+    if (cluster && cluster.songs) {
+      const otherSongs = cluster.songs.filter(s => s.filepath !== filepath);
+      const allOthersSelected = otherSongs.every(s => selectedDuplicatePaths.has(s.filepath));
+      if (allOthersSelected && otherSongs.length > 0) {
+        alert("Safety Limit: At least one copy in this cluster must be kept so the song is not lost from your library.");
+        const cb = document.querySelector(`input.dup-checkbox[data-path="${CSS.escape(filepath)}"]`);
+        if (cb) cb.checked = false;
+        return;
+      }
+    }
+    selectedDuplicatePaths.add(filepath);
+  } else {
+    selectedDuplicatePaths.delete(filepath);
+  }
+  updateDuplicatesSelectionUI();
+  renderDuplicatesPage();
+}
+
+function updateDuplicatesSelectionUI() {
+  const count = selectedDuplicatePaths.size;
+  const counterEl = document.getElementById('dup-selected-counter');
+  const deleteBtn = document.getElementById('btn-batch-delete-duplicates');
+
+  if (counterEl) {
+    counterEl.textContent = `${count} files selected`;
+  }
+  if (deleteBtn) {
+    deleteBtn.disabled = (count === 0);
+    deleteBtn.innerHTML = `
+      <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      Delete Selected (${count})
+    `;
+  }
+}
+
 function changeDuplicatesPage(delta) {
   const totalPages = Math.ceil(filteredClusters.length / dupPageSize) || 1;
   dupPage = Math.max(1, Math.min(totalPages, dupPage + delta));
@@ -434,8 +570,13 @@ function renderDuplicatesPage() {
   const container = document.getElementById('duplicates-container');
   if (!container) return;
 
+  const badgeEl = document.getElementById('duplicates-summary-badge');
+  if (badgeEl) {
+    badgeEl.textContent = `${allClusters.length} duplicate clusters`;
+  }
+
   if (!filteredClusters || filteredClusters.length === 0) {
-    container.innerHTML = `<p style="color: #34d399; font-weight: 600; display: flex; align-items: center; gap: 0.5rem;">${SVG_SPARKLES} No duplicate clusters found matching query!</p>`;
+    container.innerHTML = `<p style="color: var(--status-online); font-weight: 600; display: flex; align-items: center; gap: 0.5rem; padding: 1rem 0;">${SVG_SPARKLES} No duplicate clusters found matching query!</p>`;
     updateDuplicatesPaginationInfo(0, 0, 0, 1);
     return;
   }
@@ -447,21 +588,64 @@ function renderDuplicatesPage() {
   let html = '';
   pageClusters.forEach((c, idx) => {
     const globalIdx = startIdx + idx + 1;
+    const currentClusterIdx = startIdx + idx;
+    const keeper = findKeeperInCluster(c, currentDupKeepStrategy);
+
     html += `
-      <div style="background: rgba(15,23,42,0.5); padding: 1.25rem; border-radius: 14px; margin-bottom: 1rem; border: 1px solid var(--border-color);">
-        <h4 style="color: #f43f5e; margin-bottom: 0.75rem; font-size: 1rem;">Cluster #${globalIdx}: ${escapeHtml(c.cluster_name)} (${c.count} copies)</h4>
-        <ul style="list-style: none; padding-left: 0.25rem;">
-    `;
-    c.songs.forEach(s => {
-      html += `
-        <li style="margin-bottom: 0.6rem; font-size: 0.85rem; display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.4); padding: 0.6rem 0.85rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.05);">
-          <div>
-            ${SVG_FOLDER} <code style="color: #cbd5e1;">${escapeHtml(s.filepath)}</code> 
-            <span class="text-muted" style="margin-left: 0.5rem;">(${s.size_formatted}, ${s.mtime_str})</span>
+      <div class="duplicate-cluster-card">
+        <div class="cluster-card-header">
+          <div class="cluster-title-group">
+            <h4 class="cluster-title">
+              Cluster #${globalIdx}: ${escapeHtml(c.cluster_name)}
+            </h4>
+            <span class="badge badge-purple text-tabular">${c.count} copies</span>
           </div>
-          <div style="display: flex; gap: 0.4rem;">
-            <button class="btn btn-secondary" style="padding: 0.3rem 0.75rem; font-size: 0.75rem;" onclick="playAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}')">${SVG_PLAY} Play</button>
-            <button class="btn btn-secondary btn-danger" style="padding: 0.3rem 0.75rem; font-size: 0.75rem;" onclick="deleteSong('${escapeJs(s.filepath)}', event)">${SVG_TRASH} Delete</button>
+          <button class="btn btn-secondary btn-sm" onclick="autoSelectClusterDuplicates(${currentClusterIdx})" title="Select duplicate copies and keep the best copy">
+            Auto-select (Keep Best)
+          </button>
+        </div>
+        <ul class="cluster-items-list">
+    `;
+
+    c.songs.forEach(s => {
+      const isSelected = selectedDuplicatePaths.has(s.filepath);
+      const isKeeper = keeper && (s.filepath === keeper.filepath);
+
+      let rowBorder = '1px solid var(--border-color)';
+      let rowBg = 'rgba(17, 17, 27, 0.6)';
+      let statusBadge = '';
+
+      if (isSelected) {
+        rowBorder = '1px solid rgba(243, 139, 168, 0.4)';
+        rowBg = 'rgba(243, 139, 168, 0.08)';
+        statusBadge = '<span class="badge badge-offline" style="font-size: 0.72rem; font-weight: 700;">DELETE</span>';
+      } else if (isKeeper) {
+        rowBorder = '1px solid rgba(166, 227, 161, 0.35)';
+        rowBg = 'rgba(166, 227, 161, 0.06)';
+        statusBadge = '<span class="badge badge-online" style="font-size: 0.72rem; font-weight: 700;" title="Preserved original copy">KEEP (Best)</span>';
+      } else {
+        statusBadge = '<span class="badge badge-purple" style="font-size: 0.72rem;">COPY</span>';
+      }
+
+      const checkedAttr = isSelected ? 'checked' : '';
+
+      html += `
+        <li class="duplicate-item-row" style="background: ${rowBg}; border: ${rowBorder};">
+          <div class="dup-left-content">
+            <input type="checkbox" class="dup-checkbox" data-path="${escapeHtml(s.filepath)}" ${checkedAttr} onchange="onDuplicateCheckboxChange('${escapeJs(s.filepath)}', this.checked, ${currentClusterIdx})" style="width: 1.15rem; height: 1.15rem; cursor: pointer; accent-color: var(--ctp-mauve); flex-shrink: 0;">
+            ${statusBadge}
+            <div class="dup-file-info">
+              <code class="dup-filepath" title="${escapeHtml(s.filepath)}">${escapeHtml(s.filepath)}</code>
+              <div class="dup-file-meta">
+                <span class="meta-tag text-tabular">${escapeHtml(s.size_formatted || '—')}</span>
+                ${s.bitrate_kbps ? `<span class="meta-tag text-tabular">${escapeHtml(s.bitrate_kbps)}</span>` : ''}
+                ${s.mtime_str ? `<span class="meta-tag text-tabular">${escapeHtml(s.mtime_str)}</span>` : ''}
+              </div>
+            </div>
+          </div>
+          <div class="action-btn-group">
+            <button class="btn btn-secondary btn-sm" onclick="playAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}')" title="Play track">${SVG_PLAY} Play</button>
+            <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event)" title="Delete track">${SVG_TRASH} Delete</button>
           </div>
         </li>
       `;
@@ -481,6 +665,75 @@ function updateDuplicatesPaginationInfo(start, end, total, totalPages) {
 
   document.getElementById('dup-prev-btn').disabled = (dupPage <= 1);
   document.getElementById('dup-next-btn').disabled = (dupPage >= totalPages);
+}
+
+// Modal Handlers for Batch Duplicate Deletion
+function openBatchDeleteDuplicatesModal() {
+  if (selectedDuplicatePaths.size === 0) return;
+  const modal = document.getElementById('modal-delete-duplicates-confirm');
+  const summaryEl = document.getElementById('batch-delete-summary-text');
+  const previewEl = document.getElementById('batch-delete-files-preview');
+  if (!modal) return;
+
+  if (summaryEl) {
+    summaryEl.innerHTML = `You have selected <strong>${selectedDuplicatePaths.size}</strong> duplicate files for deletion across your duplicate song clusters.`;
+  }
+
+  if (previewEl) {
+    let filesHtml = '';
+    selectedDuplicatePaths.forEach(p => {
+      filesHtml += `<div style="margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--status-offline);"><span style="margin-right: 0.4rem;">🗑️</span>${escapeHtml(p)}</div>`;
+    });
+    previewEl.innerHTML = filesHtml;
+  }
+
+  modal.style.display = 'flex';
+}
+
+function hideBatchDeleteDuplicatesModal() {
+  const modal = document.getElementById('modal-delete-duplicates-confirm');
+  if (modal) modal.style.display = 'none';
+}
+
+async function executeBatchDeleteDuplicates() {
+  if (selectedDuplicatePaths.size === 0) return;
+  const btn = document.getElementById('btn-execute-batch-delete');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Deleting duplicate files...';
+  }
+
+  const pathsToDelete = Array.from(selectedDuplicatePaths);
+  try {
+    const res = await fetch('/api/songs/delete-batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filepaths: pathsToDelete,
+        device_id: 'local'
+      })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      hideBatchDeleteDuplicatesModal();
+      alert(`Successfully deleted ${data.deleted_count} duplicate files!\nExactly 1 copy in each cluster has been preserved.`);
+      selectedDuplicatePaths.clear();
+      updateDuplicatesSelectionUI();
+      loadDuplicates();
+      loadSongs();
+      loadDashboardStats();
+    } else {
+      alert(`Error deleting duplicate files: ${data.error || data.message || 'Batch delete failed'}`);
+    }
+  } catch (err) {
+    console.error('Error executing batch duplicate deletion:', err);
+    alert('Connection error while batch deleting duplicate files.');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Confirm & Delete Selected Files';
+    }
+  }
 }
 
 // --- MUSIC FOLDER SYNC (LOCAL -> ADB) JS LOGIC ---
@@ -839,11 +1092,11 @@ async function loadHiddenFiles() {
     records.forEach((r, idx) => {
       html += `
         <tr>
-          <td>${idx + 1}</td>
-          <td><strong>${escapeHtml(r.filename)}</strong></td>
-          <td><small class="text-muted"><code>${escapeHtml(r.filepath)}</code></small></td>
-          <td>
-            <button class="btn btn-secondary" onclick="unhideSong('${escapeJs(r.filepath)}')">${SVG_UNHIDE} Unhide</button>
+          <td class="col-center text-tabular">${idx + 1}</td>
+          <td><strong style="color: var(--text-main);">${escapeHtml(r.filename)}</strong></td>
+          <td><small class="text-muted"><code style="word-break: break-all;">${escapeHtml(r.filepath)}</code></small></td>
+          <td class="col-right">
+            <button class="btn btn-secondary btn-sm" onclick="unhideSong('${escapeJs(r.filepath)}')">${SVG_UNHIDE} Unhide</button>
           </td>
         </tr>
       `;
@@ -871,11 +1124,11 @@ async function loadSyncedHistory() {
     records.forEach((r, idx) => {
       html += `
         <tr>
-          <td>${idx + 1}</td>
-          <td><strong>${escapeHtml(r.filename)}</strong></td>
-          <td><span class="badge badge-purple">${escapeHtml(r.device_serial)}</span></td>
-          <td><small class="text-muted">${escapeHtml(r.remote_dir || 'N/A')}</small></td>
-          <td>${escapeHtml(r.synced_at || '')}</td>
+          <td class="col-center text-tabular">${idx + 1}</td>
+          <td><strong style="color: var(--text-main);">${escapeHtml(r.filename)}</strong></td>
+          <td class="col-center"><span class="badge badge-purple">${escapeHtml(r.device_serial)}</span></td>
+          <td><small class="text-muted"><code style="word-break: break-all;">${escapeHtml(r.remote_dir || 'N/A')}</code></small></td>
+          <td class="col-center text-tabular"><small class="text-muted">${escapeHtml(r.synced_at || '—')}</small></td>
         </tr>
       `;
     });
@@ -1190,16 +1443,20 @@ function renderPlaylistTracks() {
 
     html += `
       <tr ${rowClass}>
-        <td>${idx + 1}</td>
+        <td class="col-center text-tabular">${idx + 1}</td>
         <td>
-          <strong>${escapeHtml(s.title || s.filename)}</strong>
-          <br><small class="text-muted">${escapeHtml(s.artist || 'Unknown')} | ${escapeHtml(s.album || 'Unknown')}</small>
+          <div class="track-meta-cell">
+            <span class="track-title" title="${escapeHtml(s.title || s.filename)}">${escapeHtml(s.title || s.filename)}</span>
+            <span class="track-subtitle" title="${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}">${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}</span>
+          </div>
         </td>
-        <td>${escapeHtml(s.duration_formatted || '00:00')}</td>
-        <td>${escapeHtml(s.size_formatted || 'N/A')}</td>
-        <td>
-          <button class="btn btn-secondary" onclick="playPlaylistFromTrack(${idx})">${playBtnIcon} ${playBtnText}</button>
-          <button class="btn btn-secondary btn-danger" onclick="removeTrackFromPlaylist(${selectedPlaylist.id}, '${escapeJs(s.filepath)}')">${SVG_TRASH} Remove</button>
+        <td class="col-center text-tabular">${escapeHtml(s.duration_formatted || '00:00')}</td>
+        <td class="col-center text-tabular">${escapeHtml(s.size_formatted || '—')}</td>
+        <td class="col-right">
+          <div class="action-btn-group">
+            <button class="btn btn-secondary btn-sm" onclick="playPlaylistFromTrack(${idx})" title="${playBtnText}">${playBtnIcon} ${playBtnText}</button>
+            <button class="btn btn-secondary btn-danger btn-sm" onclick="removeTrackFromPlaylist(${selectedPlaylist.id}, '${escapeJs(s.filepath)}')" title="Remove from playlist">${SVG_TRASH} Remove</button>
+          </div>
         </td>
       </tr>
     `;
@@ -1349,19 +1606,21 @@ async function loadDeletedSongs() {
       const size = r.size_bytes ? formatBytes(r.size_bytes) : '—';
       html += `
         <tr>
-          <td>${idx + 1}</td>
+          <td class="col-center text-tabular">${idx + 1}</td>
           <td>
-            <strong>${escapeHtml(r.title || r.filename || 'Unknown')}</strong>
-            <br><small class="text-muted">${escapeHtml(r.filepath || '')}</small>
+            <div class="track-meta-cell">
+              <span class="track-title" title="${escapeHtml(r.title || r.filename || 'Unknown')}">${escapeHtml(r.title || r.filename || 'Unknown')}</span>
+              <span class="track-subtitle" title="${escapeHtml(r.filepath || '')}">${escapeHtml(r.filepath || '')}</span>
+            </div>
           </td>
-          <td><small class="text-muted"><code>${escapeHtml(r.filepath || '')}</code></small></td>
-          <td><span class="badge badge-purple">${escapeHtml(bitrate)}</span></td>
-          <td>${escapeHtml(size)}</td>
-          <td>${escapeHtml(r.file_created_at || '—')}</td>
-          <td>${escapeHtml(r.file_modified_at || '—')}</td>
-          <td class="text-muted">${escapeHtml(r.deleted_at || '—')}</td>
-          <td>
-            <button class="btn btn-secondary" onclick="restoreDeletedSong(${r.id})">Restore</button>
+          <td><small class="text-muted"><code style="word-break: break-all;">${escapeHtml(r.filepath || '')}</code></small></td>
+          <td class="col-center"><span class="badge badge-purple text-tabular">${escapeHtml(bitrate)}</span></td>
+          <td class="col-center text-tabular">${escapeHtml(size)}</td>
+          <td class="col-center text-tabular"><small class="text-muted">${escapeHtml(r.file_created_at || '—')}</small></td>
+          <td class="col-center text-tabular"><small class="text-muted">${escapeHtml(r.file_modified_at || '—')}</small></td>
+          <td class="col-center text-tabular"><small class="text-muted">${escapeHtml(r.deleted_at || '—')}</small></td>
+          <td class="col-right">
+            <button class="btn btn-secondary btn-sm" onclick="restoreDeletedSong(${r.id})" title="Restore song">Restore</button>
           </td>
         </tr>
       `;
@@ -1597,14 +1856,14 @@ async function onSyncDestinationDeviceChange() {
         let simHtml = '';
         similar.forEach(s => {
           simHtml += `
-            <div style="background: rgba(24, 24, 37, 0.85); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+            <div style="background: #191a21; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
               <div style="min-width: 0; flex: 1;">
                 <div style="font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(s.title || 'Unknown')}</div>
                 <div class="text-muted" style="font-size: 0.75rem;">${escapeHtml(s.artist || 'Unknown')} &bull; ${escapeHtml(s.duration_formatted || '')} &bull; <span class="badge badge-purple" style="font-size: 0.7rem;">${escapeHtml(s.bitrate_kbps ? `${s.bitrate_kbps} kbps` : '')}</span></div>
-                ${s.comparison_note ? `<div style="font-size: 0.72rem; color: #fab387; margin-top: 0.2rem;">${escapeHtml(s.comparison_note)}</div>` : ''}
+                ${s.comparison_note ? `<div style="font-size: 0.72rem; color: var(--accent-orange); margin-top: 0.2rem;">${escapeHtml(s.comparison_note)}</div>` : ''}
               </div>
               <div style="text-align: right; flex-shrink: 0;">
-                <span class="badge" style="background: rgba(203, 166, 247, 0.18); color: var(--ctp-mauve); font-size: 0.75rem; font-weight: 700;">
+                <span class="badge badge-pink" style="font-size: 0.75rem; font-weight: 700;">
                   ${s.similarity_score}% Match
                 </span>
               </div>

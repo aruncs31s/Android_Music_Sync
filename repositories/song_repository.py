@@ -148,6 +148,84 @@ class SongRepository(BaseRepository):
             logger.error(f"[SongRepository] Error deleting song '{abs_path}': {e}")
             return {"status": "error", "message": f"Failed to delete file: {e}", "code": 500}
 
+    def delete_songs_batch(self, filepaths: List[str]) -> Dict[str, Any]:
+        """
+        Move multiple audio files to repo-local trash (tmp/deleted), record their
+        metadata in the deleted songs log, remove from hide lists, and invalidate
+        all Redis song caches once after processing the batch.
+        """
+        if not filepaths:
+            return {"status": "success", "deleted_count": 0, "failed": [], "message": "No files to delete"}
+
+        def _format_ts(ts):
+            try:
+                return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return None
+
+        deleted_count = 0
+        failed = []
+        deleted_repo = DeletedSongRepository()
+
+        for fp in filepaths:
+            abs_path = os.path.abspath(fp)
+            if not os.path.exists(abs_path):
+                failed.append({"filepath": fp, "error": "File does not exist"})
+                continue
+
+            record = {
+                "filepath": abs_path,
+                "filename": os.path.basename(abs_path),
+                "title": None,
+                "artist": None,
+                "album": None,
+                "bitrate_kbps": None,
+                "sample_rate_hz": None,
+                "codec": None,
+                "size_bytes": None,
+                "file_created_at": None,
+                "file_modified_at": None
+            }
+            try:
+                st = os.stat(abs_path)
+                record["size_bytes"] = st.st_size
+                record["file_created_at"] = _format_ts(st.st_ctime)
+                record["file_modified_at"] = _format_ts(st.st_mtime)
+            except OSError:
+                pass
+
+            try:
+                meta = audio_metadata.extract_audio_metadata(abs_path)
+                record["bitrate_kbps"] = meta.get("bitrate")
+                record["sample_rate_hz"] = meta.get("sample_rate")
+                record["codec"] = meta.get("codec")
+            except Exception:
+                pass
+
+            try:
+                tmp_path = get_tmp_song_path(abs_path)
+                record["tmp_path"] = tmp_path
+                shutil.move(abs_path, tmp_path)
+                ui_db.remove_hidden_file(abs_path)
+                hide_list_db.remove_hidden_file(abs_path)
+                audio_metadata.METADATA_CACHE.pop(abs_path, None)
+                deleted_repo.record_deleted_song(record)
+                deleted_count += 1
+                logger.info(f"[SongRepository] Batch deleted audio file: {abs_path}")
+            except Exception as e:
+                logger.error(f"[SongRepository] Failed to delete file in batch '{abs_path}': {e}")
+                failed.append({"filepath": fp, "error": str(e)})
+
+        if deleted_count > 0:
+            self.invalidate_all_song_caches()
+
+        return {
+            "status": "success",
+            "deleted_count": deleted_count,
+            "failed": failed,
+            "message": f"Successfully deleted {deleted_count} files"
+        }
+
     def invalidate_all_song_caches(self):
         """Clear all cached song data in Redis."""
         self._cache_delete(self.CACHE_KEY_ALL_SONGS)

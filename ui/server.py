@@ -376,6 +376,28 @@ def delete_song():
     return jsonify(result)
 
 
+@app.route("/api/songs/delete-batch", methods=["POST"])
+def delete_songs_batch():
+    """
+    Batch delete multiple audio files from local disk or target device.
+    """
+    data = request.get_json(silent=True) or {}
+    filepaths = data.get("filepaths") or []
+    device_id = data.get("device_id") or "local"
+
+    if not filepaths:
+        return jsonify({"error": "No filepaths provided"}), 400
+
+    result = device_repo.delete_device_songs_batch(
+        device_id=device_id,
+        filepaths=filepaths
+    )
+    if result.get("status") == "error":
+        return jsonify({"error": result.get("message")}), result.get("code", 500)
+
+    return jsonify(result)
+
+
 @app.route("/api/deleted", methods=["GET"])
 def get_deleted_songs():
     """Return deleted songs history (files kept in repo-local trash)."""
