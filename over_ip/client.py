@@ -181,3 +181,28 @@ def upload_song_to_peer(
     except Exception as e:
         print(f"[Over-IP Upload] Error uploading file over HTTP: {e}", file=sys.stderr)
         return False
+
+
+def delete_remote_song(
+    ip_address: str,
+    filepath: str,
+    port: int = 5000,
+    timeout: float = 8.0
+) -> Dict[str, Any]:
+    """
+    Request remote peer over HTTP POST to delete a song.
+    """
+    base_url = get_base_url(ip_address, port)
+    url = f"{base_url}/api/song/delete"
+    try:
+        resp = requests.post(url, json={"filepath": filepath}, timeout=timeout)
+        if resp.status_code == 200:
+            return resp.json()
+        return {
+            "status": "error",
+            "message": resp.json().get("error") if resp.headers.get("Content-Type", "").startswith("application/json") else f"HTTP error {resp.status_code}",
+            "code": resp.status_code
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Connection error: {e}", "code": 500}
+

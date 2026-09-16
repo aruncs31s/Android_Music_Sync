@@ -127,7 +127,41 @@ def upload_song():
     })
 
 
+@app.route("/api/song/delete", methods=["POST"])
+def delete_song():
+    """Delete a song file from local music folders via Over-IP HTTP API."""
+    data = request.get_json(silent=True) or {}
+    file_path = data.get("filepath")
+    if not file_path:
+        return jsonify({"error": "Missing filepath parameter"}), 400
+
+    cfg = config_manager.load_config()
+    folders = config_manager.get_local_sync_folders(cfg)
+    abs_path = os.path.abspath(file_path)
+
+    # Security check: must reside in configured music folders or exist
+    is_valid = any(abs_path.startswith(os.path.abspath(f)) for f in folders)
+    if not is_valid and not os.path.isfile(abs_path):
+        return jsonify({"error": f"File '{file_path}' not found in sync folders"}), 404
+
+    try:
+        if os.path.isfile(abs_path):
+            os.remove(abs_path)
+            redis_cfg = cfg.get("redis")
+            if redis_cfg:
+                redis_cache.delete_cache(redis_cfg, f"over_ip_songs:{get_server_hostname()}")
+            return jsonify({
+                "status": "success",
+                "message": f"Deleted '{os.path.basename(abs_path)}' on host {get_server_hostname()}."
+            })
+        else:
+            return jsonify({"error": f"File '{abs_path}' does not exist"}), 404
+    except Exception as e:
+        return jsonify({"error": f"Failed to delete file: {e}"}), 500
+
+
 def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False):
     """Start the Flask API server."""
     print(f"[Over-IP Server] Starting Flask API server on http://{host}:{port}...", flush=True)
     app.run(host=host, port=port, debug=debug)
+

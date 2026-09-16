@@ -4,6 +4,8 @@ Song Repository module with Redis caching and disk fallback.
 import os
 import sys
 import socket
+import shutil
+import datetime
 from typing import List, Dict, Any, Optional
 
 from repositories.base_repository import BaseRepository
@@ -13,6 +15,7 @@ import ui.stats_manager as ui_stats
 import audio_metadata
 import ui.db_manager as ui_db
 import hide_list_db
+from repositories.deleted_song_repository import DeletedSongRepository, get_tmp_song_path
 from utils import get_logger
 
 logger = get_logger()
@@ -66,21 +69,72 @@ class SongRepository(BaseRepository):
 
     def delete_song(self, filepath: str) -> Dict[str, Any]:
         """
-        Permanently delete an audio file from disk, invalidate in-memory metadata cache,
-        remove database hide list references, and clear Redis song caches.
+        Move an audio file to the repo-local trash folder (tmp/deleted), record its
+        metadata (bitrate, ctime/mtime, size) in the deleted songs log, invalidate
+        in-memory metadata cache, remove database hide list references, and clear
+        Redis song caches. Returns an identical success/error shape as before.
         """
         abs_path = os.path.abspath(filepath)
         if not os.path.exists(abs_path):
             return {"status": "error", "message": f"File does not exist: {abs_path}", "code": 404}
 
+        def _format_ts(ts):
+            try:
+                return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            except Exception:
+                return None
+
+        # Best-effort capture of file stats & technical metadata BEFORE moving.
+        record = {
+            "filepath": abs_path,
+            "filename": os.path.basename(abs_path),
+            "title": None,
+            "artist": None,
+            "album": None,
+            "bitrate_kbps": None,
+            "sample_rate_hz": None,
+            "codec": None,
+            "size_bytes": None,
+            "file_created_at": None,
+            "file_modified_at": None
+        }
         try:
-            os.remove(abs_path)
+            st = os.stat(abs_path)
+            record["size_bytes"] = st.st_size
+            record["file_created_at"] = _format_ts(st.st_ctime)
+            record["file_modified_at"] = _format_ts(st.st_mtime)
+        except OSError:
+            pass
+
+        try:
+            meta = audio_metadata.extract_audio_metadata(abs_path)
+            record["bitrate_kbps"] = meta.get("bitrate")
+            record["sample_rate_hz"] = meta.get("sample_rate")
+            record["codec"] = meta.get("codec")
+        except Exception:
+            pass
+
+        try:
+            tmp_path = get_tmp_song_path(abs_path)
+            record["tmp_path"] = tmp_path
+            try:
+                shutil.move(abs_path, tmp_path)
+            except Exception as e:
+                logger.error(f"[SongRepository] Failed to move file to trash: {e}")
+                return {"status": "error", "message": f"Failed to delete file: {e}", "code": 500}
+
             # Remove from hide lists if present
             ui_db.remove_hidden_file(abs_path)
             hide_list_db.remove_hidden_file(abs_path)
 
             # Invalidate in-memory metadata cache
             audio_metadata.METADATA_CACHE.pop(abs_path, None)
+
+            # Try to log the deletion in the deleted songs log (best-effort).
+            try:
+                DeletedSongRepository().record_deleted_song(record)
+            except Exception as e:
+                logger.error(f"[SongRepository] Error recording deleted song log: {e}")
 
             # Invalidate Redis song caches
             self.invalidate_all_song_caches()

@@ -24,6 +24,8 @@ class BaseRepository:
             logger.error(f"[Repository] Error loading config: {e}")
             return None
 
+    _get_redis_cfg = _get_redis_config
+
     def _cache_get(self, key: str) -> Optional[Any]:
         """Attempt to retrieve deserialized JSON data from Redis cache."""
         redis_cfg = self._get_redis_config()

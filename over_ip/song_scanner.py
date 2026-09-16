@@ -61,10 +61,12 @@ def scan_songs_from_paths(
                     try:
                         st = os.stat(full_path)
                         mtime = st.st_mtime
+                        ctime = getattr(st, "st_birthtime", st.st_ctime)
                         size = st.st_size
                     except OSError as err:
                         logger.error(f"Failed stat for file '{full_path}': {err}")
                         mtime = 0.0
+                        ctime = 0.0
                         size = 0
 
                     meta = audio_metadata.extract_audio_metadata(full_path)
@@ -73,6 +75,14 @@ def scan_songs_from_paths(
                     title = meta.get("title") or os.path.splitext(filename)[0]
                     artist = meta.get("artist") or "Unknown"
                     album = meta.get("album") or "Unknown"
+
+                    bitrate_str = meta.get("bitrate", "Unknown")
+                    bitrate_val = 0
+                    try:
+                        if "kbps" in str(bitrate_str):
+                            bitrate_val = int(str(bitrate_str).replace("kbps", "").strip())
+                    except Exception:
+                        bitrate_val = 0
 
                     song = {
                         "_id": len(songs) + 1,
@@ -86,9 +96,12 @@ def scan_songs_from_paths(
                         "size_formatted": meta.get("size", f"{size / (1024*1024):.1f} MB"),
                         "mtime": mtime,
                         "mtime_str": format_mtime(mtime),
+                        "ctime": ctime,
+                        "ctime_str": format_mtime(ctime),
                         "duration_sec": 0.0,
                         "duration_formatted": meta.get("duration", "00:00"),
-                        "bitrate_kbps": meta.get("bitrate", "Unknown"),
+                        "bitrate_kbps": bitrate_str,
+                        "bitrate_val": bitrate_val,
                         "sample_rate_hz": meta.get("sample_rate", "Unknown"),
                         "channels": meta.get("channels", "Stereo"),
                         "codec": meta.get("codec", ext.lstrip(".")),

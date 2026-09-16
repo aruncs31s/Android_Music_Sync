@@ -123,31 +123,30 @@ def scan_adb_devices_info() -> List[Dict[str, Any]]:
     return adb_list
 
 
-def scan_over_ip_hosts_info() -> List[Dict[str, Any]]:
+def scan_over_ip_hosts_info(live_ping: bool = False) -> List[Dict[str, Any]]:
     """
-    Ping and scan all Over-IP peer hosts stored in ui/db.db ip_hosts table.
+    Ping and scan Over-IP peer hosts stored in database/db.db ip_hosts table.
+    If live_ping is False, uses stored last-known online status to avoid blocking page loads.
     """
     cfg = config_manager.load_config()
     redis_cfg = cfg.get("redis")
-    stored_ips = ui_db.get_connection().cursor().execute(
-        "SELECT id, ip_address, port, alias, last_seen, is_online FROM ip_hosts ORDER BY id DESC"
-    ).fetchall()
+    stored_ips = ui_db.get_stored_ip_hosts()
 
     ip_list = []
     for r in stored_ips:
         ip_addr = r["ip_address"]
         port = r["port"]
         alias = r["alias"] or ip_addr
+        is_online = bool(r.get("is_online", 0))
+        song_cnt = 0
+        hostname = alias
 
-        ping_res = ip_client.ping_host(ip_addr, port=port, redis_cfg=redis_cfg)
-        is_online = ping_res.get("online", False)
-        song_cnt = ping_res.get("song_count", 0)
-        hostname = ping_res.get("hostname") or alias
-
-        ui_db.get_connection().execute(
-            "UPDATE ip_hosts SET is_online = ?, last_seen = CURRENT_TIMESTAMP WHERE ip_address = ?",
-            (1 if is_online else 0, ip_addr)
-        )
+        if live_ping:
+            ping_res = ip_client.ping_host(ip_addr, port=port, timeout=1.5, redis_cfg=redis_cfg)
+            is_online = ping_res.get("online", False)
+            song_cnt = ping_res.get("song_count", 0)
+            hostname = ping_res.get("hostname") or alias
+            ui_db.update_ip_status(ip_addr, is_online)
 
         ip_list.append({
             "id": f"ip_{ip_addr}",
@@ -163,54 +162,56 @@ def scan_over_ip_hosts_info() -> List[Dict[str, Any]]:
     return ip_list
 
 
-def get_all_available_devices() -> List[Dict[str, Any]]:
+def get_all_available_devices(local_songs_count: Any = None) -> List[Dict[str, Any]]:
     """
     Combine Local Music folders, connected ADB devices, and Over-IP peer devices.
     """
+    from repositories import song_repo
     cfg = config_manager.load_config()
     folders = config_manager.get_local_sync_folders(cfg)
-    audio_exts = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"])
 
-    local_songs = song_scanner.scan_songs_from_paths(folders, audio_exts)
+    if local_songs_count is None:
+        local_songs = song_repo.get_all_songs()
+        local_songs_count = len(local_songs)
 
     devices = [
         {
             "id": "local",
             "name": "Local Music Folders",
             "type": "Local Storage",
-            "count": len(local_songs),
+            "count": local_songs_count,
             "details": ", ".join(folders),
             "status": "online"
         }
     ]
 
     devices.extend(scan_adb_devices_info())
-    devices.extend(scan_over_ip_hosts_info())
+    devices.extend(scan_over_ip_hosts_info(live_ping=False))
 
     return devices
 
 
 def get_dashboard_summary_stats() -> Dict[str, Any]:
     """
-    Compute complete dashboard metrics for Flask Web UI.
+    Compute complete dashboard metrics for Flask Web UI leveraging Repository caching.
     """
+    from repositories import song_repo, hide_repo, device_repo
     cfg = config_manager.load_config()
     folders = config_manager.get_local_sync_folders(cfg)
-    audio_exts = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"])
 
-    # 1. Local Music Songs & Duplicates
-    local_songs = song_scanner.scan_songs_from_paths(folders, audio_exts)
-    duplicate_info = detect_duplicate_songs(local_songs)
+    # 1. Local Music Songs & Duplicates (uses Redis cache if available)
+    local_songs = song_repo.get_all_songs()
+    duplicate_info = song_repo.get_duplicates()
 
-    # 2. Combined Available Devices
-    device_counts = get_all_available_devices()
+    # 2. Combined Available Devices (reuses local_songs count to eliminate double disk scans)
+    device_counts = get_all_available_devices(local_songs_count=len(local_songs))
 
     # 3. Synced Tracks Count (ui/db.db)
-    synced_records = ui_db.get_all_synced_records()
+    synced_records = device_repo.get_synced_records()
     synced_count = len(synced_records)
 
     # 4. Hidden Songs Count (ui/db.db)
-    hidden_records = ui_db.get_all_hidden_records()
+    hidden_records = hide_repo.get_all_hidden_records()
     hidden_count = len(hidden_records)
 
     return {

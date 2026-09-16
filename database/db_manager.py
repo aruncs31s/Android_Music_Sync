@@ -97,6 +97,14 @@ def _migrate_legacy_data(conn: sqlite3.Connection):
         except Exception as e:
             print(f"[Central DB] Migration note from {legacy}: {e}", file=sys.stderr)
 
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO dashboard_settings (key, value) VALUES (?, ?)",
+            (LEGACY_MIGRATION_FLAG, "1")
+        )
+    except sqlite3.OperationalError:
+        pass
+
 
 def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     """Get SQLite database connection to centralized database/db.db with WAL mode & 30s timeout."""
@@ -153,6 +161,24 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT UNIQUE NOT NULL,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS deleted_songs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filepath TEXT NOT NULL,
+                tmp_path TEXT NOT NULL,
+                filename TEXT NOT NULL,
+                title TEXT,
+                artist TEXT,
+                album TEXT,
+                bitrate_kbps TEXT,
+                sample_rate_hz TEXT,
+                codec TEXT,
+                size_bytes INTEGER,
+                file_created_at TEXT,
+                file_modified_at TEXT,
+                deleted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         """)
         conn.execute("""
@@ -331,6 +357,26 @@ def get_all_synced_records(device_serial: Optional[str] = None, db_path: Optiona
     finally:
         if conn:
             conn.close()
+
+
+def remove_synced_file(device_serial: str, filename: str, db_path: Optional[str] = None) -> bool:
+    """Remove record from synced_files when a track is deleted from a target device."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            cursor = conn.execute(
+                "DELETE FROM synced_files WHERE device_serial = ? AND (filename = ? OR filepath LIKE ?)",
+                (device_serial, filename, f"%/{filename}")
+            )
+            return cursor.rowcount > 0
+    except Exception as e:
+        print(f"[Central DB] Error removing synced record: {e}", file=sys.stderr)
+        return False
+    finally:
+        if conn:
+            conn.close()
+
 
 
 # --- OVER-IP HOST STORAGE METHODS ---
@@ -550,6 +596,100 @@ def get_playlist_tracks(playlist_id: int, db_path: Optional[str] = None) -> List
     except Exception as e:
         logger.error(f"[Central DB] Error fetching tracks for playlist ID {playlist_id}: {e}")
         return []
+    finally:
+        if conn:
+            conn.close()
+
+
+# --- DELETED SONGS METHODS ---
+
+def add_deleted_song(record: Dict[str, Any], db_path: Optional[str] = None) -> bool:
+    """Insert a deleted song record into the centralized database."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            conn.execute(
+                """
+                INSERT INTO deleted_songs (
+                    filepath, tmp_path, filename, title, artist, album,
+                    bitrate_kbps, sample_rate_hz, codec, size_bytes,
+                    file_created_at, file_modified_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    record.get("filepath"),
+                    record.get("tmp_path"),
+                    record.get("filename") or os.path.basename(record.get("filepath") or ""),
+                    record.get("title"),
+                    record.get("artist"),
+                    record.get("album"),
+                    record.get("bitrate_kbps"),
+                    record.get("sample_rate_hz"),
+                    record.get("codec"),
+                    record.get("size_bytes"),
+                    record.get("file_created_at"),
+                    record.get("file_modified_at")
+                )
+            )
+        logger.info(f"[Central DB] Recorded deleted song: {record.get('filename') or record.get('filepath')}")
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error recording deleted song: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_deleted_songs(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieve all deleted song records, newest first."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM deleted_songs ORDER BY id DESC"
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"[Central DB] Error fetching deleted songs: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
+def remove_deleted_song(record_id: int, db_path: Optional[str] = None) -> bool:
+    """Remove a single deleted song record by id."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            conn.execute("DELETE FROM deleted_songs WHERE id = ?", (record_id,))
+        logger.info(f"[Central DB] Removed deleted song record ID {record_id}.")
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error removing deleted song record {record_id}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def clear_deleted_songs(db_path: Optional[str] = None) -> bool:
+    """Remove all deleted song records from the centralized database."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            conn.execute("DELETE FROM deleted_songs")
+        logger.info("[Central DB] Cleared deleted songs history.")
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error clearing deleted songs history: {e}")
+        return False
     finally:
         if conn:
             conn.close()

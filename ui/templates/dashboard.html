@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Antigravity Music Manager & Web Dashboard</title>
+  <title>Android Music Sync</title>
   <link rel="stylesheet" href="/static/dashboard.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -17,15 +17,15 @@
       <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="url(#logo-grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
         <defs>
           <linearGradient id="logo-grad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#6366f1"/>
-            <stop offset="100%" stop-color="#8b5cf6"/>
+            <stop offset="0%" stop-color="#ff6b00"/>
+            <stop offset="100%" stop-color="#ff8c00"/>
           </linearGradient>
         </defs>
         <path d="M9 18V5l12-2v13"/>
         <circle cx="6" cy="18" r="3"/>
         <circle cx="18" cy="16" r="3"/>
       </svg>
-      <span>Antigravity Music Dashboard</span>
+      <span>Android Music Sync</span>
     </div>
     <nav class="nav-tabs">
       <button class="tab-btn active" data-tab="tab-overview">
@@ -48,9 +48,21 @@
         <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         Synced Tracks
       </button>
+      <button class="tab-btn" data-tab="tab-sync">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>
+        Sync Now
+      </button>
       <button class="tab-btn" data-tab="tab-hidden">
         <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
         Hidden Files
+      </button>
+      <button class="tab-btn" data-tab="tab-playlists">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+        Playlists
+      </button>
+      <button class="tab-btn" data-tab="tab-deleted">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        Deleted Songs
       </button>
     </nav>
   </header>
@@ -111,13 +123,13 @@
       <div class="panel">
         <div class="panel-title">
           <span>Connected Devices & Storage Breakdown</span>
-          <div style="display: flex; gap: 0.5rem;">
+          <div class="panel-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button class="btn" onclick="scanAdbDevices()">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
               Scan ADB Device
             </button>
             <button class="btn btn-secondary" onclick="scanIpHosts()">
-              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"/></svg>
               Scan Over-IP Peers
             </button>
             <button class="btn btn-secondary" onclick="loadDashboardStats()">
@@ -138,7 +150,7 @@
       <div class="panel">
         <div class="panel-title">
           <span>Available Devices & Device Scanners</span>
-          <div style="display: flex; gap: 0.5rem;">
+          <div class="panel-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
             <button class="btn" onclick="scanAdbDevices()">Scan ADB Devices</button>
             <button class="btn btn-secondary" onclick="scanIpHosts()">Ping Over-IP Devices</button>
           </div>
@@ -147,7 +159,7 @@
         <!-- Add Over-IP Device Form -->
         <div style="background: rgba(15, 23, 42, 0.5); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
           <h4 style="margin-bottom: 0.75rem;">Add & Ping New Over-IP Peer Device</h4>
-          <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+          <div class="form-inline-row" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
             <input type="text" id="input-ip-addr" class="search-bar" placeholder="IP Address (e.g. 192.168.1.50)" style="max-width: 250px;">
             <input type="number" id="input-ip-port" class="search-bar" value="5000" style="max-width: 100px;">
             <button class="btn" onclick="addOverIpDevice()">+ Add & Ping Device</button>
@@ -165,33 +177,84 @@
     <!-- Music Library Tab -->
     <div id="tab-library" class="tab-content" style="display: none;">
       <div class="panel">
-        <div class="panel-title">
-          <span>Local Music Library</span>
-          <input type="text" id="library-search" class="search-bar" placeholder="Search songs by title, artist, album..." oninput="onLibrarySearchInput()">
+        <div class="panel-title" style="flex-wrap: wrap; gap: 1rem;">
+          <div style="display: flex; align-items: center; gap: 0.75rem;">
+            <span id="library-title-text">Music Library</span>
+            <span id="library-device-badge" class="badge badge-purple" style="font-size: 0.8rem;">Local Storage</span>
+          </div>
+          <div class="panel-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+            <select id="library-device-select" class="search-bar" style="max-width: 260px; font-weight: 600;" onchange="onLibraryDeviceSelectChange(this.value)">
+              <option value="local">Local Music Folders</option>
+            </select>
+            <button class="btn btn-secondary" onclick="refreshCurrentDeviceLibrary()" title="Refresh Library">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Refresh
+            </button>
+            <button class="btn btn-secondary" onclick="switchTab('tab-overview')" title="Back to Devices">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Back to Devices
+            </button>
+          </div>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Track & Details</th>
-              <th>Duration</th>
-              <th>Size</th>
-              <th>Bitrate</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="songs-tbody">
-            <tr><td colspan="6" class="text-muted">Loading music library...</td></tr>
-          </tbody>
-        </table>
+
+        <!-- Search & Filter Controls -->
+        <div class="filter-controls-row" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+          <input type="text" id="library-search" class="search-bar" placeholder="Search songs by title, artist, album, filename..." oninput="onLibrarySearchInput()" style="flex: 1; min-width: 260px;">
+          <div class="sort-select-wrap" style="display: flex; align-items: center; gap: 0.5rem;">
+            <label for="library-sort" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600; white-space: nowrap;">Sort By:</label>
+            <select id="library-sort" class="search-bar" style="max-width: 240px;" onchange="onLibrarySortChange(this.value)">
+              <option value="ctime_desc" selected>Created: Newest First</option>
+              <option value="ctime_asc">Created: Oldest First</option>
+              <option value="mtime_desc">Modified: Newest First</option>
+              <option value="mtime_asc">Modified: Oldest First</option>
+              <option value="bitrate_desc">Bitrate: Highest (kbps)</option>
+              <option value="bitrate_asc">Bitrate: Lowest (kbps)</option>
+              <option value="title_asc">Title: A to Z</option>
+              <option value="title_desc">Title: Z to A</option>
+              <option value="size_desc">Size: Largest First</option>
+              <option value="size_asc">Size: Smallest First</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th onclick="toggleLibrarySort('title')" style="cursor: pointer; user-select: none;" title="Click to sort by Title">
+                  Track & Details <span id="sort-icon-title"></span>
+                </th>
+                <th onclick="toggleLibrarySort('duration')" style="cursor: pointer; user-select: none;" title="Click to sort by Duration">
+                  Duration <span id="sort-icon-duration"></span>
+                </th>
+                <th onclick="toggleLibrarySort('size')" style="cursor: pointer; user-select: none;" title="Click to sort by Size">
+                  Size <span id="sort-icon-size"></span>
+                </th>
+                <th onclick="toggleLibrarySort('bitrate')" style="cursor: pointer; user-select: none;" title="Click to sort by Bitrate">
+                  Bitrate <span id="sort-icon-bitrate"></span>
+                </th>
+                <th onclick="toggleLibrarySort('ctime')" style="cursor: pointer; user-select: none;" title="Click to sort by Created Time">
+                  Created Time <span id="sort-icon-ctime"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+                </th>
+                <th onclick="toggleLibrarySort('mtime')" style="cursor: pointer; user-select: none;" title="Click to sort by Modified Time">
+                  Modified Time <span id="sort-icon-mtime"></span>
+                </th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="songs-tbody">
+              <tr><td colspan="8" class="text-muted">Loading music library...</td></tr>
+            </tbody>
+          </table>
+        </div>
         
         <!-- Pagination Controls -->
         <div class="pagination-bar" id="library-pagination">
           <div>Showing <span id="library-showing-start">0</span> - <span id="library-showing-end">0</span> of <span id="library-total-count">0</span> tracks</div>
           <div class="pagination-controls">
-            <button class="page-btn" id="lib-prev-btn" onclick="changeLibraryPage(-1)">← Previous</button>
+            <button class="page-btn" id="lib-prev-btn" onclick="changeLibraryPage(-1)"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:0.3rem;"><polyline points="15 18 9 12 15 6"/></svg>Previous</button>
             <span class="page-info" id="lib-page-info">Page 1 of 1</span>
-            <button class="page-btn" id="lib-next-btn" onclick="changeLibraryPage(1)">Next →</button>
+            <button class="page-btn" id="lib-next-btn" onclick="changeLibraryPage(1)">Next<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:0.3rem;"><polyline points="9 18 15 12 9 6"/></svg></button>
           </div>
         </div>
       </div>
@@ -200,9 +263,9 @@
     <!-- Duplicates Tab -->
     <div id="tab-duplicates" class="tab-content" style="display: none;">
       <div class="panel">
-        <div class="panel-title">
+        <div class="panel-title" style="flex-wrap: wrap; gap: 0.75rem;">
           <span>Duplicate Song Clusters</span>
-          <div style="display: flex; gap: 0.75rem; align-items: center;">
+          <div class="panel-actions" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
             <input type="text" id="duplicates-search" class="search-bar" placeholder="Search duplicate clusters or files..." oninput="onDuplicatesSearchInput()">
             <button class="btn btn-secondary" onclick="loadDuplicates()">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
@@ -210,7 +273,7 @@
             </button>
           </div>
         </div>
-        <div id="duplicates-container">
+        <div id="duplicates-container" class="table-responsive">
           <p class="text-muted">Analyzing duplicate audio tracks...</p>
         </div>
 
@@ -218,9 +281,9 @@
         <div class="pagination-bar" id="duplicates-pagination">
           <div>Showing clusters <span id="dup-showing-start">0</span> - <span id="dup-showing-end">0</span> of <span id="dup-total-count">0</span></div>
           <div class="pagination-controls">
-            <button class="page-btn" id="dup-prev-btn" onclick="changeDuplicatesPage(-1)">← Previous</button>
+            <button class="page-btn" id="dup-prev-btn" onclick="changeDuplicatesPage(-1)"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:0.3rem;"><polyline points="15 18 9 12 15 6"/></svg>Previous</button>
             <span class="page-info" id="dup-page-info">Page 1 of 1</span>
-            <button class="page-btn" id="dup-next-btn" onclick="changeDuplicatesPage(1)">Next →</button>
+            <button class="page-btn" id="dup-next-btn" onclick="changeDuplicatesPage(1)">Next<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:0.3rem;"><polyline points="9 18 15 12 9 6"/></svg></button>
           </div>
         </div>
       </div>
@@ -232,21 +295,51 @@
         <div class="panel-title">
           <span>Synced Tracks History (database/db.db)</span>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Filename</th>
-              <th>Target Device</th>
-              <th>Remote Path</th>
-              <th>Synced At</th>
-            </tr>
-          </thead>
-          <tbody id="synced-tbody">
-            <tr><td colspan="5" class="text-muted">Loading synced history...</td></tr>
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Filename</th>
+                <th>Target Device</th>
+                <th>Remote Path</th>
+                <th>Synced At</th>
+              </tr>
+            </thead>
+            <tbody id="synced-tbody">
+              <tr><td colspan="5" class="text-muted">Loading synced history...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
+    </div>
+
+    <!-- Sync Now Tab -->
+    <div id="tab-sync" class="tab-content" style="display: none;">
+      <div class="panel">
+        <div class="panel-title">
+          <span>Music Folder Sync to ADB Device</span>
+          <button class="btn" onclick="runSyncPreview()">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+            Scan &amp; Compare
+          </button>
+        </div>
+
+        <div class="form-inline-row" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem;">
+          <select id="sync-device-select" class="search-bar" style="max-width: 360px; min-width: 220px;">
+            <option value="">Loading ADB devices...</option>
+          </select>
+          <input type="text" id="sync-remote-dir" class="search-bar" placeholder="/storage/emulated/0/Music/ADB" style="max-width: 260px;">
+          <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-muted);">
+            <input type="checkbox" id="sync-force-checkbox"> Force sync (ignore already-synced)
+          </label>
+          <button class="btn btn-secondary" onclick="loadSyncDevices(false)">Refresh Devices</button>
+        </div>
+
+        <small id="sync-status" class="text-muted" style="display: block; min-height: 1.2rem;"></small>
+      </div>
+
+      <div id="sync-preview-panel" style="display: none;"></div>
     </div>
 
     <!-- Hidden Files Tab -->
@@ -255,19 +348,100 @@
         <div class="panel-title">
           <span>Hidden Files (database/db.db)</span>
         </div>
-        <table>
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Filename</th>
-              <th>Filepath</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody id="hidden-tbody">
-            <tr><td colspan="4" class="text-muted">Loading hide list...</td></tr>
-          </tbody>
-        </table>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Filename</th>
+                <th>Filepath</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="hidden-tbody">
+              <tr><td colspan="4" class="text-muted">Loading hide list...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Playlists Tab -->
+    <div id="tab-playlists" class="tab-content" style="display: none;">
+      <div class="panel">
+        <div class="panel-title" style="flex-wrap: wrap; gap: 0.75rem;">
+          <span>Playlists Collection</span>
+          <button class="btn" onclick="showCreatePlaylistModal()">+ Create Playlist</button>
+        </div>
+        
+        <!-- Playlists List Grid -->
+        <div id="playlists-grid" class="playlists-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin-bottom: 1.5rem;">
+          <p class="text-muted">Loading playlists...</p>
+        </div>
+
+        <!-- Selected Playlist Details Container -->
+        <div id="playlist-details-panel" style="display: none; background: rgba(15, 23, 42, 0.5); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border-color);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; gap: 0.75rem;">
+            <h3 id="selected-playlist-name" style="margin: 0; font-weight: 700;">Playlist Name</h3>
+            <div class="panel-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn" id="btn-play-playlist" onclick="playCurrentPlaylist()"><svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg> Play Playlist</button>
+              <button class="btn btn-secondary" style="background: rgba(244, 63, 94, 0.2); color: #f87171; border-color: rgba(244, 63, 94, 0.3);" onclick="deleteCurrentPlaylist()">Delete Playlist</button>
+            </div>
+          </div>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Track & Details</th>
+                  <th>Duration</th>
+                  <th>Size</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="playlist-tracks-tbody">
+                <tr><td colspan="5" class="text-muted">Select a playlist to view tracks.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deleted Songs Tab -->
+    <div id="tab-deleted" class="tab-content" style="display: none;">
+      <div class="panel">
+        <div class="panel-title" style="flex-wrap: wrap; gap: 0.75rem;">
+          <span>Deleted Songs (Trash)</span>
+          <div class="panel-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+            <button class="btn btn-secondary" onclick="loadDeletedSongs()">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Refresh
+            </button>
+            <button class="btn btn-secondary" style="background: rgba(244, 63, 94, 0.2); color: #f87171; border-color: rgba(244, 63, 94, 0.3);" onclick="clearDeletedHistory()">Empty Trash (Delete Files)</button>
+          </div>
+        </div>
+        <small class="text-muted" style="display: block; margin-bottom: 1rem; min-height: 1.2rem;">Deleted songs are kept in <code>tmp/deleted/</code> (metadata: bitrate / created / modified time are optional) until restored or the trash is emptied.</small>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Track</th>
+                <th>Original Path</th>
+                <th>Bitrate</th>
+                <th>Size</th>
+                <th>Created Time</th>
+                <th>Modified Time</th>
+                <th>Deleted At</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="deleted-tbody">
+              <tr><td colspan="9" class="text-muted">Loading deleted songs...</td></tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -276,15 +450,114 @@
   <!-- Audio Player Footer -->
   <div id="audio-player-bar" class="audio-player-bar" style="display: none;">
     <div class="player-info">
-      <span class="metric-icon" style="background: rgba(99, 102, 241, 0.2); border-color: rgba(99, 102, 241, 0.3);">
+      <span class="metric-icon player-badge-icon" style="background: rgba(255, 140, 0, 0.2); border: 1px solid rgba(255, 140, 0, 0.35); border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex-shrink: 0;">
         <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
       </span>
-      <div>
+      <div class="player-text-wrap" style="min-width: 0; overflow: hidden;">
         <div class="now-playing-title" id="player-title">Track Title</div>
         <div class="now-playing-artist" id="player-artist">Artist</div>
       </div>
     </div>
-    <audio id="audio-player" controls autoplay></audio>
+    <div class="player-controls" style="display: flex; align-items: center; gap: 1rem;">
+      <button id="btn-player-playpause" class="btn" style="border-radius: 50%; width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--primary-gradient); color: #000000; flex-shrink: 0;" onclick="togglePlayPause()" title="Play / Pause">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </button>
+      <audio id="audio-player" controls autoplay style="height: 40px;"></audio>
+    </div>
+  </div>
+
+  <!-- Create Playlist Modal -->
+  <div id="modal-create-playlist" class="modal-backdrop" style="display: none;">
+    <div class="modal-card">
+      <h3 style="margin-top: 0;">Create New Playlist</h3>
+      <input type="text" id="input-playlist-name" class="search-bar" placeholder="Playlist Name (e.g. Favorites, Workout, Chill)" style="width: 100%; margin: 1rem 0; box-sizing: border-box;">
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button class="btn btn-secondary" onclick="hideCreatePlaylistModal()">Cancel</button>
+        <button class="btn" onclick="submitCreatePlaylist()">Create Playlist</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add Track To Playlist Modal -->
+  <div id="modal-add-to-playlist" class="modal-backdrop" style="display: none;">
+    <div class="modal-card">
+      <h3 style="margin-top: 0;">Add Track to Playlist</h3>
+      <p id="modal-track-title" class="text-muted" style="margin-bottom: 1rem; word-break: break-all;"></p>
+      <select id="select-playlist-choice" class="search-bar" style="width: 100%; margin-bottom: 1.25rem; box-sizing: border-box; background: var(--bg-card); color: white;">
+        <option value="">Select a playlist...</option>
+      </select>
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button class="btn btn-secondary" onclick="hideAddToPlaylistModal()">Cancel</button>
+        <button class="btn" onclick="submitAddToPlaylist()">Add Track</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sync Track to Device Modal -->
+  <div id="modal-sync-song" class="modal-backdrop" style="display: none;">
+    <div class="modal-card" style="max-width: 580px; max-height: 90vh; overflow-y: auto;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Sync Track to Device
+        </h3>
+        <button class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.85rem;" onclick="hideSyncSongModal()">✕</button>
+      </div>
+
+      <!-- Local Track Summary Card -->
+      <div id="sync-track-summary" style="background: rgba(255, 140, 0, 0.08); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1rem;">
+        <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.2rem;" id="sync-local-title">Song Title</div>
+        <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.4rem;" id="sync-local-artist-album">Artist | Album</div>
+        <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.78rem;">
+          <span class="badge badge-purple" id="sync-local-bitrate">320 kbps</span>
+          <span class="badge" style="background: rgba(255,255,255,0.08); color: var(--text-main);" id="sync-local-duration">00:00</span>
+          <span class="badge" style="background: rgba(255,255,255,0.08); color: var(--text-main);" id="sync-local-size">0 MB</span>
+        </div>
+        <small class="text-muted" style="display: block; margin-top: 0.4rem; word-break: break-all; font-family: monospace; font-size: 0.75rem;" id="sync-local-path">/path/to/song.mp3</small>
+      </div>
+
+      <!-- Target Device Selection -->
+      <div style="margin-bottom: 1.25rem;">
+        <label for="sync-destination-device" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem;">Destination Device:</label>
+        <select id="sync-destination-device" class="search-bar" style="width: 100%; box-sizing: border-box; background: var(--bg-card); color: white;" onchange="onSyncDestinationDeviceChange()">
+          <option value="">Loading devices...</option>
+        </select>
+      </div>
+
+      <!-- Device Check Results -->
+      <div id="sync-check-loading" style="display: none; text-align: center; padding: 1.5rem 0;">
+        <div style="display: inline-block; animation: spin 1s linear infinite; margin-bottom: 0.5rem;">
+          <svg class="icon-svg" style="width: 2rem; height: 2rem; color: var(--accent-orange);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </div>
+        <p class="text-muted" style="font-size: 0.85rem; margin: 0;">Checking destination device for existing &amp; similar tracks...</p>
+      </div>
+
+      <div id="sync-check-results" style="display: none;">
+        <!-- Existence Status Banner -->
+        <div id="sync-status-banner" style="padding: 0.75rem 1rem; border-radius: 10px; margin-bottom: 1rem; font-size: 0.85rem;"></div>
+
+        <!-- Similar Songs Section -->
+        <div id="sync-similar-section" style="margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-weight: 700; font-size: 0.9rem; color: var(--text-main);">Similar Songs on Device</span>
+            <span class="badge" style="background: rgba(255, 140, 0, 0.15); color: var(--accent-orange);" id="sync-similar-count">0 found</span>
+          </div>
+          <div id="sync-similar-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 220px; overflow-y: auto;"></div>
+        </div>
+      </div>
+
+      <!-- Status or Error Message -->
+      <div id="sync-action-status" style="font-size: 0.85rem; margin-bottom: 1rem; min-height: 1.2rem;"></div>
+
+      <!-- Action Buttons -->
+      <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+        <button class="btn btn-secondary" onclick="hideSyncSongModal()">Cancel</button>
+        <button class="btn" id="btn-execute-sync-song" onclick="submitSyncSongToDevice()">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <span id="btn-execute-sync-text">Sync to Device</span>
+        </button>
+      </div>
+    </div>
   </div>
 
   <script src="/static/dashboard.js"></script>
