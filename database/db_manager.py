@@ -26,11 +26,23 @@ def get_central_db_path() -> str:
     return os.path.join(base_dir, "database", "db.db")
 
 
+LEGACY_MIGRATION_FLAG = "legacy_data_migrated"
+
+
 def _migrate_legacy_data(conn: sqlite3.Connection):
     """
     Migrate records from legacy database files (sync_hide_list.db & ui/db.db)
-    into the centralized database database/db.db.
+    into the centralized database database/db.db. Runs only once per installation.
     """
+    try:
+        done = conn.execute(
+            "SELECT value FROM dashboard_settings WHERE key = ?", (LEGACY_MIGRATION_FLAG,)
+        ).fetchone()
+        if done is not None:
+            return
+    except sqlite3.OperationalError:
+        return
+
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     legacy_paths = [
         os.path.join(base_dir, "sync_hide_list.db"),
@@ -44,7 +56,7 @@ def _migrate_legacy_data(conn: sqlite3.Connection):
             continue
 
         try:
-            old_conn = sqlite3.connect(legacy)
+            old_conn = sqlite3.connect(legacy, timeout=2.0)
             old_conn.row_factory = sqlite3.Row
             cursor = old_conn.cursor()
 
@@ -87,13 +99,19 @@ def _migrate_legacy_data(conn: sqlite3.Connection):
 
 
 def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
-    """Get SQLite database connection to centralized database/db.db."""
+    """Get SQLite database connection to centralized database/db.db with WAL mode & 30s timeout."""
     if not db_path:
         db_path = get_central_db_path()
 
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA busy_timeout=30000;")
+    except Exception:
+        pass
+
     with conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS hidden_files (
@@ -130,6 +148,24 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
                 value TEXT NOT NULL
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS playlists (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS playlist_tracks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                playlist_id INTEGER NOT NULL,
+                filepath TEXT NOT NULL,
+                track_order INTEGER DEFAULT 0,
+                added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (playlist_id) REFERENCES playlists (id) ON DELETE CASCADE,
+                UNIQUE(playlist_id, filepath)
+            );
+        """)
         _migrate_legacy_data(conn)
     return conn
 
@@ -140,6 +176,7 @@ def add_hidden_file(filepath: str, filename: str = "", db_path: Optional[str] = 
     """Insert a file into centralized hide list."""
     if not filename:
         filename = os.path.basename(filepath)
+    conn = None
     try:
         conn = get_connection(db_path)
         with conn:
@@ -152,10 +189,14 @@ def add_hidden_file(filepath: str, filename: str = "", db_path: Optional[str] = 
     except Exception as e:
         logger.error(f"[Central DB] Error adding to hide list: {e}")
         return False
+    finally:
+        if conn:
+            conn.close()
 
 
 def remove_hidden_file(filepath: str, db_path: Optional[str] = None) -> bool:
     """Remove a file from centralized hide list."""
+    conn = None
     try:
         conn = get_connection(db_path)
         with conn:
@@ -165,10 +206,14 @@ def remove_hidden_file(filepath: str, db_path: Optional[str] = None) -> bool:
     except Exception as e:
         logger.error(f"[Central DB] Error removing from hide list: {e}")
         return False
+    finally:
+        if conn:
+            conn.close()
 
 
 def clear_all_hidden(db_path: Optional[str] = None) -> bool:
     """Clear all hidden files from centralized database."""
+    conn = None
     try:
         conn = get_connection(db_path)
         with conn:
@@ -178,10 +223,14 @@ def clear_all_hidden(db_path: Optional[str] = None) -> bool:
     except Exception as e:
         logger.error(f"[Central DB] Error clearing hide list: {e}")
         return False
+    finally:
+        if conn:
+            conn.close()
 
 
 def get_hidden_paths_set(db_path: Optional[str] = None) -> Set[str]:
     """Retrieve set of hidden filepaths for fast filtering."""
+    conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
@@ -190,10 +239,14 @@ def get_hidden_paths_set(db_path: Optional[str] = None) -> Set[str]:
     except Exception as e:
         print(f"[Central DB] Error fetching hidden set: {e}", file=sys.stderr)
         return set()
+    finally:
+        if conn:
+            conn.close()
 
 
 def get_all_hidden_records(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """Retrieve list of all hidden file records."""
+    conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
@@ -202,6 +255,9 @@ def get_all_hidden_records(db_path: Optional[str] = None) -> List[Dict[str, Any]
     except Exception as e:
         print(f"[Central DB] Error fetching hidden records: {e}", file=sys.stderr)
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 # --- SYNCED TRACKS HISTORY METHODS ---
@@ -216,6 +272,7 @@ def add_synced_file(
     """Record a synced file for a specific device serial in centralized database."""
     if not filename:
         filename = os.path.basename(filepath)
+    conn = None
     try:
         conn = get_connection(db_path)
         with conn:
@@ -231,10 +288,14 @@ def add_synced_file(
     except Exception as e:
         print(f"[Central DB] Error recording synced file: {e}", file=sys.stderr)
         return False
+    finally:
+        if conn:
+            conn.close()
 
 
 def get_synced_paths_set(device_serial: str, db_path: Optional[str] = None) -> Set[str]:
     """Retrieve set of local filepaths already synced to a device serial."""
+    conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
@@ -243,10 +304,14 @@ def get_synced_paths_set(device_serial: str, db_path: Optional[str] = None) -> S
     except Exception as e:
         print(f"[Central DB] Error fetching synced set: {e}", file=sys.stderr)
         return set()
+    finally:
+        if conn:
+            conn.close()
 
 
 def get_all_synced_records(device_serial: Optional[str] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """Retrieve list of all synced file records."""
+    conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
@@ -263,6 +328,9 @@ def get_all_synced_records(device_serial: Optional[str] = None, db_path: Optiona
     except Exception as e:
         print(f"[Central DB] Error fetching synced records: {e}", file=sys.stderr)
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 # --- OVER-IP HOST STORAGE METHODS ---
@@ -272,6 +340,7 @@ def add_ip_host(ip_address: str, port: int = 5000, alias: str = "", db_path: Opt
     ip_address = ip_address.strip()
     if not ip_address:
         return False
+    conn = None
     try:
         conn = get_connection(db_path)
         with conn:
@@ -291,10 +360,14 @@ def add_ip_host(ip_address: str, port: int = 5000, alias: str = "", db_path: Opt
     except Exception as e:
         print(f"[Central DB] Error adding IP host {ip_address}: {e}", file=sys.stderr)
         return False
+    finally:
+        if conn:
+            conn.close()
 
 
 def remove_ip_host(ip_address: str, db_path: Optional[str] = None) -> bool:
     """Remove an IP host from centralized database."""
+    conn = None
     try:
         conn = get_connection(db_path)
         with conn:
@@ -304,10 +377,14 @@ def remove_ip_host(ip_address: str, db_path: Optional[str] = None) -> bool:
     except Exception as e:
         print(f"[Central DB] Error removing IP host: {e}", file=sys.stderr)
         return False
+    finally:
+        if conn:
+            conn.close()
 
 
 def get_stored_ip_hosts(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """Retrieve list of all stored IP hosts."""
+    conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
@@ -316,10 +393,14 @@ def get_stored_ip_hosts(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     except Exception as e:
         print(f"[Central DB] Error fetching stored IP hosts: {e}", file=sys.stderr)
         return []
+    finally:
+        if conn:
+            conn.close()
 
 
 def update_ip_status(ip_address: str, is_online: bool, db_path: Optional[str] = None) -> bool:
     """Update online status for an IP host."""
+    conn = None
     try:
         conn = get_connection(db_path)
         with conn:
@@ -331,3 +412,146 @@ def update_ip_status(ip_address: str, is_online: bool, db_path: Optional[str] = 
     except Exception as e:
         print(f"[Central DB] Error updating IP status: {e}", file=sys.stderr)
         return False
+    finally:
+        if conn:
+            conn.close()
+
+
+# --- PLAYLIST MANAGEMENT METHODS ---
+
+def create_playlist(name: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Create a new playlist in database/db.db."""
+    name = name.strip()
+    if not name:
+        return None
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            cursor = conn.execute(
+                "INSERT INTO playlists (name) VALUES (?)",
+                (name,)
+            )
+            playlist_id = cursor.lastrowid
+        logger.info(f"[Central DB] Created playlist '{name}' (ID: {playlist_id})")
+        return {"id": playlist_id, "name": name, "track_count": 0}
+    except Exception as e:
+        logger.error(f"[Central DB] Error creating playlist '{name}': {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_playlist(playlist_id: int, db_path: Optional[str] = None) -> bool:
+    """Delete a playlist and all its tracks from database/db.db."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            conn.execute("DELETE FROM playlist_tracks WHERE playlist_id = ?", (playlist_id,))
+            conn.execute("DELETE FROM playlists WHERE id = ?", (playlist_id,))
+        logger.info(f"[Central DB] Deleted playlist ID: {playlist_id}")
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error deleting playlist ID {playlist_id}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_playlists(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Get all playlists with track counts."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT p.id, p.name, p.created_at, COUNT(pt.id) AS track_count
+            FROM playlists p
+            LEFT JOIN playlist_tracks pt ON p.id = pt.playlist_id
+            GROUP BY p.id, p.name, p.created_at
+            ORDER BY p.created_at DESC
+        """)
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"[Central DB] Error fetching playlists: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
+def add_track_to_playlist(playlist_id: int, filepath: str, db_path: Optional[str] = None) -> bool:
+    """Add a track filepath to a playlist."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT MAX(track_order) FROM playlist_tracks WHERE playlist_id = ?", (playlist_id,))
+            max_row = cursor.fetchone()
+            next_order = (max_row[0] + 1) if (max_row and max_row[0] is not None) else 1
+
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO playlist_tracks (playlist_id, filepath, track_order)
+                VALUES (?, ?, ?)
+                """,
+                (playlist_id, filepath, next_order)
+            )
+        logger.info(f"[Central DB] Added track '{filepath}' to playlist ID {playlist_id}")
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error adding track to playlist: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def remove_track_from_playlist(playlist_id: int, filepath: str, db_path: Optional[str] = None) -> bool:
+    """Remove a track filepath from a playlist."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            conn.execute(
+                "DELETE FROM playlist_tracks WHERE playlist_id = ? AND filepath = ?",
+                (playlist_id, filepath)
+            )
+        logger.info(f"[Central DB] Removed track '{filepath}' from playlist ID {playlist_id}")
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error removing track from playlist: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_playlist_tracks(playlist_id: int, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieve all track filepaths in order for a playlist."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT id, playlist_id, filepath, track_order, added_at
+            FROM playlist_tracks
+            WHERE playlist_id = ?
+            ORDER BY track_order ASC, id ASC
+            """,
+            (playlist_id,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"[Central DB] Error fetching tracks for playlist ID {playlist_id}: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
