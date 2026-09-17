@@ -240,12 +240,21 @@ def run_ranger_sync_tui(
                     curses.endwin()
 
                     print(f"\n[RangerSync] Syncing {len(items_to_push)} file(s) to device...", file=sys.stderr)
+                    synced_this_batch = []
                     for item in items_to_push:
-                        pushed = adb_pusher.push_song_to_device(device_serial, item["path"], remote_dir, redis_cfg=redis_cfg)
+                        try:
+                            pushed = adb_pusher.push_song_to_device(device_serial, item["path"], remote_dir, redis_cfg=redis_cfg)
+                        except Exception as e:
+                            pushed = False
+                            print(f"[ERROR] Failed to push '{item.get('filename')}': {e}", file=sys.stderr)
                         if pushed:
                             synced_list.append(item)
+                            synced_this_batch.append(item)
+                        else:
+                            print(f"[ERROR] Failed to push '{item.get('filename')}'", file=sys.stderr)
 
-                    pushed_paths = set(item["path"] for item in items_to_push)
+                    # Only remove files that were actually pushed successfully.
+                    pushed_paths = set(item["path"] for item in synced_this_batch)
                     to_sync_files[:] = [item for item in to_sync_files if item["path"] not in pushed_paths]
                     selected_set.clear()
                     current_idx = max(0, min(current_idx, len(to_sync_files) - 1))

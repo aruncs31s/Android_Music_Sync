@@ -57,8 +57,10 @@ def get_songs():
 
 @app.route("/api/duplicates", methods=["GET"])
 def get_duplicates():
-    """Return duplicate song clusters."""
-    dups = song_repo.get_duplicates()
+    """Return duplicate song clusters with optional acoustic fingerprinting."""
+    use_fp = request.args.get("fingerprint", "false").lower() in ("true", "1", "yes")
+    refresh = request.args.get("refresh", "false").lower() in ("true", "1", "yes")
+    dups = song_repo.get_duplicates(force_refresh=refresh, use_fingerprint=use_fp)
     return jsonify(dups)
 
 

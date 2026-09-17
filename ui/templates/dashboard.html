@@ -293,6 +293,10 @@
                 <option value="oldest">Oldest File</option>
               </select>
             </div>
+            <label class="toggle-switch-label" style="display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; color: var(--text-main); margin-left: 0.25rem;" title="Analyze audio waveforms with Chromaprint fpcalc to find duplicates even across different formats or bitrates">
+              <input type="checkbox" id="toggle-use-fingerprints" onchange="onToggleFingerprintMatching(this.checked)" style="accent-color: var(--ctp-mauve); width: 1.1rem; height: 1.1rem; cursor: pointer;">
+              <span>🎵 Acoustic Audio Fingerprinting</span>
+            </label>
           </div>
           <div style="display: flex; align-items: center; gap: 0.75rem;">
             <span id="dup-selected-counter" class="badge badge-pink" style="font-size: 0.82rem; font-weight: 700;">
@@ -304,6 +308,13 @@
             </button>
           </div>
         </div>
+
+        <!-- Audio Fingerprint Missing / Fallback Alert -->
+        <div id="dup-fingerprint-warning" style="display: none; background: rgba(249, 226, 175, 0.12); border: 1px solid rgba(249, 226, 175, 0.4); border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: #f9e2af; align-items: center; gap: 0.6rem;">
+          <svg class="icon-svg" style="color: #f9e2af; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span id="dup-fingerprint-warning-text"></span>
+        </div>
+
         <div id="duplicates-container" class="table-responsive">
           <p class="text-muted">Analyzing duplicate audio tracks...</p>
         </div>

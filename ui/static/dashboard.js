@@ -27,6 +27,7 @@ let allClusters = [];
 let filteredClusters = [];
 let dupPage = 1;
 const dupPageSize = 5;
+let useAudioFingerprinting = localStorage.getItem('antigravity_use_audio_fingerprint') === 'true';
 
 // Global Audio Player & Playlist State
 let currentTrackPath = null;
@@ -40,6 +41,10 @@ let currentPlaylistTracks = [];
 let targetTrackForPlaylist = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+  const fpToggle = document.getElementById('toggle-use-fingerprints');
+  if (fpToggle) {
+    fpToggle.checked = useAudioFingerprinting;
+  }
   initTabs();
   initAudioPlayer();
   loadDashboardStats();
@@ -426,16 +431,48 @@ function findKeeperInCluster(cluster, strategy = 'best_quality') {
   return songsCopy[0];
 }
 
-async function loadDuplicates() {
+function onToggleFingerprintMatching(checked) {
+  useAudioFingerprinting = Boolean(checked);
+  localStorage.setItem('antigravity_use_audio_fingerprint', useAudioFingerprinting);
+  const container = document.getElementById('duplicates-container');
+  if (container) {
+    container.innerHTML = `<p class="text-muted" style="display: flex; align-items: center; gap: 0.5rem; padding: 1rem 0;">${SVG_SPARKLES} Analyzing duplicates with ${useAudioFingerprinting ? 'acoustic audio fingerprinting' : 'tag & filename matching'}...</p>`;
+  }
+  loadDuplicates(true);
+}
+
+async function loadDuplicates(forceRefresh = false) {
   const container = document.getElementById('duplicates-container');
   if (!container) return;
 
+  const fpToggle = document.getElementById('toggle-use-fingerprints');
+  if (fpToggle) {
+    fpToggle.checked = useAudioFingerprinting;
+  }
+
   try {
-    const res = await fetch('/api/duplicates');
+    const params = new URLSearchParams();
+    params.set('fingerprint', useAudioFingerprinting ? 'true' : 'false');
+    if (forceRefresh) {
+      params.set('refresh', 'true');
+    }
+    const res = await fetch(`/api/duplicates?${params.toString()}`);
     const data = await res.json();
     allClusters = data.clusters || [];
     filteredClusters = [...allClusters];
     dupPage = 1;
+
+    // Handle dependency warning banner
+    const warnEl = document.getElementById('dup-fingerprint-warning');
+    const warnText = document.getElementById('dup-fingerprint-warning-text');
+    if (warnEl && warnText) {
+      if (data.warning) {
+        warnText.textContent = data.warning;
+        warnEl.style.display = 'flex';
+      } else {
+        warnEl.style.display = 'none';
+      }
+    }
 
     // Clean up any selected paths that no longer exist in clusters
     const validPaths = new Set();
@@ -591,13 +628,20 @@ function renderDuplicatesPage() {
     const currentClusterIdx = startIdx + idx;
     const keeper = findKeeperInCluster(c, currentDupKeepStrategy);
 
+    const matchBadge = c.match_type === 'audio_fingerprint'
+      ? '<span class="badge badge-purple" style="font-size: 0.72rem; background: rgba(189, 147, 249, 0.22); border: 1px solid var(--ctp-mauve); color: var(--ctp-mauve);" title="Acoustic waveform match via Chromaprint fpcalc">🎵 Waveform Fingerprint</span>'
+      : (c.match_type === 'filename'
+          ? '<span class="badge badge-purple" style="font-size: 0.72rem;">📄 Filename</span>'
+          : '<span class="badge badge-purple" style="font-size: 0.72rem;">🏷️ Tag Match</span>');
+
     html += `
       <div class="duplicate-cluster-card">
         <div class="cluster-card-header">
-          <div class="cluster-title-group">
+          <div class="cluster-title-group" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             <h4 class="cluster-title">
               Cluster #${globalIdx}: ${escapeHtml(c.cluster_name)}
             </h4>
+            ${matchBadge}
             <span class="badge badge-purple text-tabular">${c.count} copies</span>
           </div>
           <button class="btn btn-secondary btn-sm" onclick="autoSelectClusterDuplicates(${currentClusterIdx})" title="Select duplicate copies and keep the best copy">

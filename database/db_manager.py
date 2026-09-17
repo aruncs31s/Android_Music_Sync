@@ -192,6 +192,20 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
                 UNIQUE(playlist_id, filepath)
             );
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS audio_fingerprints (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filepath TEXT UNIQUE NOT NULL,
+                file_size INTEGER NOT NULL,
+                file_mtime REAL NOT NULL,
+                duration REAL NOT NULL,
+                fingerprint TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_fp_hash ON audio_fingerprints(fingerprint);
+        """)
         _migrate_legacy_data(conn)
     return conn
 
@@ -693,5 +707,96 @@ def clear_deleted_songs(db_path: Optional[str] = None) -> bool:
     finally:
         if conn:
             conn.close()
+
+
+# --- AUDIO FINGERPRINT METHODS ---
+
+def get_cached_fingerprint(
+    filepath: str, file_size: int, file_mtime: float, db_path: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """
+    Retrieve cached fingerprint for a file if size and mtime match.
+    """
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT duration, fingerprint, file_size, file_mtime FROM audio_fingerprints WHERE filepath = ?",
+            (filepath,)
+        )
+        row = cursor.fetchone()
+        if row:
+            if row["file_size"] == file_size and abs(float(row["file_mtime"]) - float(file_mtime)) < 1.0:
+                return {
+                    "duration": float(row["duration"]),
+                    "fingerprint": str(row["fingerprint"]),
+                }
+    except Exception as e:
+        logger.error(f"[Central DB] Error retrieving cached fingerprint for {filepath}: {e}")
+    finally:
+        if conn:
+            conn.close()
+    return None
+
+
+def save_cached_fingerprint(
+    filepath: str,
+    file_size: int,
+    file_mtime: float,
+    duration: float,
+    fingerprint: str,
+    db_path: Optional[str] = None,
+) -> bool:
+    """
+    Store or update an audio fingerprint in the centralized database.
+    """
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO audio_fingerprints 
+                (filepath, file_size, file_mtime, duration, fingerprint, created_at)
+                VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                """,
+                (filepath, file_size, file_mtime, duration, fingerprint),
+            )
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error saving audio fingerprint for {filepath}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_all_cached_fingerprints_map(
+    db_path: Optional[str] = None,
+) -> Dict[str, Dict[str, Any]]:
+    """
+    Load all stored audio fingerprints as a dictionary mapping filepath -> dict.
+    Enables fast in-memory matching without repeated single-file SQL queries.
+    """
+    conn = None
+    fp_map = {}
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT filepath, file_size, file_mtime, duration, fingerprint FROM audio_fingerprints")
+        for row in cursor.fetchall():
+            fp_map[row["filepath"]] = {
+                "file_size": int(row["file_size"]),
+                "file_mtime": float(row["file_mtime"]),
+                "duration": float(row["duration"]),
+                "fingerprint": str(row["fingerprint"]),
+            }
+    except Exception as e:
+        logger.error(f"[Central DB] Error loading cached fingerprints map: {e}")
+    finally:
+        if conn:
+            conn.close()
+    return fp_map
 
 

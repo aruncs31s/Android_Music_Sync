@@ -16,7 +16,7 @@ import sys
 import os
 import curses
 import subprocess
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 
 import fuzzy_matcher
 import fzf_tui
@@ -29,11 +29,16 @@ def run_ranger_reverse_sync_tui(
     local_files: List[Dict[str, str]],
     device_serial: str,
     local_dir: str = "/home/aruncs/Music",
-    redis_cfg: Optional[Dict[str, Any]] = None
+    redis_cfg: Optional[Dict[str, Any]] = None,
+    pull_callback: Optional[Callable[[Dict[str, Any]], bool]] = None
 ) -> Dict[str, Any]:
     """
     Ranger-style interactive dual-pane TUI for reverse sync (ADB -> Local).
     Returns summary dict of pulled, skipped, and hidden files.
+
+    If `pull_callback` is provided it is invoked for each selected item instead of
+    `adb pull`; it must return True on success. This lets callers (e.g. the Over-IP
+    HTTP workflow) reuse the selection UI with their own transfer method.
     """
     if not missing_songs:
         print("[RangerReverseSync] No missing songs to pull from device.", file=sys.stderr)
@@ -259,12 +264,27 @@ def run_ranger_reverse_sync_tui(
                     curses.def_prog_mode()
                     curses.endwin()
 
-                    print(f"\n[RangerReverseSync] Pulling {len(items_to_pull)} file(s) from device...", file=sys.stderr)
-                    os.makedirs(local_dir, exist_ok=True)
-                    for item in items_to_pull:
-                        remote_path = item.get("_data")
-                        display_name = item.get("_display_name") or f"song_{item.get('_id', 0)}.mp3"
+                    print(f"\n[RangerReverseSync] Pulling {len(items_to_pull)} file(s)...", file=sys.stderr)
+                    if pull_callback is None:
+                        os.makedirs(local_dir, exist_ok=True)
 
+                    for item in items_to_pull:
+                        display_name = item.get("_display_name") or item.get("filename") or f"song_{item.get('_id', 0)}.mp3"
+
+                        if pull_callback is not None:
+                            print(f"Pulling: {display_name} -> {local_dir}/", file=sys.stderr)
+                            try:
+                                ok = pull_callback(item)
+                            except Exception as e:
+                                ok = False
+                                print(f"[ERROR] Failed to pull '{display_name}': {e}", file=sys.stderr)
+                            if ok:
+                                pulled_list.append(item)
+                            else:
+                                print(f"[ERROR] Failed to pull '{display_name}'", file=sys.stderr)
+                            continue
+
+                        remote_path = item.get("_data")
                         if not remote_path:
                             continue
 
@@ -277,7 +297,8 @@ def run_ranger_reverse_sync_tui(
                         except subprocess.CalledProcessError as e:
                             print(f"[ERROR] Failed to pull '{remote_path}': {e.stderr or e.stdout}", file=sys.stderr)
 
-                    pulled_paths = set(item.get("_data") for item in items_to_pull)
+                    # Only remove items that were actually pulled successfully.
+                    pulled_paths = set(item.get("_data") for item in pulled_list)
                     missing_songs[:] = [item for item in missing_songs if item.get("_data") not in pulled_paths]
                     selected_set.clear()
                     current_idx = max(0, min(current_idx, len(missing_songs) - 1))

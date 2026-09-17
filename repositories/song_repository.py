@@ -50,21 +50,22 @@ class SongRepository(BaseRepository):
         self._cache_set(self.CACHE_KEY_ALL_SONGS, songs)
         return songs
 
-    def get_duplicates(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    def get_duplicates(self, force_refresh: bool = False, use_fingerprint: bool = False) -> Dict[str, Any]:
         """
         Detect duplicate song clusters across configured music directories.
         Checks Redis cache first if enabled; runs detection algorithm on cache miss.
         """
+        cache_key = f"{self.CACHE_KEY_DUPLICATES}:{'fp' if use_fingerprint else 'tag'}"
         if not force_refresh:
-            cached = self._cache_get(self.CACHE_KEY_DUPLICATES)
+            cached = self._cache_get(cache_key)
             if cached is not None:
-                logger.info("[SongRepository] Redis Cache Hit: Loaded duplicate clusters.")
+                logger.info(f"[SongRepository] Redis Cache Hit: Loaded duplicate clusters ({'fingerprint' if use_fingerprint else 'tags'}).")
                 return cached
 
         songs = self.get_all_songs(force_refresh=force_refresh)
-        dups = ui_stats.detect_duplicate_songs(songs)
+        dups = ui_stats.detect_duplicate_songs(songs, use_fingerprint=use_fingerprint)
 
-        self._cache_set(self.CACHE_KEY_DUPLICATES, dups)
+        self._cache_set(cache_key, dups)
         return dups
 
     def delete_song(self, filepath: str) -> Dict[str, Any]:
@@ -230,6 +231,7 @@ class SongRepository(BaseRepository):
         """Clear all cached song data in Redis."""
         self._cache_delete(self.CACHE_KEY_ALL_SONGS)
         self._cache_delete(self.CACHE_KEY_DUPLICATES)
+        self._cache_delete_pattern(f"{self.CACHE_KEY_DUPLICATES}*")
         # Clear legacy redis hostname key if present
         try:
             hostname_key = f"over_ip_songs:{socket.gethostname()}"

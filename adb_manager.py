@@ -180,7 +180,7 @@ def delete_song_from_device(
     try:
         cmd_scan = [
             "adb", "-s", serial, "shell",
-            f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{quoted_path}"
+            f"am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file://{clean_path}"
         ]
         subprocess.run(cmd_scan, capture_output=True, text=True)
     except Exception:

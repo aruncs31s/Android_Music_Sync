@@ -308,7 +308,7 @@ def main():
 
     # Handle --serve-ip Flask API Server
     if args.serve_ip:
-        ui_server.start_server(host="0.0.0.0", port=5000)
+        over_ip_server.start_server(host="0.0.0.0", port=5000)
         sys.exit(0)
 
     # Handle --ip Over-IP HTTP Synchronization Workflow
