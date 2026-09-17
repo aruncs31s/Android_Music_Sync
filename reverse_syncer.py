@@ -143,6 +143,7 @@ def run_reverse_sync_workflow(
     print(f"Querying music library on ADB device [{serial}]...", file=sys.stderr)
     try:
         raw_songs = adb_manager.query_songs_from_device(serial, redis_cfg=redis_cfg, refresh_cache=refresh_cache)
+        print(raw_songs)
         device_songs = song_parser.parse_songs(raw_songs)
     except Exception as e:
         print(f"[ERROR] Failed to query device songs: {e}", file=sys.stderr)
