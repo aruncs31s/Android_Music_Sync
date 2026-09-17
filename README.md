@@ -1,8 +1,25 @@
 # ADB Song Query, FZF Fuzzy Search, & Spotify Downloader Tool
 
-A Python command-line application and interactive Terminal User Interface (TUI) that queries audio tracks from connected Android devices via ADB (`adb shell content query`) or parses song lists from text files / stdin. Features real-time FZF-style fuzzy matching with lazy match scoring, Spotify/query song downloading, duplicate detection, and post-download pushing to Android devices.
+A cli + web tool that queries audio tracks from connected Android devices via ADB (`adb shell content query`) or local files Features real-time FZF-style fuzzy matching with lazy match scoring, Spotify/query song downloading, duplicate detection, and post-download pushing to Android devices.
 
-## Features
+## For MAC OS Users(12)
+
+
+You will need a C++ compiler and CMake to build the library. FFmpeg is required to build the fpcalc tool. ([Source](https://acoustid.org/chromaprint))
+
+```bash
+git clone https://github.com/acoustid/chromaprint.git
+cd chromaprint
+cmake .
+make
+```
+or
+```bash
+brew install chromaprint
+```
+
+
+## Features (AI DOCS)
 
 1. **ADB Device Navigation & Selection**:
    - Discovers connected Android devices automatically via `adb devices -l`.

@@ -169,7 +169,7 @@ def run_ranger_reverse_sync_tui(
                 mime_val = curr_item.get("mime_type") or "audio/mpeg"
 
                 stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-                stdscr.addstr(2, right_x, f"🎵 Device Track: {title_query}"[:right_width-1])
+                stdscr.addstr(2, right_x, f"Device Track: {title_query}"[:right_width-1])
                 stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
                 spec_line_1 = f"   • Artist: {artist_val}   |   Album: {album_val}"

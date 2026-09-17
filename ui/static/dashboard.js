@@ -15,7 +15,39 @@ const SVG_CHEVRON_RIGHT = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none"
 const SVG_FOLDER = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
 const SVG_SPARKLES = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
 const SVG_SYNC = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`;
+const SVG_CHECK = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+const SVG_ALERT = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+const SVG_WAVEFORM = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
 
+// Theme Management System
+function initTheme() {
+  const saved = localStorage.getItem('theme') || 'dark';
+  applyTheme(saved);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  const sunIcon = document.getElementById('theme-icon-sun');
+  const moonIcon = document.getElementById('theme-icon-moon');
+  const label = document.getElementById('theme-toggle-text');
+
+  if (theme === 'dark') {
+    if (sunIcon) sunIcon.style.display = 'inline-block';
+    if (moonIcon) moonIcon.style.display = 'none';
+    if (label) label.textContent = 'Dark';
+  } else {
+    if (sunIcon) sunIcon.style.display = 'none';
+    if (moonIcon) moonIcon.style.display = 'inline-block';
+    if (label) label.textContent = 'Light';
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const newTheme = current === 'dark' ? 'light' : 'dark';
+  applyTheme(newTheme);
+}
 
 // Global Search & Pagination State
 let allSongs = [];
@@ -41,6 +73,7 @@ let currentPlaylistTracks = [];
 let targetTrackForPlaylist = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
   const fpToggle = document.getElementById('toggle-use-fingerprints');
   if (fpToggle) {
     fpToggle.checked = useAudioFingerprinting;
@@ -629,10 +662,10 @@ function renderDuplicatesPage() {
     const keeper = findKeeperInCluster(c, currentDupKeepStrategy);
 
     const matchBadge = c.match_type === 'audio_fingerprint'
-      ? '<span class="badge badge-purple" style="font-size: 0.72rem; background: rgba(189, 147, 249, 0.22); border: 1px solid var(--ctp-mauve); color: var(--ctp-mauve);" title="Acoustic waveform match via Chromaprint fpcalc">🎵 Waveform Fingerprint</span>'
+      ? `<span class="badge badge-yellow" style="font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="Acoustic waveform match via Chromaprint fpcalc">${SVG_WAVEFORM} Waveform Fingerprint</span>`
       : (c.match_type === 'filename'
-          ? '<span class="badge badge-purple" style="font-size: 0.72rem;">📄 Filename</span>'
-          : '<span class="badge badge-purple" style="font-size: 0.72rem;">🏷️ Tag Match</span>');
+          ? '<span class="badge badge-yellow" style="font-size: 0.72rem;">Filename</span>'
+          : '<span class="badge badge-yellow" style="font-size: 0.72rem;">Tag Match</span>');
 
     html += `
       <div class="duplicate-cluster-card">
@@ -642,7 +675,7 @@ function renderDuplicatesPage() {
               Cluster #${globalIdx}: ${escapeHtml(c.cluster_name)}
             </h4>
             ${matchBadge}
-            <span class="badge badge-purple text-tabular">${c.count} copies</span>
+            <span class="badge badge-yellow text-tabular">${c.count} copies</span>
           </div>
           <button class="btn btn-secondary btn-sm" onclick="autoSelectClusterDuplicates(${currentClusterIdx})" title="Select duplicate copies and keep the best copy">
             Auto-select (Keep Best)
@@ -656,19 +689,19 @@ function renderDuplicatesPage() {
       const isKeeper = keeper && (s.filepath === keeper.filepath);
 
       let rowBorder = '1px solid var(--border-color)';
-      let rowBg = 'rgba(17, 17, 27, 0.6)';
+      let rowBg = 'var(--bg-card)';
       let statusBadge = '';
 
       if (isSelected) {
-        rowBorder = '1px solid rgba(243, 139, 168, 0.4)';
-        rowBg = 'rgba(243, 139, 168, 0.08)';
+        rowBorder = '1px solid rgba(239, 68, 68, 0.4)';
+        rowBg = 'rgba(239, 68, 68, 0.08)';
         statusBadge = '<span class="badge badge-offline" style="font-size: 0.72rem; font-weight: 700;">DELETE</span>';
       } else if (isKeeper) {
-        rowBorder = '1px solid rgba(166, 227, 161, 0.35)';
-        rowBg = 'rgba(166, 227, 161, 0.06)';
+        rowBorder = '1px solid rgba(34, 197, 94, 0.35)';
+        rowBg = 'rgba(34, 197, 94, 0.06)';
         statusBadge = '<span class="badge badge-online" style="font-size: 0.72rem; font-weight: 700;" title="Preserved original copy">KEEP (Best)</span>';
       } else {
-        statusBadge = '<span class="badge badge-purple" style="font-size: 0.72rem;">COPY</span>';
+        statusBadge = '<span class="badge badge-yellow" style="font-size: 0.72rem;">COPY</span>';
       }
 
       const checkedAttr = isSelected ? 'checked' : '';
@@ -676,7 +709,7 @@ function renderDuplicatesPage() {
       html += `
         <li class="duplicate-item-row" style="background: ${rowBg}; border: ${rowBorder};">
           <div class="dup-left-content">
-            <input type="checkbox" class="dup-checkbox" data-path="${escapeHtml(s.filepath)}" ${checkedAttr} onchange="onDuplicateCheckboxChange('${escapeJs(s.filepath)}', this.checked, ${currentClusterIdx})" style="width: 1.15rem; height: 1.15rem; cursor: pointer; accent-color: var(--ctp-mauve); flex-shrink: 0;">
+            <input type="checkbox" class="dup-checkbox" data-path="${escapeHtml(s.filepath)}" ${checkedAttr} onchange="onDuplicateCheckboxChange('${escapeJs(s.filepath)}', this.checked, ${currentClusterIdx})" style="width: 1.15rem; height: 1.15rem; cursor: pointer; accent-color: var(--accent-yellow); flex-shrink: 0;">
             ${statusBadge}
             <div class="dup-file-info">
               <code class="dup-filepath" title="${escapeHtml(s.filepath)}">${escapeHtml(s.filepath)}</code>
@@ -726,7 +759,7 @@ function openBatchDeleteDuplicatesModal() {
   if (previewEl) {
     let filesHtml = '';
     selectedDuplicatePaths.forEach(p => {
-      filesHtml += `<div style="margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--status-offline);"><span style="margin-right: 0.4rem;">🗑️</span>${escapeHtml(p)}</div>`;
+      filesHtml += `<div style="margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--status-offline); display: flex; align-items: center; gap: 0.35rem;"><span style="display: inline-flex; align-items: center; color: var(--status-offline); flex-shrink: 0;">${SVG_TRASH}</span><span>${escapeHtml(p)}</span></div>`;
     });
     previewEl.innerHTML = filesHtml;
   }
@@ -1863,14 +1896,17 @@ async function onSyncDestinationDeviceChange() {
         bannerEl.style.border = '1px solid rgba(249, 226, 175, 0.4)';
         bannerEl.style.color = '#f9e2af';
         bannerEl.innerHTML = `
-          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">⚠️ Song Already Exists on ${escapeHtml(data.device_name)}</div>
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
+            ${SVG_ALERT}
+            <span>Song Already Exists on ${escapeHtml(data.device_name)}</span>
+          </div>
           <div style="color: #f9e2af; font-size: 0.8rem;">${escapeHtml(data.exact_match.match_reason || 'Match found')}</div>
           <div style="display: flex; gap: 0.6rem; margin-top: 0.4rem; font-size: 0.75rem; flex-wrap: wrap;">
             <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.duration_formatted || '00:00')}</span>
-            <span class="badge badge-purple">${escapeHtml(em.bitrate_kbps ? `${em.bitrate_kbps} kbps` : 'Bitrate Unknown')}</span>
+            <span class="badge badge-yellow">${escapeHtml(em.bitrate_kbps ? `${em.bitrate_kbps} kbps` : 'Bitrate Unknown')}</span>
             <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.size_formatted || '')}</span>
           </div>
-          <div style="font-family: monospace; font-size: 0.72rem; color: #a6adc8; margin-top: 0.35rem; word-break: break-all;">
+          <div style="font-family: monospace; font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem; word-break: break-all;">
             Path: ${escapeHtml(em.filepath || em.filename || '')}
           </div>
         `;
@@ -1882,7 +1918,10 @@ async function onSyncDestinationDeviceChange() {
         bannerEl.style.border = '1px solid rgba(166, 227, 161, 0.4)';
         bannerEl.style.color = '#a6e3a1';
         bannerEl.innerHTML = `
-          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">✅ Not Present on Destination Device</div>
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
+            ${SVG_CHECK}
+            <span>Not Present on Destination Device</span>
+          </div>
           <div style="color: #a6e3a1; font-size: 0.8rem;">This track does not currently exist on ${escapeHtml(data.device_name)}. Ready to sync!</div>
         `;
       }
@@ -1900,14 +1939,14 @@ async function onSyncDestinationDeviceChange() {
         let simHtml = '';
         similar.forEach(s => {
           simHtml += `
-            <div style="background: #191a21; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+            <div style="background: var(--bg-mantle); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
               <div style="min-width: 0; flex: 1;">
                 <div style="font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(s.title || 'Unknown')}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">${escapeHtml(s.artist || 'Unknown')} &bull; ${escapeHtml(s.duration_formatted || '')} &bull; <span class="badge badge-purple" style="font-size: 0.7rem;">${escapeHtml(s.bitrate_kbps ? `${s.bitrate_kbps} kbps` : '')}</span></div>
+                <div class="text-muted" style="font-size: 0.75rem;">${escapeHtml(s.artist || 'Unknown')} &bull; ${escapeHtml(s.duration_formatted || '')} &bull; <span class="badge badge-yellow" style="font-size: 0.7rem;">${escapeHtml(s.bitrate_kbps ? `${s.bitrate_kbps} kbps` : '')}</span></div>
                 ${s.comparison_note ? `<div style="font-size: 0.72rem; color: var(--accent-orange); margin-top: 0.2rem;">${escapeHtml(s.comparison_note)}</div>` : ''}
               </div>
               <div style="text-align: right; flex-shrink: 0;">
-                <span class="badge badge-pink" style="font-size: 0.75rem; font-weight: 700;">
+                <span class="badge badge-yellow" style="font-size: 0.75rem; font-weight: 700;">
                   ${s.similarity_score}% Match
                 </span>
               </div>
@@ -1952,9 +1991,9 @@ async function submitSyncSongToDevice() {
     const data = await res.json();
 
     if (data.status === 'success') {
-      syncBtnText.textContent = 'Synced ✓';
+      syncBtnText.innerHTML = `Synced ${SVG_CHECK}`;
       if (statusEl) {
-        statusEl.innerHTML = `<span style="color: #34d399; font-weight: 600;">✓ ${escapeHtml(data.message || 'Track synced successfully!')}</span>`;
+        statusEl.innerHTML = `<span style="color: var(--status-online); font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem;">${SVG_CHECK} ${escapeHtml(data.message || 'Track synced successfully!')}</span>`;
       }
       loadDashboardStats();
       setTimeout(() => {

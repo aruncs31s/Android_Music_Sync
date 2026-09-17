@@ -4,6 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Android Music Sync</title>
+  <script>
+    (function() {
+      var savedTheme = localStorage.getItem('theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    })();
+  </script>
   <link rel="stylesheet" href="/static/base.css">
   <link rel="stylesheet" href="/static/dashboard.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -61,6 +67,25 @@
           Deleted Songs
         </button>
       </nav>
+      <div class="header-actions">
+        <button id="theme-toggle-btn" class="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Dark / Light Mode" aria-label="Toggle theme">
+          <svg id="theme-icon-sun" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+          <svg id="theme-icon-moon" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+          </svg>
+          <span id="theme-toggle-text">Dark</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -294,12 +319,15 @@
               </select>
             </div>
             <label class="toggle-switch-label" style="display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; color: var(--text-main); margin-left: 0.25rem;" title="Analyze audio waveforms with Chromaprint fpcalc to find duplicates even across different formats or bitrates">
-              <input type="checkbox" id="toggle-use-fingerprints" onchange="onToggleFingerprintMatching(this.checked)" style="accent-color: var(--ctp-mauve); width: 1.1rem; height: 1.1rem; cursor: pointer;">
-              <span>🎵 Acoustic Audio Fingerprinting</span>
+              <input type="checkbox" id="toggle-use-fingerprints" onchange="onToggleFingerprintMatching(this.checked)" style="accent-color: var(--accent-yellow); width: 1.1rem; height: 1.1rem; cursor: pointer;">
+              <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-yellow);"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                Acoustic Audio Fingerprinting
+              </span>
             </label>
           </div>
           <div style="display: flex; align-items: center; gap: 0.75rem;">
-            <span id="dup-selected-counter" class="badge badge-pink" style="font-size: 0.82rem; font-weight: 700;">
+            <span id="dup-selected-counter" class="badge badge-yellow" style="font-size: 0.82rem; font-weight: 700;">
               0 files selected
             </span>
             <button class="btn btn-secondary btn-danger" id="btn-batch-delete-duplicates" onclick="openBatchDeleteDuplicatesModal()" disabled title="Delete selected duplicates">
@@ -493,7 +521,7 @@
   <div id="audio-player-bar" class="audio-player-bar" style="display: none;">
     <div class="audio-player-inner">
       <div class="player-info">
-        <span class="metric-icon player-badge-icon" style="background: var(--accent-pink-alpha); border: 1px solid var(--accent-pink); border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex-shrink: 0; color: var(--accent-pink);">
+        <span class="metric-icon player-badge-icon" style="background: var(--accent-yellow-alpha); border: 1px solid var(--accent-yellow); border-radius: 10px; display: inline-flex; align-items: center; justify-content: center; width: 42px; height: 42px; flex-shrink: 0; color: var(--accent-yellow);">
           <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
         </span>
         <div class="player-text-wrap" style="min-width: 0; overflow: hidden;">
@@ -502,7 +530,7 @@
         </div>
       </div>
       <div class="player-controls" style="display: flex; align-items: center; gap: 1rem;">
-        <button id="btn-player-playpause" class="btn" style="border-radius: 50%; width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--accent-pink); color: #15151e; flex-shrink: 0;" onclick="togglePlayPause()" title="Play / Pause">
+        <button id="btn-player-playpause" class="btn" style="border-radius: 50%; width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; background: var(--accent-yellow); color: #000000; flex-shrink: 0;" onclick="togglePlayPause()" title="Play / Pause">
           <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
         </button>
         <audio id="audio-player" controls autoplay style="height: 40px;"></audio>
@@ -541,15 +569,17 @@
   <div id="modal-sync-song" class="modal-backdrop" style="display: none;">
     <div class="modal-card" style="max-width: 520px;">
       <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--accent-pink);">
+        <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--accent-yellow);">
           <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Sync Track to Device
         </h3>
-        <button class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.85rem;" onclick="hideSyncSongModal()">✕</button>
+        <button class="btn btn-secondary btn-sm" style="width: 30px; height: 30px; padding: 0;" onclick="hideSyncSongModal()" title="Close" aria-label="Close">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
 
       <!-- Local Track Summary Card -->
-      <div id="sync-track-summary" style="background: rgba(255, 121, 198, 0.08); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1rem;">
+      <div id="sync-track-summary" style="background: var(--accent-yellow-alpha); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1rem;">
         <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.2rem;" id="sync-local-title">Song Title</div>
         <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.4rem;" id="sync-local-artist-album">Artist | Album</div>
         <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.78rem;">
@@ -571,7 +601,7 @@
       <!-- Device Check Results -->
       <div id="sync-check-loading" style="display: none; text-align: center; padding: 1.5rem 0;">
         <div style="display: inline-block; animation: spin 1s linear infinite; margin-bottom: 0.5rem;">
-          <svg class="icon-svg" style="width: 2rem; height: 2rem; color: var(--accent-pink);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          <svg class="icon-svg" style="width: 2rem; height: 2rem; color: var(--accent-yellow);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
         </div>
         <p class="text-muted" style="font-size: 0.85rem; margin: 0;">Checking destination device for existing &amp; similar tracks...</p>
       </div>
@@ -584,7 +614,7 @@
         <div id="sync-similar-section" style="margin-bottom: 1.25rem;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
             <span style="font-weight: 700; font-size: 0.9rem; color: var(--text-main);">Similar Songs on Device</span>
-            <span class="badge badge-pink" id="sync-similar-count">0 found</span>
+            <span class="badge badge-yellow" id="sync-similar-count">0 found</span>
           </div>
           <div id="sync-similar-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 220px; overflow-y: auto;"></div>
         </div>
@@ -612,7 +642,9 @@
           <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           Confirm Duplicate Deletion
         </h3>
-        <button class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.85rem;" onclick="hideBatchDeleteDuplicatesModal()">✕</button>
+        <button class="btn btn-secondary btn-sm" style="width: 30px; height: 30px; padding: 0;" onclick="hideBatchDeleteDuplicatesModal()" title="Close" aria-label="Close">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
       </div>
       <p id="batch-delete-summary-text" style="font-size: 0.9rem; line-height: 1.5; margin-bottom: 1rem; color: var(--text-main);"></p>
       

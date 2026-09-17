@@ -147,7 +147,7 @@ def run_ranger_sync_tui(
                 meta = audio_metadata.extract_audio_metadata(curr_item["path"])
 
                 stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-                stdscr.addstr(2, right_x, f"📁 File Specs: {curr_item['filename']}"[:right_width-1])
+                stdscr.addstr(2, right_x, f"File Specs: {curr_item['filename']}"[:right_width-1])
                 stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
                 spec_line_1 = f"   • Bit Rate   : {meta['bitrate']}   |   Sample Rate: {meta['sample_rate']}"

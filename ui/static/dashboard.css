@@ -10,13 +10,12 @@ body {
 /* Header & Navigation Bar */
 .header {
   padding: 0.85rem 1.5rem;
-  background: rgba(25, 26, 33, 0.92);
-  backdrop-filter: blur(20px);
+  background: var(--bg-dark);
   border-bottom: 1px solid var(--border-color);
   position: sticky;
   top: 0;
   z-index: 100;
-  box-shadow: 0 4px 20px rgba(21, 21, 30, 0.65);
+  box-shadow: none;
 }
 
 .header-inner {
@@ -36,7 +35,7 @@ body {
   font-size: 1.35rem;
   font-weight: 800;
   letter-spacing: 0.03em;
-  color: var(--accent-pink);
+  color: var(--accent-yellow);
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -45,10 +44,44 @@ body {
   white-space: nowrap;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.theme-toggle-btn {
+  background: var(--bg-mantle);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
+}
+
+.theme-toggle-btn .icon-svg {
+  width: 1.05rem;
+  height: 1.05rem;
+  color: var(--accent-yellow);
+}
+
 .nav-tabs {
   display: flex;
   gap: 0.4rem;
-  background: rgba(21, 21, 30, 0.85);
+  background: var(--bg-mantle);
   padding: 0.35rem;
   border-radius: 12px;
   border: 1px solid var(--border-color);
@@ -63,25 +96,25 @@ body {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
   display: inline-flex;
   align-items: center;
 }
 
 .tab-btn:hover {
-  color: var(--accent-pink);
-  background: rgba(255, 121, 198, 0.1);
+  color: var(--accent-yellow);
+  background: var(--accent-yellow-alpha);
 }
 
 .tab-btn.active {
-  background: var(--accent-pink);
-  color: #15151e;
+  background: var(--accent-yellow);
+  color: #000000;
   font-weight: 700;
-  box-shadow: 0 4px 14px rgba(255, 121, 198, 0.25);
+  box-shadow: none;
 }
 
 .tab-btn.active .icon-svg {
-  color: #15151e;
+  color: #000000;
 }
 
 .btn .icon-svg, .tab-btn .icon-svg {
@@ -107,20 +140,20 @@ body {
 
 .metric-card {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 1.5rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.2s ease, border-color 0.2s ease;
+  box-shadow: none;
 }
 
 .metric-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--accent-pink);
-  box-shadow: 0 8px 25px rgba(255, 121, 198, 0.15);
+  transform: translateY(-2px);
+  border-color: var(--accent-yellow);
+  box-shadow: none;
 }
 
 .metric-header {
@@ -141,7 +174,7 @@ body {
 .metric-icon .icon-svg {
   width: 1.5rem;
   height: 1.5rem;
-  color: var(--accent-pink);
+  color: var(--accent-yellow);
 }
 
 .metric-value {
@@ -159,11 +192,11 @@ body {
 /* Panels */
 .panel {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 1.5rem;
   margin-bottom: 2rem;
+  box-shadow: none;
 }
 
 .panel-title {
@@ -209,10 +242,9 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(25, 26, 33, 0.96);
-  backdrop-filter: blur(20px);
+  background: var(--bg-dark);
   border-top: 1px solid var(--border-color);
-  box-shadow: 0 -4px 25px rgba(21, 21, 30, 0.75);
+  box-shadow: none;
   padding: 0.75rem 1.5rem;
   z-index: 1000;
 }
@@ -262,8 +294,8 @@ audio {
 
 /* Active Track Row */
 tr.playing-row {
-  background: rgba(255, 121, 198, 0.12) !important;
-  border-left: 3px solid var(--accent-pink);
+  background: var(--accent-yellow-alpha) !important;
+  border-left: 3px solid var(--accent-yellow);
 }
 
 /* Pagination Controls */
@@ -285,8 +317,8 @@ tr.playing-row {
 }
 
 .page-btn {
-  background: #282a36;
-  border: 1px solid #44475a;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
   color: var(--text-main);
   padding: 0.35rem 0.75rem;
   border-radius: 6px;
@@ -304,9 +336,9 @@ tr.playing-row {
 }
 
 .page-btn:hover:not(:disabled) {
-  background: #44475a;
-  border-color: var(--accent-pink);
-  color: var(--accent-pink);
+  background: var(--bg-card-hover);
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
 }
 
 .page-info {
@@ -321,38 +353,38 @@ tr.playing-row {
   border-radius: 12px;
   padding: 1.25rem;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all 0.2s ease;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
 }
 
 .playlist-card:hover {
-  background: rgba(68, 71, 90, 0.75);
-  border-color: var(--accent-pink);
+  background: var(--bg-card-hover);
+  border-color: var(--accent-yellow);
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(255, 121, 198, 0.2);
+  box-shadow: none;
 }
 
 .playlist-card.active {
-  border-color: var(--accent-pink);
-  background: rgba(255, 121, 198, 0.12);
-  box-shadow: 0 0 15px rgba(255, 121, 198, 0.2);
+  border-color: var(--accent-yellow);
+  background: var(--accent-yellow-alpha);
+  box-shadow: none;
 }
 
 /* Duplicates Cluster Card Styling */
 .duplicate-cluster-card {
   background: var(--bg-card);
-  backdrop-filter: blur(12px);
   border: 1px solid var(--border-color);
   border-radius: 14px;
   padding: 1.15rem 1.25rem;
   margin-bottom: 1.25rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease;
+  box-shadow: none;
 }
 
 .duplicate-cluster-card:hover {
-  border-color: rgba(255, 121, 198, 0.3);
+  border-color: var(--accent-yellow);
 }
 
 .cluster-card-header {
@@ -372,7 +404,7 @@ tr.playing-row {
 }
 
 .cluster-title {
-  color: var(--accent-pink);
+  color: var(--accent-yellow);
   margin: 0;
   font-size: 0.98rem;
   font-weight: 700;
@@ -498,17 +530,29 @@ tr.playing-row {
   }
 
   .header-inner {
-    flex-direction: column;
-    align-items: stretch;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "logo actions"
+      "nav nav";
+    align-items: center;
     gap: 0.75rem;
   }
 
   .logo {
-    justify-content: center;
+    grid-area: logo;
+    justify-content: flex-start;
     font-size: 1.25rem;
   }
 
+  .header-actions {
+    grid-area: actions;
+    display: flex;
+    justify-content: flex-end;
+  }
+
   .nav-tabs {
+    grid-area: nav;
     width: 100%;
     display: flex;
     overflow-x: auto;
