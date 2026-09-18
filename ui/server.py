@@ -249,9 +249,12 @@ def get_device_songs_query():
 def stream_device_songs(device_id="local"):
     """
     SSE endpoint — streams live file scanning progress for the Music Library page.
+    'refresh=true' forces a full disk/device re-scan (with progress); otherwise
+    cached results are streamed back immediately without re-scanning.
     """
     client_ip = request.remote_addr
-    logger.info(f"[SSE-Lib] Client {client_ip} opened library scan stream (device={device_id})")
+    force_refresh = request.args.get("refresh", "false").lower() in ("1", "true", "yes")
+    logger.info(f"[SSE-Lib] Client {client_ip} opened library scan stream (device={device_id}, refresh={force_refresh})")
 
     msg_queue = queue.Queue()
 
@@ -260,11 +263,11 @@ def stream_device_songs(device_id="local"):
         msg_queue.put(json.dumps({"type": "log", "msg": msg}))
 
     def run_library_scan():
-        logger.info(f"[SSE-Lib] Scan thread started for device '{device_id}'")
+        logger.info(f"[SSE-Lib] Scan thread started for device '{device_id}' (refresh={force_refresh})")
         try:
-            progress_cb(f"[START] Initializing library scan for '{device_id}'...")
-            data = device_repo.get_device_songs(device_id, force_refresh=True, progress_cb=progress_cb)
-            progress_cb(f"[DONE] Library scan complete — {data.get('count', 0)} song(s) loaded.")
+            progress_cb(f"[START] {'Initializing library scan' if force_refresh else 'Loading cached song library'} for '{device_id}'...")
+            data = device_repo.get_device_songs(device_id, force_refresh=force_refresh, progress_cb=progress_cb)
+            progress_cb(f"[DONE] Library {'scan' if force_refresh else 'load'} complete — {data.get('count', 0)} song(s) loaded.")
             msg_queue.put(json.dumps({"type": "done", "result": data}))
             logger.info(f"[SSE-Lib] Scan complete for '{device_id}': {data.get('count', 0)} songs")
         except Exception as exc:

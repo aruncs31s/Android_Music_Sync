@@ -6,6 +6,7 @@ import sys
 import socket
 import shutil
 import datetime
+import threading
 from typing import List, Dict, Any, Optional
 
 from repositories.base_repository import BaseRepository
@@ -30,10 +31,17 @@ class SongRepository(BaseRepository):
     CACHE_KEY_ALL_SONGS = "cache:songs:all"
     CACHE_KEY_DUPLICATES = "cache:songs:duplicates"
 
+    # Guard so concurrent requests (e.g. overlapping SSE scans) do not launch
+    # multiple full disk scans at once.
+    _scan_lock = threading.Lock()
+    _scan_active = False
+
     def get_all_songs(self, force_refresh: bool = False, progress_cb=None) -> List[Dict[str, Any]]:
         """
         Fetch all local music library songs sorted by mtime descending.
         Checks Redis cache first if enabled; scans disk folders on cache miss.
+        Concurrent scans are skipped (existing in-memory data is reused) so the
+        queue/SSE client is not flooded with duplicate work.
         """
         if not force_refresh:
             cached = self._cache_get(self.CACHE_KEY_ALL_SONGS)
@@ -41,14 +49,32 @@ class SongRepository(BaseRepository):
                 logger.info("[SongRepository] Cache Hit: Loaded songs library.")
                 return cached
 
-        logger.info("[SongRepository] Cache miss / scan requested: Scanning disk directories...")
-        cfg = config_manager.load_config()
-        folders = config_manager.get_local_sync_folders(cfg)
-        audio_exts = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"])
-        songs = song_scanner.scan_songs_from_paths(folders, audio_exts, progress_cb=progress_cb)
+        if self._scan_active:
+            cached = self._cache_get(self.CACHE_KEY_ALL_SONGS)
+            if cached is not None:
+                logger.info("[SongRepository] Scan already in progress — reusing loaded songs library.")
+                return cached
+            return []
 
-        self._cache_set(self.CACHE_KEY_ALL_SONGS, songs)
-        return songs
+        with self._scan_lock:
+            if self._scan_active:
+                cached = self._cache_get(self.CACHE_KEY_ALL_SONGS)
+                if cached is not None:
+                    logger.info("[SongRepository] Concurrent scan finished — reusing loaded songs library.")
+                    return cached
+                return []
+            self._scan_active = True
+        try:
+            logger.info("[SongRepository] Cache miss / scan requested: Scanning disk directories...")
+            cfg = config_manager.load_config()
+            folders = config_manager.get_local_sync_folders(cfg)
+            audio_exts = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"])
+            songs = song_scanner.scan_songs_from_paths(folders, audio_exts, progress_cb=progress_cb)
+
+            self._cache_set(self.CACHE_KEY_ALL_SONGS, songs)
+            return songs
+        finally:
+            self._scan_active = False
 
     def get_duplicates(self, force_refresh: bool = False, use_fingerprint: bool = False) -> Dict[str, Any]:
         """
