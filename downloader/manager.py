@@ -4,12 +4,13 @@ Supports direct Spotify/yt-dlp engine, Telegram Deezload bot automation,
 and post-download ADB push & duplicate detection.
 """
 import os
-import sys
 from typing import Optional
 
 from . import spotify_downloader
 from . import telegram_deezload
 import adb_pusher
+from utils import get_logger
+logger = get_logger()
 
 DEFAULT_DOWNLOAD_DIR = "songs/download"
 
@@ -32,24 +33,24 @@ class DownloadManager:
         Download song from Spotify URL or query and save to output_dir (songs/download/).
         Post-download: Check ADB duplicate, ask user, verify remote folder, and push to device.
         """
-        print(f"\n[DownloadManager] Starting download for: {query_or_url}", file=sys.stderr)
-        print(f"[DownloadManager] Target directory: {os.path.abspath(self.output_dir)}", file=sys.stderr)
+        logger.info(f"[DownloadManager] Starting download for: {query_or_url}")
+        logger.info(f"[DownloadManager] Target directory: {os.path.abspath(self.output_dir)}")
 
         file_path = None
 
         # Try Telegram Deezload if requested or if TELEGRAM_API_ID is present
         if self.use_telegram or os.getenv("TELEGRAM_API_ID"):
             if spotify_downloader.is_spotify_url(query_or_url):
-                print("[DownloadManager] Attempting download via Telegram Deezload bot...", file=sys.stderr)
+                logger.info("[DownloadManager] Attempting download via Telegram Deezload bot...")
                 file_path = telegram_deezload.download_via_deezload(query_or_url, output_dir=self.output_dir)
 
         # Direct engine fallback (yt-dlp)
         if not file_path:
-            print("[DownloadManager] Downloading via Direct Engine (yt-dlp)...", file=sys.stderr)
+            logger.info("[DownloadManager] Downloading via Direct Engine (yt-dlp)...")
             file_path = spotify_downloader.download_audio(query_or_url, output_dir=self.output_dir)
 
         if file_path:
-            print(f"[DownloadManager] Successfully saved to: {file_path}", file=sys.stderr)
+            logger.info(f"[DownloadManager] Successfully saved to: {file_path}")
             # Post-download ADB push & duplicate check workflow
             adb_pusher.handle_post_download_adb_workflow(
                 local_filepath=file_path,
@@ -57,6 +58,6 @@ class DownloadManager:
                 auto_confirm=self.auto_push_adb
             )
         else:
-            print("[DownloadManager] Download failed.", file=sys.stderr)
+            logger.error("[DownloadManager] Download failed.")
 
         return file_path

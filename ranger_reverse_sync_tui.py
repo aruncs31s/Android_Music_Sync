@@ -16,12 +16,14 @@ import sys
 import os
 import curses
 import subprocess
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Callable
 
 import fuzzy_matcher
 import fzf_tui
 import audio_metadata
 import hide_list_db
+from utils import get_logger
+logger = get_logger()
 
 
 def run_ranger_reverse_sync_tui(
@@ -29,14 +31,19 @@ def run_ranger_reverse_sync_tui(
     local_files: List[Dict[str, str]],
     device_serial: str,
     local_dir: str = "/home/aruncs/Music",
-    redis_cfg: Optional[Dict[str, Any]] = None
+    redis_cfg: Optional[Dict[str, Any]] = None,
+    pull_callback: Optional[Callable[[Dict[str, Any]], bool]] = None
 ) -> Dict[str, Any]:
     """
     Ranger-style interactive dual-pane TUI for reverse sync (ADB -> Local).
     Returns summary dict of pulled, skipped, and hidden files.
+
+    If `pull_callback` is provided it is invoked for each selected item instead of
+    `adb pull`; it must return True on success. This lets callers (e.g. the Over-IP
+    HTTP workflow) reuse the selection UI with their own transfer method.
     """
     if not missing_songs:
-        print("[RangerReverseSync] No missing songs to pull from device.", file=sys.stderr)
+        logger.info("[RangerReverseSync] No missing songs to pull from device.")
         return {"pulled": [], "skipped": [], "hidden": []}
 
     def _tui(stdscr):
@@ -164,7 +171,7 @@ def run_ranger_reverse_sync_tui(
                 mime_val = curr_item.get("mime_type") or "audio/mpeg"
 
                 stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-                stdscr.addstr(2, right_x, f"🎵 Device Track: {title_query}"[:right_width-1])
+                stdscr.addstr(2, right_x, f"Device Track: {title_query}"[:right_width-1])
                 stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
                 spec_line_1 = f"   • Artist: {artist_val}   |   Album: {album_val}"
@@ -259,25 +266,41 @@ def run_ranger_reverse_sync_tui(
                     curses.def_prog_mode()
                     curses.endwin()
 
-                    print(f"\n[RangerReverseSync] Pulling {len(items_to_pull)} file(s) from device...", file=sys.stderr)
-                    os.makedirs(local_dir, exist_ok=True)
-                    for item in items_to_pull:
-                        remote_path = item.get("_data")
-                        display_name = item.get("_display_name") or f"song_{item.get('_id', 0)}.mp3"
+                    logger.info(f"[RangerReverseSync] Pulling {len(items_to_pull)} file(s)...")
+                    if pull_callback is None:
+                        os.makedirs(local_dir, exist_ok=True)
 
+                    for item in items_to_pull:
+                        display_name = item.get("_display_name") or item.get("filename") or f"song_{item.get('_id', 0)}.mp3"
+
+                        if pull_callback is not None:
+                            logger.info(f"[RangerReverseSync] Pulling: {display_name} -> {local_dir}/")
+                            try:
+                                ok = pull_callback(item)
+                            except Exception as e:
+                                ok = False
+                                logger.error(f"[RangerReverseSync] Failed to pull '{display_name}': {e}")
+                            if ok:
+                                pulled_list.append(item)
+                            else:
+                                logger.error(f"[RangerReverseSync] Failed to pull '{display_name}'")
+                            continue
+
+                        remote_path = item.get("_data")
                         if not remote_path:
                             continue
 
-                        print(f"Pulling: {display_name} -> {local_dir}/", file=sys.stderr)
+                        logger.info(f"[RangerReverseSync] Pulling: {display_name} -> {local_dir}/")
                         cmd = ["adb", "-s", device_serial, "pull", remote_path, os.path.join(local_dir, display_name)]
                         try:
                             res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                            print(res.stdout.strip(), file=sys.stderr)
+                            logger.debug(f"[RangerReverseSync] {res.stdout.strip()}")
                             pulled_list.append(item)
                         except subprocess.CalledProcessError as e:
-                            print(f"[ERROR] Failed to pull '{remote_path}': {e.stderr or e.stdout}", file=sys.stderr)
+                            logger.error(f"[RangerReverseSync] Failed to pull '{remote_path}': {e.stderr or e.stdout}")
 
-                    pulled_paths = set(item.get("_data") for item in items_to_pull)
+                    # Only remove items that were actually pulled successfully.
+                    pulled_paths = set(item.get("_data") for item in pulled_list)
                     missing_songs[:] = [item for item in missing_songs if item.get("_data") not in pulled_paths]
                     selected_set.clear()
                     current_idx = max(0, min(current_idx, len(missing_songs) - 1))

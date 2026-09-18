@@ -5,9 +5,11 @@ Automates sending Spotify links to Telegram music download bots (such as @deezlo
 using Telethon or Pyrogram, and saving received audio files into songs/download/.
 """
 import os
-import sys
 import asyncio
 from typing import Optional
+
+from utils import get_logger
+logger = get_logger()
 
 DEFAULT_BOT = "@deezloadbot"
 
@@ -31,7 +33,7 @@ async def _download_from_telegram_bot_async(
     Async implementation using Telethon client to send link to Telegram Deezload bot and download audio.
     """
     if not is_telegram_client_available():
-        print("Telethon library is not installed. Install with: pip install telethon", file=sys.stderr)
+        logger.warning("[TelegramDeezload] Telethon library is not installed. Install with: pip install telethon")
         return None
 
     from telethon import TelegramClient, events
@@ -43,7 +45,7 @@ async def _download_from_telegram_bot_async(
     final_api_hash = api_hash or env_api_hash
 
     if not final_api_id or not final_api_hash:
-        print("Missing TELEGRAM_API_ID or TELEGRAM_API_HASH environment variables.", file=sys.stderr)
+        logger.warning("[TelegramDeezload] Missing TELEGRAM_API_ID or TELEGRAM_API_HASH environment variables.")
         return None
 
     os.makedirs(output_dir, exist_ok=True)
@@ -52,7 +54,7 @@ async def _download_from_telegram_bot_async(
 
     await client.start()
 
-    print(f"Connected to Telegram. Sending link to {bot_username}...", file=sys.stderr)
+    logger.info(f"[TelegramDeezload] Connected to Telegram. Sending link to {bot_username}...")
 
     # Event handler waiting for audio document response from deezload bot
     event_future = asyncio.get_event_loop().create_future()
@@ -69,13 +71,13 @@ async def _download_from_telegram_bot_async(
     try:
         # Wait up to 60 seconds for bot reply
         reply_message = await asyncio.wait_for(event_future, timeout=60.0)
-        print("Received audio file from Deezload bot. Downloading to songs/download/...", file=sys.stderr)
+        logger.info("[TelegramDeezload] Received audio file from Deezload bot. Downloading to songs/download/...")
 
         # Download media file into output_dir
         downloaded_path = await reply_message.download_media(file=output_dir)
-        print(f"Deezload download complete: {downloaded_path}", file=sys.stderr)
+        logger.info(f"[TelegramDeezload] Deezload download complete: {downloaded_path}")
     except asyncio.TimeoutError:
-        print(f"Timeout waiting for reply from {bot_username}.", file=sys.stderr)
+        logger.warning(f"[TelegramDeezload] Timeout waiting for reply from {bot_username}.")
     finally:
         await client.disconnect()
 
@@ -92,5 +94,5 @@ def download_via_deezload(
     try:
         return asyncio.run(_download_from_telegram_bot_async(spotify_url, output_dir=output_dir, bot_username=bot_username))
     except Exception as e:
-        print(f"Error in Deezload Telegram download: {e}", file=sys.stderr)
+        logger.error(f"[TelegramDeezload] Error in Deezload Telegram download: {e}")
         return None

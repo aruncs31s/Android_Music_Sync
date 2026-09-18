@@ -47,6 +47,8 @@ def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]
     def _menu(stdscr):
         curses.curs_set(0) # Hide cursor
         stdscr.keypad(True)
+        curses.start_color()
+        curses.use_default_colors()
         current_row = 0
 
         curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN) # Highlight

@@ -8,7 +8,10 @@ import sys
 import json
 import socket
 from typing import Dict, Any
-from flask import Flask, jsonify, request, send_file, render_template
+import queue
+import threading
+from flask import Flask, jsonify, request, send_file, render_template, Response, stream_with_context
+
 
 import config_manager
 import over_ip.song_scanner as song_scanner
@@ -19,7 +22,9 @@ import syncer
 import adb_pusher
 import sync_checker
 from repositories import song_repo, playlist_repo, hide_repo, device_repo, deleted_repo
+from utils import get_logger
 
+logger = get_logger()
 # Create Flask app with template and static folders configured inside ui/
 ui_dir = os.path.dirname(os.path.abspath(__file__))
 app = Flask(
@@ -57,9 +62,124 @@ def get_songs():
 
 @app.route("/api/duplicates", methods=["GET"])
 def get_duplicates():
-    """Return duplicate song clusters."""
-    dups = song_repo.get_duplicates()
+    """Return duplicate song clusters with optional acoustic fingerprinting."""
+    use_fp = request.args.get("fingerprint", "false").lower() in ("true", "1", "yes")
+    refresh = request.args.get("refresh", "false").lower() in ("true", "1", "yes")
+    dups = song_repo.get_duplicates(force_refresh=refresh, use_fingerprint=use_fp)
     return jsonify(dups)
+
+@app.route("/api/duplicates/stream", methods=["GET"])
+def stream_duplicates():
+    """
+    SSE endpoint — streams live per-song analysis progress to the browser.
+    Each event is a JSON object:
+      {"type": "log",   "msg": "..."}         — progress line
+      {"type": "done",  "result": {...}}       — final duplicate data payload
+      {"type": "error", "msg": "..."}         — on exception
+    """
+    use_fp = request.args.get("fingerprint", "false").lower() in ("true", "1", "yes")
+    client_ip = request.remote_addr
+    logger.info(f"[SSE] Client {client_ip} opened duplicate analysis stream (fingerprint={use_fp})")
+
+    # Shared queue between the background analysis thread and the SSE generator.
+    # Sentinel value None signals the generator that the thread has finished.
+    msg_queue = queue.Queue()
+
+    def progress_cb(msg: str):
+        """Forward a progress log line from the analysis thread to the SSE queue."""
+        logger.debug(f"[SSE] Progress: {msg}")
+        msg_queue.put(json.dumps({"type": "log", "msg": msg}))
+
+    def run_analysis():
+        logger.info(f"[SSE] Analysis thread started (fingerprint={use_fp})")
+        try:
+            progress_cb(f"[START] Initializing duplicate scan ({'acoustic audio fingerprinting' if use_fp else 'tag & filename matching'})...")
+            progress_cb("[INFO] Scanning configured music library paths...")
+            logger.info("[SSE] Fetching song library...")
+            songs = song_repo.get_all_songs(force_refresh=True, progress_cb=progress_cb)
+            progress_cb(f"[INFO] Loaded {len(songs)} song(s) from local library.")
+            logger.info(f"[SSE] Got {len(songs)} songs, starting duplicate detection...")
+
+            if not songs:
+                progress_cb("[WARN] No audio tracks found in local folders. Check your config.json sync paths.")
+
+            result = ui_stats.detect_duplicate_songs(
+                songs,
+                use_fingerprint=use_fp,
+                progress_cb=progress_cb,
+            )
+
+            logger.info(
+                f"[SSE] Detection complete: {result.get('cluster_count', 0)} cluster(s), "
+                f"{result.get('total_duplicates', 0)} duplicate file(s)"
+            )
+
+            # Write result into the repo cache (optional — silently skipped if Redis is
+            # disabled or unavailable) so subsequent /api/duplicates calls are instant.
+            try:
+                cache_key = f"{song_repo.CACHE_KEY_DUPLICATES}:{'fp' if use_fp else 'tag'}"
+                song_repo._cache_set(cache_key, result)
+                logger.info(f"[SSE] Cached result under key '{cache_key}'")
+            except Exception as cache_err:
+                logger.warning(f"[SSE] Cache write skipped (Redis unavailable?): {cache_err}")
+
+            msg_queue.put(json.dumps({"type": "done", "result": result}))
+            logger.info("[SSE] Sent 'done' event to client")
+
+        except Exception as exc:
+            logger.error(f"[SSE] Analysis thread error: {exc}", exc_info=True)
+            msg_queue.put(json.dumps({"type": "error", "msg": str(exc)}))
+        finally:
+            msg_queue.put(None)  # sentinel — tells generate() to close the stream
+            logger.info("[SSE] Analysis thread finished, sentinel enqueued")
+
+    thread = threading.Thread(target=run_analysis, daemon=True, name="dup-sse-analysis")
+    thread.start()
+    logger.info(f"[SSE] Background analysis thread '{thread.name}' started")
+
+    def generate():
+        """SSE generator — yields events from the analysis thread."""
+        logger.info(f"[SSE] Generator started for client {client_ip}")
+        try:
+            yield ": SSE stream open\n\n"
+            import time
+            last_keepalive = time.time()
+
+            while True:
+                try:
+                    # Short timeout (0.5s) so events stream with zero delay
+                    item = msg_queue.get(timeout=0.5)
+                except queue.Empty:
+                    # Send a keepalive comment every 10s if queue has been idle
+                    now = time.time()
+                    if now - last_keepalive >= 10.0:
+                        last_keepalive = now
+                        yield ": keepalive\n\n"
+                    continue
+
+                if item is None:
+                    # Sentinel received — analysis thread finished, close stream.
+                    logger.info(f"[SSE] Sentinel received, closing stream for {client_ip}")
+                    break
+
+                yield f"data: {item}\n\n"
+
+        except GeneratorExit:
+            # Client closed the EventSource connection before analysis finished.
+            logger.info(f"[SSE] Client {client_ip} disconnected (GeneratorExit)")
+
+        logger.info(f"[SSE] Generator finished for client {client_ip}")
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
 
 
 @app.route("/api/hidden", methods=["GET"])
@@ -122,6 +242,70 @@ def get_device_songs_query():
     force_refresh = request.args.get("refresh", "false").lower() == "true"
     data = device_repo.get_device_songs(device_id, force_refresh=force_refresh)
     return jsonify(data)
+
+
+@app.route("/api/devices/<path:device_id>/songs/stream", methods=["GET"])
+@app.route("/api/songs/stream", methods=["GET"])
+def stream_device_songs(device_id="local"):
+    """
+    SSE endpoint — streams live file scanning progress for the Music Library page.
+    """
+    client_ip = request.remote_addr
+    logger.info(f"[SSE-Lib] Client {client_ip} opened library scan stream (device={device_id})")
+
+    msg_queue = queue.Queue()
+
+    def progress_cb(msg: str):
+        logger.debug(f"[SSE-Lib] Progress: {msg}")
+        msg_queue.put(json.dumps({"type": "log", "msg": msg}))
+
+    def run_library_scan():
+        logger.info(f"[SSE-Lib] Scan thread started for device '{device_id}'")
+        try:
+            progress_cb(f"[START] Initializing library scan for '{device_id}'...")
+            data = device_repo.get_device_songs(device_id, force_refresh=True, progress_cb=progress_cb)
+            progress_cb(f"[DONE] Library scan complete — {data.get('count', 0)} song(s) loaded.")
+            msg_queue.put(json.dumps({"type": "done", "result": data}))
+            logger.info(f"[SSE-Lib] Scan complete for '{device_id}': {data.get('count', 0)} songs")
+        except Exception as exc:
+            logger.error(f"[SSE-Lib] Scan thread error: {exc}", exc_info=True)
+            msg_queue.put(json.dumps({"type": "error", "msg": str(exc)}))
+        finally:
+            msg_queue.put(None)
+
+    thread = threading.Thread(target=run_library_scan, daemon=True, name="lib-sse-scan")
+    thread.start()
+
+    def generate():
+        logger.info(f"[SSE-Lib] Generator started for {client_ip}")
+        try:
+            yield ": SSE stream open\n\n"
+            import time
+            last_keepalive = time.time()
+            while True:
+                try:
+                    item = msg_queue.get(timeout=0.5)
+                except queue.Empty:
+                    now = time.time()
+                    if now - last_keepalive >= 10.0:
+                        last_keepalive = now
+                        yield ": keepalive\n\n"
+                    continue
+                if item is None:
+                    break
+                yield f"data: {item}\n\n"
+        except GeneratorExit:
+            logger.info(f"[SSE-Lib] Client {client_ip} disconnected")
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.route("/api/devices/scan-adb", methods=["POST"])

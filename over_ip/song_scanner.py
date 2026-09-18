@@ -25,11 +25,13 @@ def format_mtime(ts: float) -> str:
 
 def scan_songs_from_paths(
     folder_paths: List[str],
-    audio_extensions: List[str] = None
+    audio_extensions: List[str] = None,
+    progress_cb=None,
 ) -> List[Dict[str, Any]]:
     """
     Recursively scan a list of local folder paths for audio files.
     Returns list of song dictionaries sorted by modification time (mtime descending).
+    Optional progress_cb(msg: str) reports files as they are discovered.
     """
     if audio_extensions is None:
         audio_extensions = [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"]
@@ -43,13 +45,31 @@ def scan_songs_from_paths(
     for folder in folder_paths:
         if not folder or not os.path.exists(folder):
             logger.warning(f"Scan path skipped (does not exist): '{folder}'")
+            if progress_cb:
+                try:
+                    progress_cb(f"[WARN] Directory not found: '{folder}'")
+                except Exception:
+                    pass
             continue
 
         folder_abs = os.path.abspath(folder)
         logger.info(f"Scanning directory: '{folder_abs}'...")
+        if progress_cb:
+            try:
+                progress_cb(f"[INFO] Scanning directory: {folder_abs}")
+            except Exception:
+                pass
         scanned_in_folder = 0
 
-        for root, _, files in os.walk(folder_abs):
+        def _on_walk_error(err):
+            logger.warning(f"[SongScanner] Cannot access '{err.filename}': {err}")
+            if progress_cb:
+                try:
+                    progress_cb(f"[WARN] Permission/access error: {err.filename}")
+                except Exception:
+                    pass
+
+        for root, _, files in os.walk(folder_abs, onerror=_on_walk_error):
             for file in files:
                 ext = os.path.splitext(file)[1].lower()
                 if ext in valid_extensions:
@@ -57,6 +77,13 @@ def scan_songs_from_paths(
                     if full_path in seen_paths:
                         continue
                     seen_paths.add(full_path)
+                    scanned_in_folder += 1
+
+                    if progress_cb:
+                        try:
+                            progress_cb(f"[SCAN]  ({scanned_in_folder}) {file}")
+                        except Exception:
+                            pass
 
                     try:
                         st = os.stat(full_path)
@@ -83,7 +110,7 @@ def scan_songs_from_paths(
                             bitrate_val = int(str(bitrate_str).replace("kbps", "").strip())
                     except Exception:
                         bitrate_val = 0
-
+                    logger.debug(f"Scanned file: {full_path} | Title: {title} | Artist: {artist} | Album: {album} | Size: {size} bytes | MTime: {mtime} | CTime: {ctime}")
                     song = {
                         "_id": len(songs) + 1,
                         "title": title,

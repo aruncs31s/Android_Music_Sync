@@ -58,7 +58,7 @@ class DeviceRepository(BaseRepository):
         """
         return ui_db.get_all_synced_records(device_serial)
 
-    def get_device_songs(self, device_id: str, force_refresh: bool = False) -> Dict[str, Any]:
+    def get_device_songs(self, device_id: str, force_refresh: bool = False, progress_cb=None) -> Dict[str, Any]:
         """
         Fetch all songs for a specified device (Local, ADB, Over-IP) with Redis caching.
         Returns a dictionary containing device metadata and the list of song dicts.
@@ -68,7 +68,7 @@ class DeviceRepository(BaseRepository):
         # 1. Local Storage
         if device_id in ("local", "default", ""):
             from repositories import song_repo
-            songs = song_repo.get_all_songs(force_refresh=force_refresh)
+            songs = song_repo.get_all_songs(force_refresh=force_refresh, progress_cb=progress_cb)
             return {
                 "device_id": "local",
                 "device_name": "Local Music Folders",
@@ -84,7 +84,7 @@ class DeviceRepository(BaseRepository):
             if not force_refresh:
                 cached = self._cache_get(cache_key)
                 if cached is not None:
-                    logger.info(f"[DeviceRepository] Redis Cache Hit: Loaded ADB songs for {serial}.")
+                    logger.info(f"[DeviceRepository] Cache Hit: Loaded ADB songs for {serial}.")
                     return cached
 
             import config_manager
@@ -104,12 +104,28 @@ class DeviceRepository(BaseRepository):
             except Exception:
                 pass
 
+            if progress_cb:
+                try:
+                    progress_cb(f"[START] Querying music library from ADB device [{serial}] ({model})...")
+                except Exception:
+                    pass
+
             try:
                 raw_out = adb_manager.query_songs_from_device(serial, redis_cfg=redis_cfg, refresh_cache=force_refresh)
                 songs = song_parser.parse_songs(raw_out)
                 logger.info(f"[DeviceRepository] Successfully queried {len(songs)} songs from ADB device [{serial}].")
+                if progress_cb:
+                    try:
+                        progress_cb(f"[DONE] Found {len(songs)} song(s) on ADB device [{serial}].")
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.error(f"[DeviceRepository] Failed to query songs from ADB device {serial}: {e}")
+                if progress_cb:
+                    try:
+                        progress_cb(f"[ERROR] Failed to query ADB device: {e}")
+                    except Exception:
+                        pass
 
             result = {
                 "device_id": device_id,
@@ -145,11 +161,26 @@ class DeviceRepository(BaseRepository):
                     break
 
             redis_cfg = self._get_redis_config()
+            if progress_cb:
+                try:
+                    progress_cb(f"[START] Fetching songs from Over-IP host {ip_addr}:{port} ({alias})...")
+                except Exception:
+                    pass
             try:
                 songs = ip_client.get_remote_songs(ip_addr, port=port, redis_cfg=redis_cfg, refresh=force_refresh)
                 logger.info(f"[DeviceRepository] Successfully fetched {len(songs)} songs from Over-IP host {ip_addr}.")
+                if progress_cb:
+                    try:
+                        progress_cb(f"[DONE] Found {len(songs)} song(s) on Over-IP host {ip_addr}.")
+                    except Exception:
+                        pass
             except Exception as e:
                 logger.error(f"[DeviceRepository] Failed to fetch songs from Over-IP host {ip_addr}: {e}")
+                if progress_cb:
+                    try:
+                        progress_cb(f"[ERROR] Failed to fetch songs from Over-IP host {ip_addr}: {e}")
+                    except Exception:
+                        pass
                 songs = []
 
             result = {
@@ -166,7 +197,7 @@ class DeviceRepository(BaseRepository):
 
         # Fallback to local
         from repositories import song_repo
-        songs = song_repo.get_all_songs(force_refresh=force_refresh)
+        songs = song_repo.get_all_songs(force_refresh=force_refresh, progress_cb=progress_cb)
         return {
             "device_id": device_id,
             "device_name": device_id,

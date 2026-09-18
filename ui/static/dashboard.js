@@ -15,7 +15,39 @@ const SVG_CHEVRON_RIGHT = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none"
 const SVG_FOLDER = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
 const SVG_SPARKLES = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>`;
 const SVG_SYNC = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>`;
+const SVG_CHECK = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`;
+const SVG_ALERT = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
+const SVG_WAVEFORM = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
 
+// Theme Management System
+function initTheme() {
+  const saved = localStorage.getItem('theme') || 'dark';
+  applyTheme(saved);
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  const sunIcon = document.getElementById('theme-icon-sun');
+  const moonIcon = document.getElementById('theme-icon-moon');
+  const label = document.getElementById('theme-toggle-text');
+
+  if (theme === 'dark') {
+    if (sunIcon) sunIcon.style.display = 'inline-block';
+    if (moonIcon) moonIcon.style.display = 'none';
+    if (label) label.textContent = 'Dark';
+  } else {
+    if (sunIcon) sunIcon.style.display = 'none';
+    if (moonIcon) moonIcon.style.display = 'inline-block';
+    if (label) label.textContent = 'Light';
+  }
+}
+
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  const newTheme = current === 'dark' ? 'light' : 'dark';
+  applyTheme(newTheme);
+}
 
 // Global Search & Pagination State
 let allSongs = [];
@@ -27,6 +59,8 @@ let allClusters = [];
 let filteredClusters = [];
 let dupPage = 1;
 const dupPageSize = 5;
+let useAudioFingerprinting = localStorage.getItem('antigravity_use_audio_fingerprint') === 'true';
+let dupEventSource = null; // active SSE connection for live analysis
 
 // Global Audio Player & Playlist State
 let currentTrackPath = null;
@@ -40,6 +74,11 @@ let currentPlaylistTracks = [];
 let targetTrackForPlaylist = null;
 
 document.addEventListener('DOMContentLoaded', () => {
+  initTheme();
+  const fpToggle = document.getElementById('toggle-use-fingerprints');
+  if (fpToggle) {
+    fpToggle.checked = useAudioFingerprinting;
+  }
   initTabs();
   initAudioPlayer();
   loadDashboardStats();
@@ -185,7 +224,110 @@ function onLibraryDeviceSelectChange(deviceId) {
 }
 
 function refreshCurrentDeviceLibrary() {
-  loadDeviceSongs(currentDeviceId, true);
+  streamDeviceSongs(currentDeviceId);
+}
+
+let libEventSource = null;
+
+function streamDeviceSongs(deviceId = 'local') {
+  currentDeviceId = deviceId;
+  if (libEventSource) {
+    libEventSource.close();
+    libEventSource = null;
+  }
+
+  const btn = document.getElementById('btn-refresh-library');
+  const terminal = document.getElementById('lib-terminal');
+  const termLog = document.getElementById('lib-terminal-log');
+  const tbody = document.getElementById('songs-tbody');
+
+  if (terminal) terminal.style.display = 'block';
+  if (termLog) termLog.innerHTML = '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scanning…`;
+  }
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Scanning music library…</td></tr>';
+  }
+
+  const url = `/api/devices/${encodeURIComponent(deviceId)}/songs/stream`;
+  const evtSource = new EventSource(url);
+  libEventSource = evtSource;
+
+  function appendLibLog(msg) {
+    if (!termLog) return;
+    const line = document.createElement('span');
+    line.className = 'dup-terminal-line ' + _dupTerminalLineClass(msg);
+    line.textContent = msg;
+    termLog.appendChild(line);
+    termLog.appendChild(document.createTextNode('\n'));
+    termLog.scrollTop = termLog.scrollHeight;
+  }
+
+  evtSource.onmessage = (e) => {
+    let payload;
+    try { payload = JSON.parse(e.data); } catch { return; }
+
+    if (payload.type === 'log') {
+      appendLibLog(payload.msg);
+    } else if (payload.type === 'done') {
+      appendLibLog('[DONE] Library scan complete!');
+      evtSource.close();
+      libEventSource = null;
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scan / Refresh`;
+      }
+
+      const data = payload.result || {};
+      currentDeviceName = data.device_name || currentDeviceId;
+      currentDeviceType = data.device_type || 'Storage';
+      allSongs = data.songs || [];
+
+      const titleEl = document.getElementById('library-title-text');
+      if (titleEl) titleEl.textContent = currentDeviceName;
+
+      const badgeEl = document.getElementById('library-device-badge');
+      if (badgeEl) badgeEl.textContent = `${currentDeviceType} (${allSongs.length} songs)`;
+
+      const selectEl = document.getElementById('library-device-select');
+      if (selectEl) selectEl.value = currentDeviceId;
+
+      applyLibraryFilterAndSort();
+
+      // Refresh overview counters as well
+      loadDashboardStats();
+
+      // Collapse terminal after 2.5 seconds
+      setTimeout(() => {
+        if (terminal) terminal.style.display = 'none';
+      }, 2500);
+    } else if (payload.type === 'error') {
+      appendLibLog('[ERROR] ' + (payload.msg || 'Scan failed.'));
+      evtSource.close();
+      libEventSource = null;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scan / Refresh`;
+      }
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="color: var(--status-offline) !important;">Scan failed.</td></tr>';
+      }
+    }
+  };
+
+  evtSource.onerror = () => {
+    if (evtSource.readyState === EventSource.CLOSED) return;
+    appendLibLog('[ERROR] Connection to server lost.');
+    evtSource.close();
+    libEventSource = null;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scan / Refresh`;
+    }
+  };
 }
 
 // --- MUSIC LIBRARY SEARCH, SORTING & PAGINATION ---
@@ -426,16 +568,180 @@ function findKeeperInCluster(cluster, strategy = 'best_quality') {
   return songsCopy[0];
 }
 
-async function loadDuplicates() {
+function onToggleFingerprintMatching(checked) {
+  useAudioFingerprinting = Boolean(checked);
+  localStorage.setItem('antigravity_use_audio_fingerprint', useAudioFingerprinting);
+  const container = document.getElementById('duplicates-container');
+  if (container) {
+    container.innerHTML = `<p class="text-muted" style="display: flex; align-items: center; gap: 0.5rem; padding: 1rem 0;">${SVG_SPARKLES} Loading duplicates...</p>`;
+  }
+  loadDuplicates(true);
+}
+
+// --- Live SSE Duplicate Analysis Terminal ---
+
+function _dupTerminalLineClass(msg) {
+  const tag = msg.slice(0, 7).toUpperCase();
+  if (tag.startsWith('[CACHE]')) return 'log-cache';
+  if (tag.startsWith('[FP]'))    return 'log-fp';
+  if (tag.startsWith('[SCAN]'))  return 'log-scan';
+  if (tag.startsWith('[TAG]'))   return 'log-tag';
+  if (tag.startsWith('[MATCH]')) return 'log-match';
+  if (tag.startsWith('[SKIP]'))  return 'log-skip';
+  if (tag.startsWith('[FAIL]'))  return 'log-fail';
+  if (tag.startsWith('[WARN]'))  return 'log-warn';
+  if (tag.startsWith('[START]')) return 'log-start';
+  if (tag.startsWith('[INFO]'))  return 'log-info';
+  if (tag.startsWith('[DONE]'))  return 'log-done';
+  if (tag.startsWith('[ERROR]')) return 'log-error';
+  return '';
+}
+
+function _dupTerminalAppend(msg) {
+  const log = document.getElementById('dup-terminal-log');
+  if (!log) return;
+  const line = document.createElement('span');
+  line.className = 'dup-terminal-line ' + _dupTerminalLineClass(msg);
+  line.textContent = msg;
+  log.appendChild(line);
+  log.appendChild(document.createTextNode('\n'));
+  // auto-scroll to bottom
+  log.scrollTop = log.scrollHeight;
+}
+
+function streamDuplicates() {
+  // Close any existing SSE connection
+  if (dupEventSource) {
+    dupEventSource.close();
+    dupEventSource = null;
+  }
+
+  const btn = document.getElementById('btn-rescan-duplicates');
+  const terminal = document.getElementById('dup-terminal');
+  const termLog = document.getElementById('dup-terminal-log');
+  const container = document.getElementById('duplicates-container');
+
+  // Show terminal, clear previous log
+  if (terminal) terminal.style.display = 'block';
+  if (termLog) termLog.innerHTML = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Analyzing…'; }
+  if (container) container.innerHTML = '';
+
+  const params = new URLSearchParams();
+  params.set('fingerprint', useAudioFingerprinting ? 'true' : 'false');
+
+  const evtSource = new EventSource(`/api/duplicates/stream?${params.toString()}`);
+  dupEventSource = evtSource;
+
+  let logCount = 0;
+  const counter = document.getElementById('dup-terminal-counter');
+
+  evtSource.onmessage = (e) => {
+    let payload;
+    try { payload = JSON.parse(e.data); } catch { return; }
+
+    if (payload.type === 'log') {
+      _dupTerminalAppend(payload.msg);
+      logCount++;
+      if (counter) counter.textContent = `${logCount} lines`;
+
+    } else if (payload.type === 'done') {
+      evtSource.close();
+      dupEventSource = null;
+      _dupTerminalAppend(payload.msg || '');
+
+      // Brief pause then collapse terminal and render results
+      setTimeout(() => {
+        if (terminal) terminal.style.display = 'none';
+      }, 1800);
+
+      // Populate clusters and render
+      const data = payload.result || {};
+      allClusters = data.clusters || [];
+      filteredClusters = [...allClusters];
+      dupPage = 1;
+
+      const warnEl = document.getElementById('dup-fingerprint-warning');
+      const warnText = document.getElementById('dup-fingerprint-warning-text');
+      if (warnEl && warnText) {
+        if (data.warning) {
+          warnText.textContent = data.warning;
+          warnEl.style.display = 'flex';
+        } else {
+          warnEl.style.display = 'none';
+        }
+      }
+
+      const validPaths = new Set();
+      allClusters.forEach(c => (c.songs || []).forEach(s => validPaths.add(s.filepath)));
+      for (const p of selectedDuplicatePaths) {
+        if (!validPaths.has(p)) selectedDuplicatePaths.delete(p);
+      }
+
+      updateDuplicatesSelectionUI();
+      renderDuplicatesPage();
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Analyze`;
+      }
+
+    } else if (payload.type === 'error') {
+      _dupTerminalAppend(`[ERROR] ${payload.msg}`);
+      evtSource.close();
+      dupEventSource = null;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Analyze`;
+      }
+    }
+  };
+
+  evtSource.onerror = () => {
+    if (evtSource.readyState === EventSource.CLOSED) return;
+    _dupTerminalAppend('[ERROR] Connection to server lost.');
+    evtSource.close();
+    dupEventSource = null;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Analyze`;
+    }
+  };
+}
+
+
+async function loadDuplicates(forceRefresh = false) {
   const container = document.getElementById('duplicates-container');
   if (!container) return;
 
+  const fpToggle = document.getElementById('toggle-use-fingerprints');
+  if (fpToggle) {
+    fpToggle.checked = useAudioFingerprinting;
+  }
+
   try {
-    const res = await fetch('/api/duplicates');
+    const params = new URLSearchParams();
+    params.set('fingerprint', useAudioFingerprinting ? 'true' : 'false');
+    if (forceRefresh) {
+      params.set('refresh', 'true');
+    }
+    const res = await fetch(`/api/duplicates?${params.toString()}`);
     const data = await res.json();
     allClusters = data.clusters || [];
     filteredClusters = [...allClusters];
     dupPage = 1;
+
+    // Handle dependency warning banner
+    const warnEl = document.getElementById('dup-fingerprint-warning');
+    const warnText = document.getElementById('dup-fingerprint-warning-text');
+    if (warnEl && warnText) {
+      if (data.warning) {
+        warnText.textContent = data.warning;
+        warnEl.style.display = 'flex';
+      } else {
+        warnEl.style.display = 'none';
+      }
+    }
 
     // Clean up any selected paths that no longer exist in clusters
     const validPaths = new Set();
@@ -591,14 +897,21 @@ function renderDuplicatesPage() {
     const currentClusterIdx = startIdx + idx;
     const keeper = findKeeperInCluster(c, currentDupKeepStrategy);
 
+    const matchBadge = c.match_type === 'audio_fingerprint'
+      ? `<span class="badge badge-yellow" style="font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="Acoustic waveform match via Chromaprint fpcalc">${SVG_WAVEFORM} Waveform Fingerprint</span>`
+      : (c.match_type === 'filename'
+          ? '<span class="badge badge-yellow" style="font-size: 0.72rem;">Filename</span>'
+          : '<span class="badge badge-yellow" style="font-size: 0.72rem;">Tag Match</span>');
+
     html += `
       <div class="duplicate-cluster-card">
         <div class="cluster-card-header">
-          <div class="cluster-title-group">
+          <div class="cluster-title-group" style="display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
             <h4 class="cluster-title">
               Cluster #${globalIdx}: ${escapeHtml(c.cluster_name)}
             </h4>
-            <span class="badge badge-purple text-tabular">${c.count} copies</span>
+            ${matchBadge}
+            <span class="badge badge-yellow text-tabular">${c.count} copies</span>
           </div>
           <button class="btn btn-secondary btn-sm" onclick="autoSelectClusterDuplicates(${currentClusterIdx})" title="Select duplicate copies and keep the best copy">
             Auto-select (Keep Best)
@@ -612,19 +925,19 @@ function renderDuplicatesPage() {
       const isKeeper = keeper && (s.filepath === keeper.filepath);
 
       let rowBorder = '1px solid var(--border-color)';
-      let rowBg = 'rgba(17, 17, 27, 0.6)';
+      let rowBg = 'var(--bg-card)';
       let statusBadge = '';
 
       if (isSelected) {
-        rowBorder = '1px solid rgba(243, 139, 168, 0.4)';
-        rowBg = 'rgba(243, 139, 168, 0.08)';
+        rowBorder = '1px solid rgba(239, 68, 68, 0.4)';
+        rowBg = 'rgba(239, 68, 68, 0.08)';
         statusBadge = '<span class="badge badge-offline" style="font-size: 0.72rem; font-weight: 700;">DELETE</span>';
       } else if (isKeeper) {
-        rowBorder = '1px solid rgba(166, 227, 161, 0.35)';
-        rowBg = 'rgba(166, 227, 161, 0.06)';
+        rowBorder = '1px solid rgba(34, 197, 94, 0.35)';
+        rowBg = 'rgba(34, 197, 94, 0.06)';
         statusBadge = '<span class="badge badge-online" style="font-size: 0.72rem; font-weight: 700;" title="Preserved original copy">KEEP (Best)</span>';
       } else {
-        statusBadge = '<span class="badge badge-purple" style="font-size: 0.72rem;">COPY</span>';
+        statusBadge = '<span class="badge badge-yellow" style="font-size: 0.72rem;">COPY</span>';
       }
 
       const checkedAttr = isSelected ? 'checked' : '';
@@ -632,7 +945,7 @@ function renderDuplicatesPage() {
       html += `
         <li class="duplicate-item-row" style="background: ${rowBg}; border: ${rowBorder};">
           <div class="dup-left-content">
-            <input type="checkbox" class="dup-checkbox" data-path="${escapeHtml(s.filepath)}" ${checkedAttr} onchange="onDuplicateCheckboxChange('${escapeJs(s.filepath)}', this.checked, ${currentClusterIdx})" style="width: 1.15rem; height: 1.15rem; cursor: pointer; accent-color: var(--ctp-mauve); flex-shrink: 0;">
+            <input type="checkbox" class="dup-checkbox" data-path="${escapeHtml(s.filepath)}" ${checkedAttr} onchange="onDuplicateCheckboxChange('${escapeJs(s.filepath)}', this.checked, ${currentClusterIdx})" style="width: 1.15rem; height: 1.15rem; cursor: pointer; accent-color: var(--accent-yellow); flex-shrink: 0;">
             ${statusBadge}
             <div class="dup-file-info">
               <code class="dup-filepath" title="${escapeHtml(s.filepath)}">${escapeHtml(s.filepath)}</code>
@@ -682,7 +995,7 @@ function openBatchDeleteDuplicatesModal() {
   if (previewEl) {
     let filesHtml = '';
     selectedDuplicatePaths.forEach(p => {
-      filesHtml += `<div style="margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--status-offline);"><span style="margin-right: 0.4rem;">🗑️</span>${escapeHtml(p)}</div>`;
+      filesHtml += `<div style="margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--status-offline); display: flex; align-items: center; gap: 0.35rem;"><span style="display: inline-flex; align-items: center; color: var(--status-offline); flex-shrink: 0;">${SVG_TRASH}</span><span>${escapeHtml(p)}</span></div>`;
     });
     previewEl.innerHTML = filesHtml;
   }
@@ -1819,14 +2132,17 @@ async function onSyncDestinationDeviceChange() {
         bannerEl.style.border = '1px solid rgba(249, 226, 175, 0.4)';
         bannerEl.style.color = '#f9e2af';
         bannerEl.innerHTML = `
-          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">⚠️ Song Already Exists on ${escapeHtml(data.device_name)}</div>
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
+            ${SVG_ALERT}
+            <span>Song Already Exists on ${escapeHtml(data.device_name)}</span>
+          </div>
           <div style="color: #f9e2af; font-size: 0.8rem;">${escapeHtml(data.exact_match.match_reason || 'Match found')}</div>
           <div style="display: flex; gap: 0.6rem; margin-top: 0.4rem; font-size: 0.75rem; flex-wrap: wrap;">
             <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.duration_formatted || '00:00')}</span>
-            <span class="badge badge-purple">${escapeHtml(em.bitrate_kbps ? `${em.bitrate_kbps} kbps` : 'Bitrate Unknown')}</span>
+            <span class="badge badge-yellow">${escapeHtml(em.bitrate_kbps ? `${em.bitrate_kbps} kbps` : 'Bitrate Unknown')}</span>
             <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.size_formatted || '')}</span>
           </div>
-          <div style="font-family: monospace; font-size: 0.72rem; color: #a6adc8; margin-top: 0.35rem; word-break: break-all;">
+          <div style="font-family: monospace; font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem; word-break: break-all;">
             Path: ${escapeHtml(em.filepath || em.filename || '')}
           </div>
         `;
@@ -1838,7 +2154,10 @@ async function onSyncDestinationDeviceChange() {
         bannerEl.style.border = '1px solid rgba(166, 227, 161, 0.4)';
         bannerEl.style.color = '#a6e3a1';
         bannerEl.innerHTML = `
-          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem;">✅ Not Present on Destination Device</div>
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
+            ${SVG_CHECK}
+            <span>Not Present on Destination Device</span>
+          </div>
           <div style="color: #a6e3a1; font-size: 0.8rem;">This track does not currently exist on ${escapeHtml(data.device_name)}. Ready to sync!</div>
         `;
       }
@@ -1856,14 +2175,14 @@ async function onSyncDestinationDeviceChange() {
         let simHtml = '';
         similar.forEach(s => {
           simHtml += `
-            <div style="background: #191a21; border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+            <div style="background: var(--bg-mantle); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
               <div style="min-width: 0; flex: 1;">
                 <div style="font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(s.title || 'Unknown')}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">${escapeHtml(s.artist || 'Unknown')} &bull; ${escapeHtml(s.duration_formatted || '')} &bull; <span class="badge badge-purple" style="font-size: 0.7rem;">${escapeHtml(s.bitrate_kbps ? `${s.bitrate_kbps} kbps` : '')}</span></div>
+                <div class="text-muted" style="font-size: 0.75rem;">${escapeHtml(s.artist || 'Unknown')} &bull; ${escapeHtml(s.duration_formatted || '')} &bull; <span class="badge badge-yellow" style="font-size: 0.7rem;">${escapeHtml(s.bitrate_kbps ? `${s.bitrate_kbps} kbps` : '')}</span></div>
                 ${s.comparison_note ? `<div style="font-size: 0.72rem; color: var(--accent-orange); margin-top: 0.2rem;">${escapeHtml(s.comparison_note)}</div>` : ''}
               </div>
               <div style="text-align: right; flex-shrink: 0;">
-                <span class="badge badge-pink" style="font-size: 0.75rem; font-weight: 700;">
+                <span class="badge badge-yellow" style="font-size: 0.75rem; font-weight: 700;">
                   ${s.similarity_score}% Match
                 </span>
               </div>
@@ -1908,9 +2227,9 @@ async function submitSyncSongToDevice() {
     const data = await res.json();
 
     if (data.status === 'success') {
-      syncBtnText.textContent = 'Synced ✓';
+      syncBtnText.innerHTML = `Synced ${SVG_CHECK}`;
       if (statusEl) {
-        statusEl.innerHTML = `<span style="color: #34d399; font-weight: 600;">✓ ${escapeHtml(data.message || 'Track synced successfully!')}</span>`;
+        statusEl.innerHTML = `<span style="color: var(--status-online); font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem;">${SVG_CHECK} ${escapeHtml(data.message || 'Track synced successfully!')}</span>`;
       }
       loadDashboardStats();
       setTimeout(() => {

@@ -8,6 +8,7 @@ Calculates metric counts:
 """
 import os
 import sys
+import datetime
 from collections import defaultdict
 from typing import List, Dict, Any
 
@@ -17,25 +18,197 @@ import over_ip.song_scanner as song_scanner
 import over_ip.client as ip_client
 import adb_manager
 import ui.db_manager as ui_db
+import database.db_manager as central_db
+import audio_fingerprint
 import song_parser
 from utils import get_logger
 
 logger = get_logger()
 
 
-def detect_duplicate_songs(songs: List[Dict[str, Any]]) -> Dict[str, Any]:
+def detect_duplicate_songs(
+    songs: List[Dict[str, Any]],
+    use_fingerprint: bool = False,
+    progress_cb=None,
+) -> Dict[str, Any]:
     """
     Detect duplicate audio files across local music folders.
-    Groups songs by title + artist or normalized filename.
-    Returns dictionary with total duplicate count and duplicate clusters.
+    If use_fingerprint is True and fpcalc is installed, groups songs by acoustic waveform
+    fingerprint first (using SQLite cache), falling back to title+artist and filename matching.
+    If fpcalc is missing, sets a warning message and falls back to tag/filename matching.
+
+    Optional progress_cb(msg: str) callback is called for each processed song so callers
+    (e.g. the SSE streaming endpoint) can relay live progress to the browser.
+
+    Returns dictionary with total duplicate count, duplicate clusters, fpcalc availability, and warning.
     """
+    import time as _time
+
+    def _emit(msg: str):
+        """Send a progress message to the SSE callback (if any) and swallow errors."""
+        if progress_cb:
+            try:
+                progress_cb(msg)
+            except Exception as cb_err:
+                logger.warning(f"[DupScan] progress_cb raised an error: {cb_err}")
+
+    logger.info(f"[DupScan] detect_duplicate_songs called — {len(songs)} song(s), use_fingerprint={use_fingerprint}")
+
+    fpcalc_avail = audio_fingerprint.is_fpcalc_available()
+    logger.info(f"[DupScan] fpcalc available: {fpcalc_avail}")
+    warning = None
+
+    if use_fingerprint and not fpcalc_avail:
+        warning = "Acoustic fingerprinting utility ('fpcalc') is not installed on this system. Falling back to tag & filename matching."
+        logger.warning(f"[DupScan] {warning}")
+        use_fingerprint = False
+        _emit("[WARN]  fpcalc not found — falling back to tag & filename matching")
+
+    clusters = []
+    seen_paths = set()
+    total_songs = len(songs)
+
+    # ------------------------------------------------------------------ #
+    #  Phase 1: Acoustic fingerprint matching (only when fpcalc available)
+    # ------------------------------------------------------------------ #
+    if use_fingerprint and fpcalc_avail:
+        logger.info(f"[DupScan] Phase 1: Acoustic fingerprint scan — {total_songs} song(s)")
+        _emit(f"[START] Acoustic fingerprint scan — {total_songs} songs")
+
+        logger.info("[DupScan] Loading cached fingerprint map from database...")
+        cached_map = central_db.get_all_cached_fingerprints_map()
+        logger.info(f"[DupScan] Loaded {len(cached_map)} cached fingerprint(s)")
+
+        by_fingerprint = defaultdict(list)
+        cache_hits = 0
+        fp_computed = 0
+        fp_failed = 0
+        fp_skipped = 0
+
+        for idx, s in enumerate(songs, 1):
+            fp_path = s.get("filepath")
+            display_name = s.get("filename") or (os.path.basename(fp_path) if fp_path else "unknown")
+
+            if not fp_path or not os.path.isfile(fp_path):
+                logger.debug(f"[DupScan] ({idx}/{total_songs}) SKIP (missing file): {fp_path!r}")
+                _emit(f"[SKIP]  ({idx}/{total_songs}) {display_name} — file not found")
+                fp_skipped += 1
+                continue
+
+            try:
+                st = os.stat(fp_path)
+                fsize = st.st_size
+                fmtime = st.st_mtime
+            except OSError as e:
+                logger.warning(f"[DupScan] ({idx}/{total_songs}) SKIP (stat error): {fp_path!r} — {e}")
+                _emit(f"[SKIP]  ({idx}/{total_songs}) {display_name} — stat error")
+                fp_skipped += 1
+                continue
+
+            cached_entry = cached_map.get(fp_path)
+            if (
+                cached_entry
+                and cached_entry.get("file_size") == fsize
+                and abs(cached_entry.get("file_mtime", 0.0) - fmtime) < 1e-3
+            ):
+                fp = cached_entry.get("fingerprint")
+                dur = cached_entry.get("duration")
+                logger.debug(f"[DupScan] ({idx}/{total_songs}) CACHE HIT: {display_name}")
+                _emit(f"[CACHE] ({idx}/{total_songs}) {display_name}")
+                cache_hits += 1
+            else:
+                logger.info(f"[DupScan] ({idx}/{total_songs}) Running fpcalc on: {display_name}")
+                _t0 = _time.monotonic()
+                res = audio_fingerprint.generate_audio_fingerprint(fp_path)
+                elapsed = _time.monotonic() - _t0
+
+                if res:
+                    fp = res["fingerprint"]
+                    dur = res["duration"]
+                    logger.info(f"[DupScan] ({idx}/{total_songs}) fpcalc OK in {elapsed:.2f}s — saving to cache: {display_name}")
+                    central_db.save_cached_fingerprint(fp_path, fsize, fmtime, dur, fp)
+                    # Update in-memory map so subsequent songs in this run benefit immediately
+                    cached_map[fp_path] = {
+                        "filepath": fp_path,
+                        "file_size": fsize,
+                        "file_mtime": fmtime,
+                        "duration": dur,
+                        "fingerprint": fp,
+                    }
+                    _emit(f"[FP]    ({idx}/{total_songs}) {display_name}  ({elapsed:.1f}s)")
+                    fp_computed += 1
+                else:
+                    fp = None
+                    dur = None
+                    logger.warning(f"[DupScan] ({idx}/{total_songs}) fpcalc returned no result for: {fp_path!r}")
+                    _emit(f"[FAIL]  ({idx}/{total_songs}) {display_name} — fpcalc returned no result")
+                    fp_failed += 1
+
+            if fp:
+                s_copy = dict(s)
+                s_copy["audio_fingerprint"] = fp
+                s_copy["audio_duration"] = dur
+                by_fingerprint[fp].append(s_copy)
+
+        logger.info(
+            f"[DupScan] Fingerprint pass done — "
+            f"cache hits: {cache_hits}, computed: {fp_computed}, "
+            f"failed: {fp_failed}, skipped: {fp_skipped}"
+        )
+
+        # Build acoustic clusters from fingerprint groups
+        logger.info(f"[DupScan] Building acoustic clusters from {len(by_fingerprint)} unique fingerprint(s)...")
+        for fp, song_group in by_fingerprint.items():
+            if len(song_group) > 1:
+                cluster_paths = set(s.get("filepath") for s in song_group if s.get("filepath"))
+                if len(cluster_paths) > 1:
+                    cluster_name = None
+                    for s in song_group:
+                        t = (s.get("title") or "").strip()
+                        a = (s.get("artist") or "").strip()
+                        if t and t.lower() != "unknown":
+                            cluster_name = f"{a} - {t}" if a and a.lower() != "unknown" else t
+                            break
+                    if not cluster_name:
+                        cluster_name = song_group[0].get("filename") or os.path.basename(
+                            song_group[0].get("filepath", "Audio Track")
+                        )
+
+                    cname = cluster_name.title() if cluster_name else "Acoustic Duplicate Cluster"
+                    logger.info(f"[DupScan] Acoustic cluster: '{cname}' — {len(song_group)} song(s)")
+                    clusters.append({
+                        "cluster_name": cname,
+                        "match_type": "audio_fingerprint",
+                        "count": len(song_group),
+                        "songs": song_group
+                    })
+                    seen_paths.update(cluster_paths)
+
+        logger.info(f"[DupScan] Acoustic clusters found: {len(clusters)}")
+    else:
+        logger.info(f"[DupScan] Skipping fingerprint phase (use_fingerprint={use_fingerprint}, fpcalc_avail={fpcalc_avail})")
+        _emit(f"[START] Tag & filename matching — {total_songs} songs")
+
+    # ------------------------------------------------------------------ #
+    #  Phase 2: Tag (title+artist) and filename matching
+    # ------------------------------------------------------------------ #
+    logger.info(f"[DupScan] Phase 2: Tag & filename matching on remaining songs (already matched: {len(seen_paths)})")
     by_key = defaultdict(list)
     by_filename = defaultdict(list)
 
-    for s in songs:
+    tag_count = 0
+    for idx, s in enumerate(songs, 1):
+        filepath = s.get("filepath")
+        if filepath and filepath in seen_paths:
+            continue
+
         title = (s.get("title") or "").strip().lower()
         artist = (s.get("artist") or "").strip().lower()
         filename = (s.get("filename") or os.path.basename(s.get("filepath", ""))).strip().lower()
+        display_name = s.get("filename") or os.path.basename(filepath or "track")
+
+        if not use_fingerprint:
+            _emit(f"[TAG]   ({idx}/{total_songs}) {display_name}")
 
         if title and title != "unknown":
             key = f"{artist} - {title}" if artist and artist != "unknown" else title
@@ -44,13 +217,19 @@ def detect_duplicate_songs(songs: List[Dict[str, Any]]) -> Dict[str, Any]:
         if filename:
             by_filename[filename].append(s)
 
-    clusters = []
-    seen_paths = set()
+        tag_count += 1
 
+    logger.info(f"[DupScan] Tag/filename pass: {tag_count} song(s) scanned, {len(by_key)} title-key group(s), {len(by_filename)} filename group(s)")
+    if not use_fingerprint:
+        _emit(f"[INFO]  Grouped {tag_count} songs by metadata tags and filenames")
+
+    new_clusters = 0
     for key, song_group in by_key.items():
         if len(song_group) > 1:
             cluster_paths = set(s.get("filepath") for s in song_group if s.get("filepath"))
-            if len(cluster_paths) > 1:
+            if len(cluster_paths) > 1 and not cluster_paths.issubset(seen_paths):
+                logger.info(f"[DupScan] Title/artist cluster: '{key.title()}' — {len(song_group)} song(s)")
+                _emit(f"[MATCH] Duplicate: '{key.title()}' ({len(song_group)} copies)")
                 clusters.append({
                     "cluster_name": key.title(),
                     "match_type": "title_artist",
@@ -58,11 +237,14 @@ def detect_duplicate_songs(songs: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "songs": song_group
                 })
                 seen_paths.update(cluster_paths)
+                new_clusters += 1
 
     for fn, song_group in by_filename.items():
         if len(song_group) > 1:
             cluster_paths = set(s.get("filepath") for s in song_group if s.get("filepath"))
             if len(cluster_paths) > 1 and not cluster_paths.issubset(seen_paths):
+                logger.info(f"[DupScan] Filename cluster: '{fn}' — {len(song_group)} song(s)")
+                _emit(f"[MATCH] Duplicate: '{fn}' ({len(song_group)} copies)")
                 clusters.append({
                     "cluster_name": fn,
                     "match_type": "filename",
@@ -70,14 +252,30 @@ def detect_duplicate_songs(songs: List[Dict[str, Any]]) -> Dict[str, Any]:
                     "songs": song_group
                 })
                 seen_paths.update(cluster_paths)
+                new_clusters += 1
 
+    if new_clusters:
+        logger.info(f"[DupScan] Tag/filename matching found {new_clusters} new cluster(s)")
+        _emit(f"[INFO]  Found {new_clusters} tag/filename cluster(s)")
+    else:
+        logger.info("[DupScan] Tag/filename matching found no additional clusters")
+
+    # ------------------------------------------------------------------ #
+    #  Final summary
+    # ------------------------------------------------------------------ #
     total_duplicate_files = sum(len(c["songs"]) - 1 for c in clusters)
-    logger.info(f"Duplicate scan finished: Found {len(clusters)} clusters ({total_duplicate_files} duplicate files).")
+    logger.info(
+        f"[DupScan] Scan complete — use_fingerprint={use_fingerprint}: "
+        f"{len(clusters)} cluster(s), {total_duplicate_files} duplicate file(s)"
+    )
+    _emit(f"[DONE]  {len(clusters)} cluster(s) found — {total_duplicate_files} duplicate file(s)")
 
     return {
         "total_duplicates": total_duplicate_files,
         "cluster_count": len(clusters),
-        "clusters": clusters
+        "clusters": clusters,
+        "fpcalc_available": fpcalc_avail,
+        "warning": warning
     }
 
 
@@ -104,8 +302,6 @@ def scan_adb_devices_info() -> List[Dict[str, Any]]:
                 logger.info(f"Queried ADB device [{serial}] ({model}): {cnt} songs.")
             except Exception as err:
                 logger.error(f"Error querying songs from ADB device [{serial}]: {err}")
-                pass
-            except Exception:
                 pass
 
             adb_list.append({
@@ -222,5 +418,5 @@ def get_dashboard_summary_stats() -> Dict[str, Any]:
         "duplicates_count": duplicate_info["total_duplicates"],
         "duplicate_clusters_count": duplicate_info["cluster_count"],
         "folders": folders,
-        "timestamp": os.popen("date '+%Y-%m-%d %H:%M:%S'").read().strip()
+        "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     }
