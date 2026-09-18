@@ -30,7 +30,7 @@ class SongRepository(BaseRepository):
     CACHE_KEY_ALL_SONGS = "cache:songs:all"
     CACHE_KEY_DUPLICATES = "cache:songs:duplicates"
 
-    def get_all_songs(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
+    def get_all_songs(self, force_refresh: bool = False, progress_cb=None) -> List[Dict[str, Any]]:
         """
         Fetch all local music library songs sorted by mtime descending.
         Checks Redis cache first if enabled; scans disk folders on cache miss.
@@ -38,14 +38,14 @@ class SongRepository(BaseRepository):
         if not force_refresh:
             cached = self._cache_get(self.CACHE_KEY_ALL_SONGS)
             if cached is not None:
-                logger.info("[SongRepository] Redis Cache Hit: Loaded songs library.")
+                logger.info("[SongRepository] Cache Hit: Loaded songs library.")
                 return cached
 
         logger.info("[SongRepository] Cache miss / scan requested: Scanning disk directories...")
         cfg = config_manager.load_config()
         folders = config_manager.get_local_sync_folders(cfg)
         audio_exts = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"])
-        songs = song_scanner.scan_songs_from_paths(folders, audio_exts)
+        songs = song_scanner.scan_songs_from_paths(folders, audio_exts, progress_cb=progress_cb)
 
         self._cache_set(self.CACHE_KEY_ALL_SONGS, songs)
         return songs

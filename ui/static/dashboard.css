@@ -779,3 +779,82 @@ tr.playing-row {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
 }
+
+/* ==========================================================================
+   Duplicate Analysis Terminal Window
+   ========================================================================== */
+
+.dup-terminal {
+  background: #000;
+  border: 1px solid var(--accent-yellow);
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+
+.dup-terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #111;
+  padding: 0.45rem 0.85rem;
+  border-bottom: 1px solid #222;
+  font-family: 'SF Mono', 'Fira Mono', 'Menlo', monospace;
+  color: var(--text-muted);
+  user-select: none;
+}
+
+.dup-terminal-dot {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: #333;
+}
+
+.dup-terminal-log {
+  height: 220px;
+  overflow-y: auto;
+  padding: 0.6rem 0.9rem;
+  font-family: 'SF Mono', 'Fira Mono', 'Menlo', 'Consolas', monospace;
+  font-size: 0.75rem;
+  line-height: 1.6;
+  color: #e0e0e0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--accent-yellow) #111;
+}
+
+.dup-terminal-log::-webkit-scrollbar {
+  width: 5px;
+}
+
+.dup-terminal-log::-webkit-scrollbar-track {
+  background: #111;
+}
+
+.dup-terminal-log::-webkit-scrollbar-thumb {
+  background: var(--accent-yellow);
+}
+
+.dup-terminal-line {
+  display: block;
+  white-space: pre;
+  animation: termFadeIn 0.12s ease-out;
+}
+
+.dup-terminal-line.log-cache  { color: #888; }
+.dup-terminal-line.log-fp     { color: #e0e0e0; }
+.dup-terminal-line.log-scan   { color: #38bdf8; }
+.dup-terminal-line.log-tag    { color: #cbd5e1; }
+.dup-terminal-line.log-match  { color: var(--accent-yellow); font-weight: 600; }
+.dup-terminal-line.log-skip   { color: #555; }
+.dup-terminal-line.log-fail   { color: #f87171; }
+.dup-terminal-line.log-warn   { color: #fbbf24; }
+.dup-terminal-line.log-start  { color: var(--accent-yellow); font-weight: 700; }
+.dup-terminal-line.log-info   { color: #94a3b8; }
+.dup-terminal-line.log-done   { color: #4ade80; font-weight: 700; }
+.dup-terminal-line.log-error  { color: #f87171; font-weight: 700; }
+
+@keyframes termFadeIn {
+  from { opacity: 0; transform: translateY(3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

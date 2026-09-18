@@ -4,10 +4,12 @@ Downloads high quality audio and embeds metadata into songs/download/ directory.
 """
 import os
 import re
-import sys
 import subprocess
 import shutil
 from typing import Optional, Dict, Any
+
+from utils import get_logger
+logger = get_logger()
 
 SPOTIFY_URL_REGEX = re.compile(r"https?://(?:open\.)?spotify\.(?:com|link)/(?:track|album|playlist|artist)/[a-zA-Z0-9]+")
 
@@ -42,14 +44,14 @@ def download_audio(query_or_url: str, output_dir: str = "songs/download") -> Opt
     ]
 
     if is_spotify_url(query_or_url):
-        print(f"Detected Spotify link: {query_or_url}", file=sys.stderr)
+        logger.info(f"[SpotifyDownloader] Detected Spotify link: {query_or_url}")
         cmd.append(query_or_url)
     else:
         # Search query fallback (ytsearch)
-        print(f"Searching and downloading audio for: {query_or_url}", file=sys.stderr)
+        logger.info(f"[SpotifyDownloader] Searching and downloading audio for: {query_or_url}")
         cmd.append(f"ytsearch1:{query_or_url}")
 
-    print(f"Downloading to: {os.path.abspath(output_dir)} ...", file=sys.stderr)
+    logger.info(f"[SpotifyDownloader] Downloading to: {os.path.abspath(output_dir)} ...")
 
     try:
         res = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -71,10 +73,10 @@ def download_audio(query_or_url: str, output_dir: str = "songs/download") -> Opt
                 downloaded_file = max(files, key=os.path.getmtime)
 
         if downloaded_file and os.path.exists(downloaded_file):
-            print(f"Download complete: {downloaded_file}", file=sys.stderr)
+            logger.info(f"[SpotifyDownloader] Download complete: {downloaded_file}")
             return os.path.abspath(downloaded_file)
 
         return None
     except subprocess.CalledProcessError as e:
-        print(f"Error during audio download: {e.stderr or e.stdout}", file=sys.stderr)
+        logger.error(f"[SpotifyDownloader] Error during audio download: {e.stderr or e.stdout}")
         return None

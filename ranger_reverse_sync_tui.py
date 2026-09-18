@@ -22,6 +22,8 @@ import fuzzy_matcher
 import fzf_tui
 import audio_metadata
 import hide_list_db
+from utils import get_logger
+logger = get_logger()
 
 
 def run_ranger_reverse_sync_tui(
@@ -41,7 +43,7 @@ def run_ranger_reverse_sync_tui(
     HTTP workflow) reuse the selection UI with their own transfer method.
     """
     if not missing_songs:
-        print("[RangerReverseSync] No missing songs to pull from device.", file=sys.stderr)
+        logger.info("[RangerReverseSync] No missing songs to pull from device.")
         return {"pulled": [], "skipped": [], "hidden": []}
 
     def _tui(stdscr):
@@ -264,7 +266,7 @@ def run_ranger_reverse_sync_tui(
                     curses.def_prog_mode()
                     curses.endwin()
 
-                    print(f"\n[RangerReverseSync] Pulling {len(items_to_pull)} file(s)...", file=sys.stderr)
+                    logger.info(f"[RangerReverseSync] Pulling {len(items_to_pull)} file(s)...")
                     if pull_callback is None:
                         os.makedirs(local_dir, exist_ok=True)
 
@@ -272,30 +274,30 @@ def run_ranger_reverse_sync_tui(
                         display_name = item.get("_display_name") or item.get("filename") or f"song_{item.get('_id', 0)}.mp3"
 
                         if pull_callback is not None:
-                            print(f"Pulling: {display_name} -> {local_dir}/", file=sys.stderr)
+                            logger.info(f"[RangerReverseSync] Pulling: {display_name} -> {local_dir}/")
                             try:
                                 ok = pull_callback(item)
                             except Exception as e:
                                 ok = False
-                                print(f"[ERROR] Failed to pull '{display_name}': {e}", file=sys.stderr)
+                                logger.error(f"[RangerReverseSync] Failed to pull '{display_name}': {e}")
                             if ok:
                                 pulled_list.append(item)
                             else:
-                                print(f"[ERROR] Failed to pull '{display_name}'", file=sys.stderr)
+                                logger.error(f"[RangerReverseSync] Failed to pull '{display_name}'")
                             continue
 
                         remote_path = item.get("_data")
                         if not remote_path:
                             continue
 
-                        print(f"Pulling: {display_name} -> {local_dir}/", file=sys.stderr)
+                        logger.info(f"[RangerReverseSync] Pulling: {display_name} -> {local_dir}/")
                         cmd = ["adb", "-s", device_serial, "pull", remote_path, os.path.join(local_dir, display_name)]
                         try:
                             res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                            print(res.stdout.strip(), file=sys.stderr)
+                            logger.debug(f"[RangerReverseSync] {res.stdout.strip()}")
                             pulled_list.append(item)
                         except subprocess.CalledProcessError as e:
-                            print(f"[ERROR] Failed to pull '{remote_path}': {e.stderr or e.stdout}", file=sys.stderr)
+                            logger.error(f"[RangerReverseSync] Failed to pull '{remote_path}': {e.stderr or e.stdout}")
 
                     # Only remove items that were actually pulled successfully.
                     pulled_paths = set(item.get("_data") for item in pulled_list)

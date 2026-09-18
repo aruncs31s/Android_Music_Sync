@@ -6,7 +6,6 @@ Queries songs present on connected ADB device, compares with local music folder 
 identifies songs on the device that do not exist locally, and pulls them via ADB.
 """
 import os
-import sys
 import subprocess
 import re
 from typing import List, Dict, Any, Tuple, Optional
@@ -18,6 +17,8 @@ import fuzzy_matcher
 import redis_cache
 import ranger_reverse_sync_tui
 import hide_list_db
+from utils import get_logger
+logger = get_logger()
 
 
 def normalize_string(s: str) -> str:
@@ -109,21 +110,21 @@ def run_reverse_sync_workflow(
     6. If interactive (-i), launch Ranger-style Dual-Pane Reverse Sync TUI (with 'h' key SQLite hiding).
     7. Else, prompt and pull missing songs from device to local_dir.
     """
-    print(f"\n======================================================================", file=sys.stderr)
-    print(f"               REVERSE SYNCHRONIZER (ADB -> Local)                   ", file=sys.stderr)
-    print(f"======================================================================", file=sys.stderr)
-    print(f" Destination Local Folder : {os.path.abspath(local_dir)}", file=sys.stderr)
+    logger.info("[ReverseSync] ======================================================================")
+    logger.info("[ReverseSync]                REVERSE SYNCHRONIZER (ADB -> Local)")
+    logger.info("[ReverseSync] ======================================================================")
+    logger.info(f"[ReverseSync] Destination: {os.path.abspath(local_dir)}")
 
     os.makedirs(local_dir, exist_ok=True)
 
     try:
         devices = adb_manager.list_adb_devices()
     except Exception as e:
-        print(f"\n[ERROR] Could not list ADB devices: {e}", file=sys.stderr)
+        logger.error(f"[ReverseSync] Could not list ADB devices: {e}")
         return
 
     if not devices:
-        print("\n[ERROR] No ADB devices connected. Please connect an Android device.", file=sys.stderr)
+        logger.error("[ReverseSync] No ADB devices connected. Please connect an Android device.")
         return
 
     target_device = None
@@ -136,32 +137,32 @@ def run_reverse_sync_workflow(
         target_device = devices[0]
 
     serial = target_device["serial"]
-    print(f" Source ADB Device        : {target_device['description']}", file=sys.stderr)
-    print(f"======================================================================\n", file=sys.stderr)
+    logger.info(f"[ReverseSync] Source device: {target_device['description']}")
+    logger.info("[ReverseSync] ======================================================================")
 
     # Step 1: Query device songs (cached)
-    print(f"Querying music library on ADB device [{serial}]...", file=sys.stderr)
+    logger.info(f"[ReverseSync] Querying music library on ADB device [{serial}]...")
     try:
         raw_songs = adb_manager.query_songs_from_device(serial, redis_cfg=redis_cfg, refresh_cache=refresh_cache)
-        print(raw_songs)
+        logger.debug(f"[ReverseSync] Raw ADB output ({len(raw_songs)} chars)")
         device_songs = song_parser.parse_songs(raw_songs)
     except Exception as e:
-        print(f"[ERROR] Failed to query device songs: {e}", file=sys.stderr)
+        logger.error(f"[ReverseSync] Failed to query device songs: {e}")
         return
 
-    print(f"Found {len(device_songs)} songs on ADB device.", file=sys.stderr)
+    logger.info(f"[ReverseSync] Found {len(device_songs)} songs on ADB device.")
 
     # Step 2: Get local files (cached)
-    print(f"Scanning local music folder '{local_dir}'...", file=sys.stderr)
+    logger.info(f"[ReverseSync] Scanning local music folder '{local_dir}'...")
     local_files = get_local_music_files(local_dir, audio_extensions, redis_cfg=redis_cfg, refresh_cache=refresh_cache)
-    print(f"Found {len(local_files)} local audio files.", file=sys.stderr)
+    logger.info(f"[ReverseSync] Found {len(local_files)} local audio files.")
 
     # Step 3: Compare device vs local (with SQLite hide list filtering)
     already_local, missing_locally = compare_device_with_local(device_songs, local_files, show_hidden=show_hidden)
 
     # Step 4: Check if Interactive Ranger TUI (-i) requested
     if interactive:
-        print("\n[ReverseSync] Launching Ranger-Style Interactive Reverse Sync TUI (-i)...", file=sys.stderr)
+        logger.info("[ReverseSync] Launching Ranger-Style Interactive Reverse Sync TUI...")
         res = ranger_reverse_sync_tui.run_ranger_reverse_sync_tui(
             missing_songs=missing_locally,
             local_files=local_files,
@@ -169,60 +170,50 @@ def run_reverse_sync_workflow(
             local_dir=local_dir,
             redis_cfg=redis_cfg
         )
-        print(f"\n[ReverseSync] Ranger Reverse Sync session finished. Pulled {len(res['pulled'])} files, Hidden {len(res.get('hidden', []))} files.", file=sys.stderr)
+        logger.info(f"[ReverseSync] Session finished. Pulled {len(res['pulled'])} files, hidden {len(res.get('hidden', []))} files.")
         return
 
     # Step 5: Non-interactive display & CLI execution
-    print(f"\n----------------------------------------------------------------------", file=sys.stderr)
-    print(f" [SECTION 1] Already Present Locally (Skipped - {len(already_local)} tracks):", file=sys.stderr)
-    print(f"----------------------------------------------------------------------", file=sys.stderr)
-    if not already_local:
-        print("  (None found)", file=sys.stderr)
-    else:
+    logger.info("[ReverseSync] ----------------------------------------------------------------------")
+    logger.info(f"[ReverseSync] Already present locally: {len(already_local)} track(s) (skipped)")
+    if already_local:
         for idx, song in enumerate(already_local[:15], 1):
             t = song.get("title") or song.get("_display_name") or "Unknown"
             a = song.get("artist") or "Unknown"
-            print(f"  {idx:3d}. {t} - {a}", file=sys.stderr)
+            logger.debug(f"[ReverseSync]   Already local: {t} - {a}")
         if len(already_local) > 15:
-            print(f"  ... and {len(already_local) - 15} more tracks already present locally.", file=sys.stderr)
+            logger.debug(f"[ReverseSync]   ... and {len(already_local) - 15} more already present locally")
 
-    print(f"\n----------------------------------------------------------------------", file=sys.stderr)
-    print(f" [SECTION 2] Missing Locally (To Pull / Download from Device - {len(missing_locally)} tracks):", file=sys.stderr)
-    print(f"----------------------------------------------------------------------", file=sys.stderr)
+    logger.info("[ReverseSync] ----------------------------------------------------------------------")
+    logger.info(f"[ReverseSync] Missing locally: {len(missing_locally)} track(s) to pull")
     if not missing_locally:
-        print("  (No missing files! All songs on ADB device already exist locally.)", file=sys.stderr)
-        print(f"======================================================================\n", file=sys.stderr)
+        logger.info("[ReverseSync] No missing files — all device songs already exist locally.")
         return
 
     for idx, song in enumerate(missing_locally[:30], 1):
         t = song.get("title") or song.get("_display_name") or "Unknown"
         a = song.get("artist") or "Unknown"
-        p = song.get("_data") or ""
-        print(f"  {idx:3d}. {t} - {a}", file=sys.stderr)
-        if p:
-            print(f"       Remote: {p}", file=sys.stderr)
+        logger.debug(f"[ReverseSync]   To pull [{idx}]: {t} - {a}")
     if len(missing_locally) > 30:
-        print(f"  ... and {len(missing_locally) - 30} more tracks to pull.", file=sys.stderr)
-
-    print(f"======================================================================\n", file=sys.stderr)
+        logger.debug(f"[ReverseSync]   ... and {len(missing_locally) - 30} more tracks to pull")
 
     should_pull = auto_confirm
     if not should_pull:
-        if sys.stdin.isatty() or os.isatty(0):
+        if os.isatty(0):
             try:
                 ans = input(f"Proceed to pull {len(missing_locally)} file(s) from ADB device to '{local_dir}'? [Y/n]: ").strip().lower()
                 should_pull = ans in ("", "y", "yes")
             except (KeyboardInterrupt, EOFError):
                 should_pull = False
         else:
-            print("Non-interactive mode: Run with --yes or -y to auto-confirm reverse sync.", file=sys.stderr)
+            logger.info("[ReverseSync] Non-interactive mode: run with --yes or -y to auto-confirm.")
             return
 
     if not should_pull:
-        print("Reverse sync cancelled by user.", file=sys.stderr)
+        logger.info("[ReverseSync] Reverse sync cancelled by user.")
         return
 
-    print(f"\nPulling {len(missing_locally)} file(s) from ADB device to '{local_dir}'...", file=sys.stderr)
+    logger.info(f"[ReverseSync] Pulling {len(missing_locally)} file(s) from ADB device to '{local_dir}'...")
     success_count = 0
 
     for idx, song in enumerate(missing_locally, 1):
@@ -233,16 +224,15 @@ def run_reverse_sync_workflow(
             continue
 
         percent = (idx / len(missing_locally)) * 100
-        print(f"\n[{idx}/{len(missing_locally)} - {percent:.1f}%] Pulling: {display_name}", file=sys.stderr)
+        logger.info(f"[ReverseSync] [{idx}/{len(missing_locally)} {percent:.1f}%] Pulling: {display_name}")
 
         cmd = ["adb", "-s", serial, "pull", remote_path, os.path.join(local_dir, display_name)]
         try:
             res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-            print(res.stdout.strip(), file=sys.stderr)
+            logger.debug(f"[ReverseSync] {res.stdout.strip()}")
             success_count += 1
         except subprocess.CalledProcessError as e:
-            print(f"[ERROR] Failed to pull file '{remote_path}': {e.stderr or e.stdout}", file=sys.stderr)
+            logger.error(f"[ReverseSync] Failed to pull '{remote_path}': {e.stderr or e.stdout}")
 
-    print(f"\n======================================================================", file=sys.stderr)
-    print(f" Reverse Sync Complete: {success_count}/{len(missing_locally)} files pulled successfully.", file=sys.stderr)
-    print(f"======================================================================\n", file=sys.stderr)
+    logger.info("[ReverseSync] ======================================================================")
+    logger.info(f"[ReverseSync] Complete: {success_count}/{len(missing_locally)} files pulled successfully.")

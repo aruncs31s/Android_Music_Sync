@@ -46,6 +46,7 @@ def generate_audio_fingerprint(
         return None
 
     try:
+        logger.debug(f"[AudioFingerprint] Generating fingerprint for {filepath} with length={length}s and timeout={timeout}s")
         cmd = ["fpcalc", "-json", "-length", str(length), filepath]
         res = subprocess.run(
             cmd,
@@ -54,7 +55,7 @@ def generate_audio_fingerprint(
             text=True,
             timeout=timeout,
         )
-
+        logger.debug(f"[AudioFingerprint] fpcalc stdout: {res.stdout.strip()}")
         if res.returncode == 0 and res.stdout.strip():
             data = json.loads(res.stdout)
             fingerprint = data.get("fingerprint")
@@ -86,3 +87,6 @@ def are_fingerprints_equal(fp1: Optional[str], fp2: Optional[str]) -> bool:
     if not fp1 or not fp2:
         return False
     return fp1.strip() == fp2.strip()
+
+if __name__ == "__main__":
+    logger.info(f"fpcalc available: {is_fpcalc_available()}")

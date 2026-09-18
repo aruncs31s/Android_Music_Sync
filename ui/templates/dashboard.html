@@ -208,14 +208,25 @@
             <select id="library-device-select" class="search-bar" style="max-width: 260px; font-weight: 600;" onchange="onLibraryDeviceSelectChange(this.value)">
               <option value="local">Local Music Folders</option>
             </select>
-            <button class="btn btn-secondary" onclick="refreshCurrentDeviceLibrary()" title="Refresh Library">
+            <button class="btn btn-secondary" id="btn-refresh-library" onclick="refreshCurrentDeviceLibrary()" title="Scan / Refresh Library">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              Refresh
+              Scan / Refresh
             </button>
             <button class="btn btn-secondary" onclick="switchTab('tab-overview')" title="Back to Devices">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Back to Devices
             </button>
           </div>
+        </div>
+
+        <!-- Live Library Scan Terminal -->
+        <div id="lib-terminal" class="dup-terminal" style="display: none; margin-bottom: 1.25rem;">
+          <div class="dup-terminal-header">
+            <span class="dup-terminal-dot"></span>
+            <span class="dup-terminal-dot"></span>
+            <span class="dup-terminal-dot"></span>
+            <span style="margin-left: 0.5rem; font-size: 0.72rem; color: var(--text-muted);">library-scanner — live scan</span>
+          </div>
+          <div id="lib-terminal-log" class="dup-terminal-log"></div>
         </div>
 
         <!-- Search & Filter Controls -->
@@ -292,9 +303,9 @@
           </div>
           <div class="panel-actions" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
             <input type="text" id="duplicates-search" class="search-bar" placeholder="Search duplicate clusters or files..." oninput="onDuplicatesSearchInput()">
-            <button class="btn btn-secondary" onclick="loadDuplicates()">
+            <button class="btn btn-secondary" id="btn-rescan-duplicates" onclick="streamDuplicates()">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
-              Re-scan Duplicates
+              Analyze
             </button>
           </div>
         </div>
@@ -343,8 +354,22 @@
           <span id="dup-fingerprint-warning-text"></span>
         </div>
 
+        <!-- Live Analysis Terminal Window (shown while SSE stream is active) -->
+        <div id="dup-terminal" class="dup-terminal" style="display: none;">
+          <div class="dup-terminal-header">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <span class="dup-terminal-dot"></span>
+              <span class="dup-terminal-dot" style="background: var(--accent-yellow);"></span>
+              <span class="dup-terminal-dot"></span>
+              <span id="dup-terminal-title" style="margin-left: 0.5rem; font-size: 0.78rem; opacity: 0.75;">duplicate-scanner</span>
+            </div>
+            <span id="dup-terminal-counter" style="font-size: 0.75rem; opacity: 0.65;"></span>
+          </div>
+          <div id="dup-terminal-log" class="dup-terminal-log"></div>
+        </div>
+
         <div id="duplicates-container" class="table-responsive">
-          <p class="text-muted">Analyzing duplicate audio tracks...</p>
+          <p class="text-muted">No duplicate scan results yet. Click <strong>Analyze</strong> above to scan your music library.</p>
         </div>
 
         <!-- Duplicates Pagination Bar -->

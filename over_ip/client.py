@@ -11,6 +11,8 @@ from typing import List, Dict, Any, Optional
 
 import over_ip.db as ip_db
 import redis_cache
+from utils import get_logger
+logger = get_logger()
 
 
 def get_base_url(ip_address: str, port: int = 5000) -> str:
@@ -112,10 +114,10 @@ def get_remote_songs(
                 redis_cache.set_cache(redis_cfg, cache_key, json.dumps(songs))
             return songs
         else:
-            print(f"[Over-IP Client] Failed to fetch songs from {ip_address}: HTTP {resp.status_code}", file=sys.stderr)
+            logger.error(f"[Over-IP Client] Failed to fetch songs from {ip_address}: HTTP {resp.status_code}")
             return []
     except Exception as e:
-        print(f"[Over-IP Client] Error connecting to {ip_address}: {e}", file=sys.stderr)
+        logger.error(f"[Over-IP Client] Error connecting to {ip_address}: {e}")
         return []
 
 
@@ -141,13 +143,13 @@ def download_remote_song(
                 for chunk in resp.iter_content(chunk_size=65536):
                     if chunk:
                         f.write(chunk)
-            print(f"[Over-IP Download] Successfully downloaded: {os.path.basename(dest_filepath)}", file=sys.stderr)
+            logger.info(f"[Over-IP Download] Successfully downloaded: {os.path.basename(dest_filepath)}")
             return True
         else:
-            print(f"[Over-IP Download] HTTP Error {resp.status_code} downloading {remote_filepath}", file=sys.stderr)
+            logger.error(f"[Over-IP Download] HTTP Error {resp.status_code} downloading {remote_filepath}")
             return False
     except Exception as e:
-        print(f"[Over-IP Download] Error downloading file over HTTP: {e}", file=sys.stderr)
+        logger.error(f"[Over-IP Download] Error downloading file over HTTP: {e}")
         return False
 
 
@@ -161,7 +163,7 @@ def upload_song_to_peer(
     Upload a local audio file to remote peer over HTTP POST endpoint.
     """
     if not os.path.exists(local_filepath):
-        print(f"[Over-IP Upload] Local file does not exist: {local_filepath}", file=sys.stderr)
+        logger.error(f"[Over-IP Upload] Local file does not exist: {local_filepath}")
         return False
 
     base_url = get_base_url(ip_address, port)
@@ -173,13 +175,13 @@ def upload_song_to_peer(
             resp = requests.post(url, files=files, timeout=timeout)
 
         if resp.status_code == 200:
-            print(f"[Over-IP Upload] Successfully uploaded: {os.path.basename(local_filepath)}", file=sys.stderr)
+            logger.info(f"[Over-IP Upload] Successfully uploaded: {os.path.basename(local_filepath)}")
             return True
         else:
-            print(f"[Over-IP Upload] HTTP Error {resp.status_code} uploading file", file=sys.stderr)
+            logger.error(f"[Over-IP Upload] HTTP Error {resp.status_code} uploading file")
             return False
     except Exception as e:
-        print(f"[Over-IP Upload] Error uploading file over HTTP: {e}", file=sys.stderr)
+        logger.error(f"[Over-IP Upload] Error uploading file over HTTP: {e}")
         return False
 
 

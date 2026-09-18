@@ -14,6 +14,8 @@ import over_ip.db as ip_db
 import over_ip.client as ip_client
 import over_ip.song_scanner as song_scanner
 import ranger_reverse_sync_tui
+from utils import get_logger
+logger = get_logger()
 
 
 def select_or_input_ip_host(
@@ -31,19 +33,19 @@ def select_or_input_ip_host(
     stored_hosts = ip_db.get_stored_ip_hosts()
 
     if not stored_hosts and not target_ip:
-        print("\n=== Over-IP HTTP Synchronization ===")
+        logger.info("=== Over-IP HTTP Synchronization ===")
         try:
             user_ip = input("Enter remote device IP address (e.g. 192.168.1.50): ").strip()
             if not user_ip:
-                print("No IP address entered. Exiting.", file=sys.stderr)
+                logger.info("No IP address entered. Exiting.")
                 return None
             ip_db.add_ip_host(user_ip)
             stored_hosts = ip_db.get_stored_ip_hosts()
         except (KeyboardInterrupt, EOFError):
-            print("\nAborted.", file=sys.stderr)
+            logger.info("Aborted.")
             return None
 
-    print("\n[Over-IP] Checking online status of saved IP hosts...", file=sys.stderr)
+    logger.info("[Over-IP] Checking online status of saved IP hosts...")
     online_hosts = []
 
     for idx, host in enumerate(stored_hosts, 1):
@@ -55,7 +57,7 @@ def select_or_input_ip_host(
         host_name = ping_res.get("hostname", "Unknown")
         song_cnt = ping_res.get("song_count", 0)
 
-        print(f"  [{idx}] {ip_addr}:{port} | Host: {host_name} | Status: [{status_str}] ({song_cnt} songs)")
+        logger.info(f"  [{idx}] {ip_addr}:{port} | Host: {host_name} | Status: [{status_str}] ({song_cnt} songs)")
 
         if ping_res["online"]:
             host_info = dict(host)
@@ -63,7 +65,7 @@ def select_or_input_ip_host(
             online_hosts.append(host_info)
 
     if not online_hosts:
-        print("\nNo online Over-IP peer hosts found. Make sure Flask API server is running on target (`python3 app.py --serve-ip`).", file=sys.stderr)
+        logger.warning("No online Over-IP peer hosts found. Make sure Flask API server is running on target (`python3 app.py --serve-ip`).")
         try:
             retry_ip = input("Enter a new IP address to add & try (or press Enter to exit): ").strip()
             if retry_ip:
@@ -75,12 +77,12 @@ def select_or_input_ip_host(
 
     if len(online_hosts) == 1:
         selected = online_hosts[0]
-        print(f"\nConnected to online peer host: {selected['ip']}:{selected['port']} ({selected['hostname']})", file=sys.stderr)
+        logger.info(f"Connected to online peer host: {selected['ip']}:{selected['port']} ({selected['hostname']})")
         return selected
 
-    print("\nMultiple online hosts detected:")
+    logger.info("Multiple online hosts detected:")
     for idx, h in enumerate(online_hosts, 1):
-        print(f"  [{idx}] {h['ip']}:{h['port']} ({h['hostname']}) - {h['song_count']} songs")
+        logger.info(f"  [{idx}] {h['ip']}:{h['port']} ({h['hostname']}) - {h['song_count']} songs")
 
     try:
         ans = input(f"Select host number [1-{len(online_hosts)}] (default 1): ").strip()
@@ -122,14 +124,14 @@ def run_over_ip_workflow(
     device_serial = f"IP:{peer_ip}"
 
     # Step 2: Acquire songs from remote Flask server (sorted by mtime)
-    print(f"\nAcquiring song library from {peer_ip}:{peer_port}...", file=sys.stderr)
+    logger.info(f"[Over-IP] Acquiring song library from {peer_ip}:{peer_port}...")
     remote_songs = ip_client.get_remote_songs(peer_ip, port=peer_port, redis_cfg=redis_cfg, refresh=refresh_cache)
 
     if not remote_songs:
-        print(f"No songs returned from peer host {peer_ip}:{peer_port}.", file=sys.stderr)
+        logger.info(f"[Over-IP] No songs returned from peer host {peer_ip}:{peer_port}.")
         sys.exit(0)
 
-    print(f"Fetched {len(remote_songs)} songs from {peer_ip} (sorted by modification time).", file=sys.stderr)
+    logger.info(f"[Over-IP] Fetched {len(remote_songs)} songs from {peer_ip} (sorted by modification time).")
 
     # Step 3: Scan local folders & compare
     local_songs = song_scanner.scan_songs_from_paths(local_folders, audio_exts)
@@ -145,10 +147,10 @@ def run_over_ip_workflow(
         if fn.lower() not in local_filename_set and rel_path not in hidden_paths_set:
             missing_from_local.append(s)
 
-    print(f"Found {len(missing_from_local)} missing songs on local system available on peer {peer_ip}.", file=sys.stderr)
+    logger.info(f"[Over-IP] Found {len(missing_from_local)} missing songs on local system available on peer {peer_ip}.")
 
     if not missing_from_local:
-        print("Local library is fully in sync with peer host!", file=sys.stderr)
+        logger.info("[Over-IP] Local library is fully in sync with peer host!")
         sys.exit(0)
 
     # Build local file index in the schema expected by the Ranger TUI (title_no_ext/path/filename)
@@ -186,8 +188,8 @@ def run_over_ip_workflow(
 
     pulled = result.get("pulled", []) if isinstance(result, dict) else list(result or [])
     if not pulled:
-        print("No songs selected for Over-IP sync. Exiting.", file=sys.stderr)
+        logger.info("[Over-IP] No songs selected for Over-IP sync. Exiting.")
         sys.exit(0)
 
     # Step 5: Report results (transfers already performed by the TUI callback)
-    print(f"\n=== Over-IP HTTP Sync Completed: {len(pulled)}/{len(missing_from_local)} songs downloaded to {target_folder} ===")
+    logger.info(f"[Over-IP] Sync Completed: {len(pulled)}/{len(missing_from_local)} songs downloaded to {target_folder}")

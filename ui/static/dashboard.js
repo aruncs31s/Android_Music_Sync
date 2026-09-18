@@ -60,6 +60,7 @@ let filteredClusters = [];
 let dupPage = 1;
 const dupPageSize = 5;
 let useAudioFingerprinting = localStorage.getItem('antigravity_use_audio_fingerprint') === 'true';
+let dupEventSource = null; // active SSE connection for live analysis
 
 // Global Audio Player & Playlist State
 let currentTrackPath = null;
@@ -223,7 +224,110 @@ function onLibraryDeviceSelectChange(deviceId) {
 }
 
 function refreshCurrentDeviceLibrary() {
-  loadDeviceSongs(currentDeviceId, true);
+  streamDeviceSongs(currentDeviceId);
+}
+
+let libEventSource = null;
+
+function streamDeviceSongs(deviceId = 'local') {
+  currentDeviceId = deviceId;
+  if (libEventSource) {
+    libEventSource.close();
+    libEventSource = null;
+  }
+
+  const btn = document.getElementById('btn-refresh-library');
+  const terminal = document.getElementById('lib-terminal');
+  const termLog = document.getElementById('lib-terminal-log');
+  const tbody = document.getElementById('songs-tbody');
+
+  if (terminal) terminal.style.display = 'block';
+  if (termLog) termLog.innerHTML = '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scanning…`;
+  }
+  if (tbody) {
+    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Scanning music library…</td></tr>';
+  }
+
+  const url = `/api/devices/${encodeURIComponent(deviceId)}/songs/stream`;
+  const evtSource = new EventSource(url);
+  libEventSource = evtSource;
+
+  function appendLibLog(msg) {
+    if (!termLog) return;
+    const line = document.createElement('span');
+    line.className = 'dup-terminal-line ' + _dupTerminalLineClass(msg);
+    line.textContent = msg;
+    termLog.appendChild(line);
+    termLog.appendChild(document.createTextNode('\n'));
+    termLog.scrollTop = termLog.scrollHeight;
+  }
+
+  evtSource.onmessage = (e) => {
+    let payload;
+    try { payload = JSON.parse(e.data); } catch { return; }
+
+    if (payload.type === 'log') {
+      appendLibLog(payload.msg);
+    } else if (payload.type === 'done') {
+      appendLibLog('[DONE] Library scan complete!');
+      evtSource.close();
+      libEventSource = null;
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scan / Refresh`;
+      }
+
+      const data = payload.result || {};
+      currentDeviceName = data.device_name || currentDeviceId;
+      currentDeviceType = data.device_type || 'Storage';
+      allSongs = data.songs || [];
+
+      const titleEl = document.getElementById('library-title-text');
+      if (titleEl) titleEl.textContent = currentDeviceName;
+
+      const badgeEl = document.getElementById('library-device-badge');
+      if (badgeEl) badgeEl.textContent = `${currentDeviceType} (${allSongs.length} songs)`;
+
+      const selectEl = document.getElementById('library-device-select');
+      if (selectEl) selectEl.value = currentDeviceId;
+
+      applyLibraryFilterAndSort();
+
+      // Refresh overview counters as well
+      loadDashboardStats();
+
+      // Collapse terminal after 2.5 seconds
+      setTimeout(() => {
+        if (terminal) terminal.style.display = 'none';
+      }, 2500);
+    } else if (payload.type === 'error') {
+      appendLibLog('[ERROR] ' + (payload.msg || 'Scan failed.'));
+      evtSource.close();
+      libEventSource = null;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scan / Refresh`;
+      }
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="color: var(--status-offline) !important;">Scan failed.</td></tr>';
+      }
+    }
+  };
+
+  evtSource.onerror = () => {
+    if (evtSource.readyState === EventSource.CLOSED) return;
+    appendLibLog('[ERROR] Connection to server lost.');
+    evtSource.close();
+    libEventSource = null;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scan / Refresh`;
+    }
+  };
 }
 
 // --- MUSIC LIBRARY SEARCH, SORTING & PAGINATION ---
@@ -469,10 +573,142 @@ function onToggleFingerprintMatching(checked) {
   localStorage.setItem('antigravity_use_audio_fingerprint', useAudioFingerprinting);
   const container = document.getElementById('duplicates-container');
   if (container) {
-    container.innerHTML = `<p class="text-muted" style="display: flex; align-items: center; gap: 0.5rem; padding: 1rem 0;">${SVG_SPARKLES} Analyzing duplicates with ${useAudioFingerprinting ? 'acoustic audio fingerprinting' : 'tag & filename matching'}...</p>`;
+    container.innerHTML = `<p class="text-muted" style="display: flex; align-items: center; gap: 0.5rem; padding: 1rem 0;">${SVG_SPARKLES} Loading duplicates...</p>`;
   }
   loadDuplicates(true);
 }
+
+// --- Live SSE Duplicate Analysis Terminal ---
+
+function _dupTerminalLineClass(msg) {
+  const tag = msg.slice(0, 7).toUpperCase();
+  if (tag.startsWith('[CACHE]')) return 'log-cache';
+  if (tag.startsWith('[FP]'))    return 'log-fp';
+  if (tag.startsWith('[SCAN]'))  return 'log-scan';
+  if (tag.startsWith('[TAG]'))   return 'log-tag';
+  if (tag.startsWith('[MATCH]')) return 'log-match';
+  if (tag.startsWith('[SKIP]'))  return 'log-skip';
+  if (tag.startsWith('[FAIL]'))  return 'log-fail';
+  if (tag.startsWith('[WARN]'))  return 'log-warn';
+  if (tag.startsWith('[START]')) return 'log-start';
+  if (tag.startsWith('[INFO]'))  return 'log-info';
+  if (tag.startsWith('[DONE]'))  return 'log-done';
+  if (tag.startsWith('[ERROR]')) return 'log-error';
+  return '';
+}
+
+function _dupTerminalAppend(msg) {
+  const log = document.getElementById('dup-terminal-log');
+  if (!log) return;
+  const line = document.createElement('span');
+  line.className = 'dup-terminal-line ' + _dupTerminalLineClass(msg);
+  line.textContent = msg;
+  log.appendChild(line);
+  log.appendChild(document.createTextNode('\n'));
+  // auto-scroll to bottom
+  log.scrollTop = log.scrollHeight;
+}
+
+function streamDuplicates() {
+  // Close any existing SSE connection
+  if (dupEventSource) {
+    dupEventSource.close();
+    dupEventSource = null;
+  }
+
+  const btn = document.getElementById('btn-rescan-duplicates');
+  const terminal = document.getElementById('dup-terminal');
+  const termLog = document.getElementById('dup-terminal-log');
+  const container = document.getElementById('duplicates-container');
+
+  // Show terminal, clear previous log
+  if (terminal) terminal.style.display = 'block';
+  if (termLog) termLog.innerHTML = '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Analyzing…'; }
+  if (container) container.innerHTML = '';
+
+  const params = new URLSearchParams();
+  params.set('fingerprint', useAudioFingerprinting ? 'true' : 'false');
+
+  const evtSource = new EventSource(`/api/duplicates/stream?${params.toString()}`);
+  dupEventSource = evtSource;
+
+  let logCount = 0;
+  const counter = document.getElementById('dup-terminal-counter');
+
+  evtSource.onmessage = (e) => {
+    let payload;
+    try { payload = JSON.parse(e.data); } catch { return; }
+
+    if (payload.type === 'log') {
+      _dupTerminalAppend(payload.msg);
+      logCount++;
+      if (counter) counter.textContent = `${logCount} lines`;
+
+    } else if (payload.type === 'done') {
+      evtSource.close();
+      dupEventSource = null;
+      _dupTerminalAppend(payload.msg || '');
+
+      // Brief pause then collapse terminal and render results
+      setTimeout(() => {
+        if (terminal) terminal.style.display = 'none';
+      }, 1800);
+
+      // Populate clusters and render
+      const data = payload.result || {};
+      allClusters = data.clusters || [];
+      filteredClusters = [...allClusters];
+      dupPage = 1;
+
+      const warnEl = document.getElementById('dup-fingerprint-warning');
+      const warnText = document.getElementById('dup-fingerprint-warning-text');
+      if (warnEl && warnText) {
+        if (data.warning) {
+          warnText.textContent = data.warning;
+          warnEl.style.display = 'flex';
+        } else {
+          warnEl.style.display = 'none';
+        }
+      }
+
+      const validPaths = new Set();
+      allClusters.forEach(c => (c.songs || []).forEach(s => validPaths.add(s.filepath)));
+      for (const p of selectedDuplicatePaths) {
+        if (!validPaths.has(p)) selectedDuplicatePaths.delete(p);
+      }
+
+      updateDuplicatesSelectionUI();
+      renderDuplicatesPage();
+
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Analyze`;
+      }
+
+    } else if (payload.type === 'error') {
+      _dupTerminalAppend(`[ERROR] ${payload.msg}`);
+      evtSource.close();
+      dupEventSource = null;
+      if (btn) {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Analyze`;
+      }
+    }
+  };
+
+  evtSource.onerror = () => {
+    if (evtSource.readyState === EventSource.CLOSED) return;
+    _dupTerminalAppend('[ERROR] Connection to server lost.');
+    evtSource.close();
+    dupEventSource = null;
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Analyze`;
+    }
+  };
+}
+
 
 async function loadDuplicates(forceRefresh = false) {
   const container = document.getElementById('duplicates-container');

@@ -22,6 +22,8 @@ import adb_pusher
 import fzf_tui
 import audio_metadata
 import hide_list_db
+from utils import get_logger
+logger = get_logger()
 
 
 def run_ranger_sync_tui(
@@ -36,7 +38,7 @@ def run_ranger_sync_tui(
     Returns summary dict of synced, skipped, and hidden files.
     """
     if not to_sync_files:
-        print("[RangerSync] No files to sync.", file=sys.stderr)
+        logger.info("[RangerSync] No files to sync.")
         return {"synced": [], "skipped": [], "hidden": []}
 
     def _tui(stdscr):
@@ -239,19 +241,19 @@ def run_ranger_sync_tui(
                     curses.def_prog_mode()
                     curses.endwin()
 
-                    print(f"\n[RangerSync] Syncing {len(items_to_push)} file(s) to device...", file=sys.stderr)
+                    logger.info(f"[RangerSync] Syncing {len(items_to_push)} file(s) to device...")
                     synced_this_batch = []
                     for item in items_to_push:
                         try:
                             pushed = adb_pusher.push_song_to_device(device_serial, item["path"], remote_dir, redis_cfg=redis_cfg)
                         except Exception as e:
                             pushed = False
-                            print(f"[ERROR] Failed to push '{item.get('filename')}': {e}", file=sys.stderr)
+                            logger.error(f"[RangerSync] Failed to push '{item.get('filename')}': {e}")
                         if pushed:
                             synced_list.append(item)
                             synced_this_batch.append(item)
                         else:
-                            print(f"[ERROR] Failed to push '{item.get('filename')}'", file=sys.stderr)
+                            logger.error(f"[RangerSync] Failed to push '{item.get('filename')}'")
 
                     # Only remove files that were actually pushed successfully.
                     pushed_paths = set(item["path"] for item in synced_this_batch)

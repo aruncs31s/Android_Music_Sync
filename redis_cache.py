@@ -3,10 +3,12 @@ Redis caching module with resilient fallback and repository support.
 Caches query outputs, JSON data structures, and local folder file indexes in Redis.
 If Redis is disabled in config.json or offline, logs a warning and gracefully returns None for fallback.
 """
-import sys
 import json
 import os
 from typing import Optional, Dict, Any, List
+
+from utils import get_logger
+logger = get_logger()
 
 REDIS_AVAILABLE = False
 try:
@@ -29,7 +31,7 @@ def _get_redis_client(redis_cfg: Optional[Dict[str, Any]]):
 
     if not REDIS_AVAILABLE:
         if not _WARNED_OFFLINE:
-            print("[RedisCache] Warning: Redis is enabled in config.json, but 'redis' package is not installed. Falling back to DB/disk.", file=sys.stderr)
+            logger.warning("[RedisCache] Redis is enabled in config.json but 'redis' package is not installed. Falling back to DB/disk.")
             _WARNED_OFFLINE = True
         return None
 
@@ -45,7 +47,7 @@ def _get_redis_client(redis_cfg: Optional[Dict[str, Any]]):
         return r
     except Exception as e:
         if not _WARNED_OFFLINE:
-            print(f"[RedisCache] Warning: Could not connect to Redis at {host}:{port} ({e}). Falling back to DB/disk.", file=sys.stderr)
+            logger.warning(f"[RedisCache] Could not connect to Redis at {host}:{port} ({e}). Falling back to DB/disk.")
             _WARNED_OFFLINE = True
         return None
 
@@ -60,10 +62,10 @@ def get_cached_songs(serial: str, redis_cfg: Optional[Dict[str, Any]]) -> Option
     try:
         cached_bytes = client.get(key)
         if cached_bytes:
-            print(f"[RedisCache] Hit! Retrieved cached songs for device [{serial}] from Redis.", file=sys.stderr)
+            logger.info(f"[RedisCache] Cache hit — songs for device [{serial}]")
             return cached_bytes.decode("utf-8", errors="replace")
     except Exception as e:
-        print(f"[RedisCache] Read error: {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] Read error: {e}")
 
     return None
 
@@ -79,9 +81,9 @@ def set_cached_songs(serial: str, raw_output: str, redis_cfg: Optional[Dict[str,
 
     try:
         client.setex(key, ttl, raw_output)
-        print(f"[RedisCache] Saved song query results for [{serial}] in Redis (TTL: {ttl}s).", file=sys.stderr)
+        logger.info(f"[RedisCache] Cached songs for [{serial}] (TTL: {ttl}s)")
     except Exception as e:
-        print(f"[RedisCache] Write error: {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] Write error: {e}")
 
 
 def invalidate_cache(serial: str, redis_cfg: Optional[Dict[str, Any]]):
@@ -93,9 +95,9 @@ def invalidate_cache(serial: str, redis_cfg: Optional[Dict[str, Any]]):
     key = f"adb_songs:{serial}"
     try:
         client.delete(key)
-        print(f"[RedisCache] Cleared cached songs for [{serial}].", file=sys.stderr)
+        logger.info(f"[RedisCache] Cleared cached songs for [{serial}]")
     except Exception as e:
-        print(f"[RedisCache] Delete error: {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] Delete error: {e}")
 
 
 def get_cached_local_index(local_dir: str, redis_cfg: Optional[Dict[str, Any]]) -> Optional[List[Dict[str, str]]]:
@@ -108,10 +110,10 @@ def get_cached_local_index(local_dir: str, redis_cfg: Optional[Dict[str, Any]]) 
     try:
         cached_bytes = client.get(key)
         if cached_bytes:
-            print(f"[RedisCache] Hit! Retrieved cached local file index for '{local_dir}' from Redis.", file=sys.stderr)
+            logger.info(f"[RedisCache] Cache hit — local index for '{local_dir}'")
             return json.loads(cached_bytes.decode("utf-8"))
     except Exception as e:
-        print(f"[RedisCache] Read local index error: {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] Read local index error: {e}")
 
     return None
 
@@ -128,9 +130,9 @@ def set_cached_local_index(local_dir: str, files_data: List[Dict[str, str]], red
     try:
         json_data = json.dumps(files_data)
         client.setex(key, ttl, json_data)
-        print(f"[RedisCache] Saved local file index for '{local_dir}' in Redis (TTL: {ttl}s).", file=sys.stderr)
+        logger.info(f"[RedisCache] Cached local file index for '{local_dir}' in Redis (TTL: {ttl}s)")
     except Exception as e:
-        print(f"[RedisCache] Write local index error: {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] Write local index error: {e}")
 
 
 def get_cache(redis_cfg: Optional[Dict[str, Any]], key: str) -> Optional[str]:
@@ -144,7 +146,7 @@ def get_cache(redis_cfg: Optional[Dict[str, Any]], key: str) -> Optional[str]:
         if val:
             return val.decode("utf-8", errors="replace")
     except Exception as e:
-        print(f"[RedisCache] get_cache error for '{key}': {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] get_cache error for '{key}': {e}")
     return None
 
 
@@ -160,7 +162,7 @@ def set_cache(redis_cfg: Optional[Dict[str, Any]], key: str, value: str, ttl_sec
     try:
         client.setex(key, ttl_seconds, value)
     except Exception as e:
-        print(f"[RedisCache] set_cache error for '{key}': {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] set_cache error for '{key}': {e}")
 
 
 def get_json(redis_cfg: Optional[Dict[str, Any]], key: str) -> Optional[Any]:
@@ -171,7 +173,7 @@ def get_json(redis_cfg: Optional[Dict[str, Any]], key: str) -> Optional[Any]:
     try:
         return json.loads(raw)
     except Exception as e:
-        print(f"[RedisCache] JSON decode error for '{key}': {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] JSON decode error for '{key}': {e}")
         return None
 
 
@@ -183,7 +185,7 @@ def set_json(redis_cfg: Optional[Dict[str, Any]], key: str, data: Any, ttl_secon
         raw = json.dumps(data)
         set_cache(redis_cfg, key, raw, ttl_seconds)
     except Exception as e:
-        print(f"[RedisCache] JSON encode error for '{key}': {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] JSON encode error for '{key}': {e}")
 
 
 def delete_cache(redis_cfg: Optional[Dict[str, Any]], key: str):
@@ -194,7 +196,7 @@ def delete_cache(redis_cfg: Optional[Dict[str, Any]], key: str):
     try:
         client.delete(key)
     except Exception as e:
-        print(f"[RedisCache] delete_cache error for '{key}': {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] delete_cache error for '{key}': {e}")
 
 
 def delete_cache_pattern(redis_cfg: Optional[Dict[str, Any]], pattern: str):
@@ -207,6 +209,6 @@ def delete_cache_pattern(redis_cfg: Optional[Dict[str, Any]], pattern: str):
         if keys:
             client.delete(*keys)
     except Exception as e:
-        print(f"[RedisCache] delete_cache_pattern error for '{pattern}': {e}", file=sys.stderr)
+        logger.error(f"[RedisCache] delete_cache_pattern error for '{pattern}': {e}")
 
 

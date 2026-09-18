@@ -15,6 +15,8 @@ from werkzeug.utils import secure_filename
 import config_manager
 import over_ip.song_scanner as song_scanner
 import redis_cache
+from utils import get_logger
+logger = get_logger()
 
 app = Flask(__name__)
 
@@ -165,6 +167,6 @@ def delete_song():
 
 def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False):
     """Start the Flask API server."""
-    print(f"[Over-IP Server] Starting Flask API server on http://{host}:{port}...", flush=True)
+    logger.info(f"[Over-IP Server] Starting Flask API server on http://{host}:{port}...")
     app.run(host=host, port=port, debug=debug)
 
