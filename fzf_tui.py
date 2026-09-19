@@ -3,12 +3,15 @@ Interactive curses-based terminal user interface (TUI) for:
 1. Device selection menu navigation.
 2. FZF-style live fuzzy song searching and interactive selection with technical audio specs.
 """
-import sys
-import os
+
 import curses
-from typing import List, Dict, Any, Optional
-import fuzzy_matcher
+import os
+import sys
+from typing import Any
+
 import audio_metadata
+import fuzzy_matcher
+
 
 def run_with_tty(func, *args, **kwargs):
     """
@@ -35,7 +38,7 @@ def run_with_tty(func, *args, **kwargs):
             tty_fd.close()
 
 
-def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]:
+def select_device_tui(devices: list[dict[str, str]]) -> dict[str, str] | None:
     """
     Interactive TUI menu for choosing an ADB device using arrow keys / Enter.
     """
@@ -45,14 +48,14 @@ def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]
         return devices[0]
 
     def _menu(stdscr):
-        curses.curs_set(0) # Hide cursor
+        curses.curs_set(0)  # Hide cursor
         stdscr.keypad(True)
         curses.start_color()
         curses.use_default_colors()
         current_row = 0
 
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN) # Highlight
-        curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK) # Header
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)  # Highlight
+        curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Header
 
         while True:
             stdscr.clear()
@@ -60,7 +63,7 @@ def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]
 
             title = " Select ADB Device (Use Up/Down arrows & Enter to select): "
             stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-            stdscr.addstr(0, 0, title[:width-1])
+            stdscr.addstr(0, 0, title[: width - 1])
             stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
             for idx, dev in enumerate(devices):
@@ -68,46 +71,51 @@ def select_device_tui(devices: List[Dict[str, str]]) -> Optional[Dict[str, str]]
                 if row_y >= height - 1:
                     break
 
-                text = f"  [{idx + 1}] {dev['serial']} - {dev['model']} ({dev['state']})  "
+                text = (
+                    f"  [{idx + 1}] {dev['serial']} - {dev['model']} ({dev['state']})  "
+                )
                 text = text.ljust(width - 2)
 
                 if idx == current_row:
                     stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
-                    stdscr.addstr(row_y, 1, text[:width-2])
+                    stdscr.addstr(row_y, 1, text[: width - 2])
                     stdscr.attroff(curses.color_pair(1) | curses.A_BOLD)
                 else:
-                    stdscr.addstr(row_y, 1, text[:width-2])
+                    stdscr.addstr(row_y, 1, text[: width - 2])
 
             stdscr.refresh()
 
             key = stdscr.getch()
-            if key in (curses.KEY_UP, ord('k')):
+            if key in (curses.KEY_UP, ord("k")):
                 current_row = (current_row - 1) % len(devices)
-            elif key in (curses.KEY_DOWN, ord('j')):
+            elif key in (curses.KEY_DOWN, ord("j")):
                 current_row = (current_row + 1) % len(devices)
-            elif key in (10, 13): # Enter
+            elif key in (10, 13):  # Enter
                 return devices[current_row]
-            elif key in (27, ord('q')): # ESC / q
+            elif key in (27, ord("q")):  # ESC / q
                 return None
 
     return run_with_tty(_menu)
 
 
-def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected Device") -> Optional[Dict[str, Any]]:
+def search_songs_tui(
+    songs: list[dict[str, Any]], device_info: str = "Connected Device"
+) -> dict[str, Any] | None:
     """
     Interactive fzf-style song search UI with live fuzzy filtering, counter, technical metadata, and preview.
     """
+
     def _search(stdscr):
-        curses.curs_set(1) # Show cursor for prompt
+        curses.curs_set(1)  # Show cursor for prompt
         stdscr.keypad(True)
 
         curses.start_color()
         curses.use_default_colors()
-        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)   # Selected row
-        curses.init_pair(2, curses.COLOR_YELLOW, -1)                # Header & prompt symbol
-        curses.init_pair(3, curses.COLOR_GREEN, -1)                 # Song title
-        curses.init_pair(4, curses.COLOR_CYAN, -1)                  # Artist
-        curses.init_pair(5, curses.COLOR_MAGENTA, -1)               # Specs / Details
+        curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)  # Selected row
+        curses.init_pair(2, curses.COLOR_YELLOW, -1)  # Header & prompt symbol
+        curses.init_pair(3, curses.COLOR_GREEN, -1)  # Song title
+        curses.init_pair(4, curses.COLOR_CYAN, -1)  # Artist
+        curses.init_pair(5, curses.COLOR_MAGENTA, -1)  # Specs / Details
 
         query = ""
         filtered_songs = songs
@@ -122,14 +130,14 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
                 stdscr.addstr(0, 0, "Terminal window too small!")
                 stdscr.refresh()
                 key = stdscr.getch()
-                if key in (27, ord('q')):
+                if key in (27, ord("q")):
                     return None
                 continue
 
             # Header info line
             header_str = f" ADB Song Search [{device_info}] | {len(filtered_songs)}/{len(songs)} matches "
             stdscr.attron(curses.color_pair(2) | curses.A_BOLD)
-            stdscr.addstr(0, 0, header_str[:width-1])
+            stdscr.addstr(0, 0, header_str[: width - 1])
             stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
             # Search prompt line (Row 1)
@@ -138,7 +146,7 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
             stdscr.addstr(1, 0, prompt)
             stdscr.attroff(curses.color_pair(2) | curses.A_BOLD)
 
-            query_display = query[:width - len(prompt) - 1]
+            query_display = query[: width - len(prompt) - 1]
             stdscr.addstr(1, len(prompt), query_display)
 
             # Calculate printable list area vs metadata preview bar
@@ -169,8 +177,10 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
                 album = song.get("album") or ""
                 duration = song.get("duration_formatted") or "00:00"
 
-                line_str = f"{item_idx + 1:4d}. {title} - {artist} [{album}] ({duration})"
-                line_str = line_str[:width - 2]
+                line_str = (
+                    f"{item_idx + 1:4d}. {title} - {artist} [{album}] ({duration})"
+                )
+                line_str = line_str[: width - 2]
 
                 if item_idx == selected_idx:
                     stdscr.attron(curses.color_pair(1) | curses.A_BOLD)
@@ -195,15 +205,19 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
 
                 preview_y = height - preview_height - 1
                 stdscr.attron(curses.color_pair(5))
-                stdscr.addstr(preview_y, 0, specs_line[:width-1].ljust(width-1))
+                stdscr.addstr(preview_y, 0, specs_line[: width - 1].ljust(width - 1))
                 if data_path:
-                    stdscr.addstr(preview_y + 1, 0, f" Path: {data_path}"[:width-1].ljust(width-1))
+                    stdscr.addstr(
+                        preview_y + 1,
+                        0,
+                        f" Path: {data_path}"[: width - 1].ljust(width - 1),
+                    )
                 stdscr.attroff(curses.color_pair(5))
 
             # Footer / Status bar (Bottom row)
             footer = " [UP/DN] Navigate | [ENTER] Select | [ESC/Ctrl+C] Quit "
             stdscr.attron(curses.A_REVERSE)
-            stdscr.addstr(height - 1, 0, footer[:width-1].ljust(width-1))
+            stdscr.addstr(height - 1, 0, footer[: width - 1].ljust(width - 1))
             stdscr.attroff(curses.A_REVERSE)
 
             # Place cursor at end of search prompt
@@ -220,33 +234,33 @@ def search_songs_tui(songs: List[Dict[str, Any]], device_info: str = "Connected 
             except KeyboardInterrupt:
                 return None
 
-            if key in (27, 3, 17): # ESC, Ctrl+C, Ctrl+Q
+            if key in (27, 3, 17):  # ESC, Ctrl+C, Ctrl+Q
                 return None
-            elif key in (10, 13): # Enter key
+            elif key in (10, 13):  # Enter key
                 if filtered_songs and 0 <= selected_idx < len(filtered_songs):
                     return filtered_songs[selected_idx]
                 return None
-            elif key in (curses.KEY_UP, 16, ord('k')):
+            elif key in (curses.KEY_UP, 16, ord("k")):
                 if selected_idx > 0:
                     selected_idx -= 1
-            elif key in (curses.KEY_DOWN, 14, ord('j')):
+            elif key in (curses.KEY_DOWN, 14, ord("j")):
                 if selected_idx < len(filtered_songs) - 1:
                     selected_idx += 1
-            elif key == curses.KEY_PPAGE: # Page Up
+            elif key == curses.KEY_PPAGE:  # Page Up
                 selected_idx = max(0, selected_idx - list_height)
-            elif key == curses.KEY_NPAGE: # Page Down
+            elif key == curses.KEY_NPAGE:  # Page Down
                 selected_idx = min(len(filtered_songs) - 1, selected_idx + list_height)
-            elif key == curses.KEY_HOME: # Home
+            elif key == curses.KEY_HOME:  # Home
                 selected_idx = 0
-            elif key == curses.KEY_END: # End
+            elif key == curses.KEY_END:  # End
                 selected_idx = max(0, len(filtered_songs) - 1)
-            elif key in (curses.KEY_BACKSPACE, 127, 8): # Backspace
+            elif key in (curses.KEY_BACKSPACE, 127, 8):  # Backspace
                 if len(query) > 0:
                     query = query[:-1]
                     filtered_songs = fuzzy_matcher.filter_and_rank_songs(query, songs)
                     selected_idx = 0
                     scroll_offset = 0
-            elif 32 <= key <= 126: # Printable ASCII characters
+            elif 32 <= key <= 126:  # Printable ASCII characters
                 query += chr(key)
                 filtered_songs = fuzzy_matcher.filter_and_rank_songs(query, songs)
                 selected_idx = 0

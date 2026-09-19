@@ -3,20 +3,24 @@ Deleted Song Repository module with Redis caching and SQLite fallback.
 Files deleted from the music library are moved to a repo-local trash folder
 (tmp/deleted) so they can be restored later.
 """
+
 import os
 import shutil
 import time
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-from repositories.base_repository import BaseRepository
+from repositories.exceptions import TrashFileMissingError, FileMoveError
+import audio_metadata
 import ui.db_manager as ui_db
+from model.song import RestoredSongRecord, SongRecord
+from over_ip.song_scanner import format_mtime
+from repositories.base_repository import BaseRepository
 from utils import get_logger
 
 logger = get_logger()
 
 TRASH_ROOT = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "tmp", "deleted"
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tmp", "deleted"
 )
 
 
@@ -42,14 +46,16 @@ class DeletedSongRepository(BaseRepository):
         """
         cached = self._cache_get(self.CACHE_KEY_DELETED)
         if cached is not None:
-            logger.info("[DeletedSongRepository] Redis Cache Hit: Loaded deleted songs.")
+            logger.info(
+                "[DeletedSongRepository] Redis Cache Hit: Loaded deleted songs."
+            )
             return cached
 
         records = ui_db.get_deleted_songs()
         self._cache_set(self.CACHE_KEY_DELETED, records)
         return records
 
-    def record_deleted_song(self, record: Dict[str, Any]) -> bool:
+    def record_deleted_song(self, record: SongRecord) -> bool:
         """
         Persist a deleted song record and invalidate Redis deleted-songs cache.
         """
@@ -58,7 +64,7 @@ class DeletedSongRepository(BaseRepository):
             self._cache_delete(self.CACHE_KEY_DELETED)
         return success
 
-    def restore_deleted_song(self, record_id: int) -> Dict[str, Any]:
+    def restore_deleted_song(self, record_id: int) -> dict[str, Any]:
         """
         Move a deleted song back to its original filepath and remove its record.
         Returns a result dict with status and message.
@@ -70,18 +76,28 @@ class DeletedSongRepository(BaseRepository):
                     record = r
                     break
         except Exception as e:
-            logger.error(f"[DeletedSongRepository] Error fetching record {record_id}: {e}")
+            logger.error(
+                f"[DeletedSongRepository] Error fetching record {record_id}: {e}"
+            )
             return {"status": "error", "message": f"Failed to locate record: {e}"}
 
         if not record:
-            return {"status": "error", "message": f"Deleted song record {record_id} not found", "code": 404}
+            return {
+                "status": "error",
+                "message": f"Deleted song record {record_id} not found",
+                "code": 404,
+            }
 
         tmp_path = record.get("tmp_path")
         filepath = record.get("filepath")
         if not tmp_path or not os.path.isfile(tmp_path):
             ui_db.remove_deleted_song(record_id)
             self._cache_delete(self.CACHE_KEY_DELETED)
-            return {"status": "error", "message": f"Trash file missing: {tmp_path}", "code": 404}
+            return {
+                "status": "error",
+                "message": f"Trash file missing: {tmp_path}",
+                "code": 404,
+            }
 
         try:
             parent = os.path.dirname(filepath)
@@ -89,16 +105,22 @@ class DeletedSongRepository(BaseRepository):
                 os.makedirs(parent, exist_ok=True)
             shutil.move(tmp_path, filepath)
         except Exception as e:
-            logger.error(f"[DeletedSongRepository] Error restoring file to '{filepath}': {e}")
-            return {"status": "error", "message": f"Failed to restore file: {e}", "code": 500}
+            logger.error(
+                f"[DeletedSongRepository] Error restoring file to '{filepath}': {e}"
+            )
+            return {
+                "status": "error",
+                "message": f"Failed to restore file: {e}",
+                "code": 500,
+            }
 
         if not ui_db.remove_deleted_song(record_id):
-            logger.warning(f"[DeletedSongRepository] Restored file but failed to remove record {record_id}.")
+            logger.warning(
+                f"[DeletedSongRepository] Restored file but failed to remove record {record_id}."
+            )
 
         # Re-index restored song into SQLite local_songs table
         try:
-            from over_ip.song_scanner import format_mtime
-            import audio_metadata
             st = os.stat(filepath)
             meta = audio_metadata.extract_audio_metadata(filepath)
             filename = os.path.basename(filepath)
@@ -111,31 +133,35 @@ class DeletedSongRepository(BaseRepository):
                 if "kbps" in str(bitrate_str):
                     bitrate_val = int(str(bitrate_str).replace("kbps", "").strip())
             except Exception:
-                pass
-            restored_song = {
-                "filepath": filepath,
-                "filename": filename,
-                "title": title,
-                "artist": artist,
-                "album": album,
-                "size": st.st_size,
-                "size_formatted": meta.get("size", f"{st.st_size / (1024*1024):.1f} MB"),
-                "mtime": st.st_mtime,
-                "mtime_str": format_mtime(st.st_mtime),
-                "ctime": getattr(st, "st_birthtime", st.st_ctime),
-                "ctime_str": format_mtime(getattr(st, "st_birthtime", st.st_ctime)),
-                "duration_sec": 0.0,
-                "duration_formatted": meta.get("duration", "00:00"),
-                "bitrate_kbps": bitrate_str,
-                "bitrate_val": bitrate_val,
-                "sample_rate_hz": meta.get("sample_rate", "Unknown"),
-                "channels": meta.get("channels", "Stereo"),
-                "codec": meta.get("codec", os.path.splitext(filename)[1].lstrip(".")),
-                "searchable_text": f"{title} {artist} {album} {filename}".lower()
+                logger.warning(
+                    f"[DeletedSongRepository] Failed to parse bitrate '{bitrate_str}' for {filepath}"
+                )
+
+            restored_song_record = RestoredSongRecord(
+                filepath=filepath,
+                filename=filename,
+                title=title,
+                artist=artist,
+                album=album,
+                size_bytes=st.st_size,
+                file_created_at=format_mtime(getattr(st, "st_birthtime", st.st_ctime)),
+                file_modified_at=format_mtime(st.st_mtime),
+                duration_sec=meta.get("duration_sec", 0.0),
+                duration_formatted=meta.get("duration", "00:00"),
+                bitrate_kbps=bitrate_str,
+                bitrate_val=bitrate_val,
+                sample_rate_hz=meta.get("sample_rate", "Unknown"),
+                channels=meta.get("channels", "Stereo"),
+                codec=meta.get("codec", os.path.splitext(filename)[1].lstrip(".")),
+                searchable_text=f"{title} {artist} {album} {filename}".lower(),
+            )
+            ui_db.save_local_songs([restored_song_record], purge_missing=False)
+        except (TrashFileMissingError, FileMoveError) as e:
+            return {
+                "status": "error",
+                "message": str(e),
+                "code": e.code,
             }
-            ui_db.save_local_songs([restored_song], purge_missing=False)
-        except Exception as e:
-            logger.warning(f"[DeletedSongRepository] Note re-indexing restored song: {e}")
 
         self._cache_delete(self.CACHE_KEY_DELETED)
         self._cache_delete("cache:songs:all")
@@ -145,10 +171,10 @@ class DeletedSongRepository(BaseRepository):
         return {
             "status": "success",
             "message": f"Restored {os.path.basename(filepath)}",
-            "filepath": filepath
+            "filepath": filepath,
         }
 
-    def clear_deleted_history(self) -> Dict[str, Any]:
+    def clear_deleted_history(self) -> dict[str, Any]:
         """
         Permanently remove all trash files and clear deleted song records.
         """
@@ -161,7 +187,9 @@ class DeletedSongRepository(BaseRepository):
                     os.remove(tmp_path)
                     removed += 1
                 except Exception as e:
-                    logger.error(f"[DeletedSongRepository] Error removing trash file '{tmp_path}': {e}")
+                    logger.error(
+                        f"[DeletedSongRepository] Error removing trash file '{tmp_path}': {e}"
+                    )
                     failed += 1
 
         cleared = ui_db.clear_deleted_songs()
@@ -171,5 +199,5 @@ class DeletedSongRepository(BaseRepository):
             "message": f"Cleared deleted songs history ({removed} file(s) removed).",
             "removed": removed,
             "failed": failed,
-            "records_cleared": cleared
+            "records_cleared": cleared,
         }

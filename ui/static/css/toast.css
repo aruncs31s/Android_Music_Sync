@@ -51,6 +51,7 @@
   gap: 0.5rem;
   word-break: break-word;
   line-height: 1.4;
+  color: aqua;
 }
 
 .toast-close-btn {

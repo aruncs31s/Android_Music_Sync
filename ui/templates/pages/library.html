@@ -77,26 +77,26 @@
             <th style="width: 38px;" class="col-center">
               <input type="checkbox" id="lib-select-all" onchange="toggleSelectAllLibrarySongs(this.checked)" title="Select all on this page">
             </th>
-            <th style="width: 48px;" class="col-center">#</th>
-            <th onclick="toggleLibrarySort('title')" style="cursor: pointer; user-select: none; min-width: 220px;" title="Click to sort by Title">
+            <th style="width: 44px;" class="col-center col-hide-sm">#</th>
+            <th onclick="toggleLibrarySort('title')" style="cursor: pointer; user-select: none; min-width: 140px;" title="Click to sort by Title">
               Track & Details <span id="sort-icon-title"></span>
             </th>
-            <th style="width: 85px;" class="col-center" onclick="toggleLibrarySort('duration')" style="cursor: pointer; user-select: none;" title="Click to sort by Duration">
+            <th style="width: 80px;" class="col-center col-hide-xs" onclick="toggleLibrarySort('duration')" style="cursor: pointer; user-select: none;" title="Click to sort by Duration">
               Duration <span id="sort-icon-duration"></span>
             </th>
-            <th style="width: 90px;" class="col-center" onclick="toggleLibrarySort('size')" style="cursor: pointer; user-select: none;" title="Click to sort by Size">
+            <th style="width: 85px;" class="col-center col-hide-sm" onclick="toggleLibrarySort('size')" style="cursor: pointer; user-select: none;" title="Click to sort by Size">
               Size <span id="sort-icon-size"></span>
             </th>
-            <th style="width: 100px;" class="col-center" onclick="toggleLibrarySort('bitrate')" style="cursor: pointer; user-select: none;" title="Click to sort by Bitrate">
+            <th style="width: 95px;" class="col-center col-hide-md" onclick="toggleLibrarySort('bitrate')" style="cursor: pointer; user-select: none;" title="Click to sort by Bitrate">
               Bitrate <span id="sort-icon-bitrate"></span>
             </th>
-            <th style="width: 145px;" class="col-center" onclick="toggleLibrarySort('ctime')" style="cursor: pointer; user-select: none;" title="Click to sort by Created Time">
+            <th style="width: 140px;" class="col-center col-hide-lg" onclick="toggleLibrarySort('ctime')" style="cursor: pointer; user-select: none;" title="Click to sort by Created Time">
               Created Time <span id="sort-icon-ctime"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
             </th>
-            <th style="width: 145px;" class="col-center" onclick="toggleLibrarySort('mtime')" style="cursor: pointer; user-select: none;" title="Click to sort by Modified Time">
+            <th style="width: 140px;" class="col-center col-hide-lg" onclick="toggleLibrarySort('mtime')" style="cursor: pointer; user-select: none;" title="Click to sort by Modified Time">
               Modified Time <span id="sort-icon-mtime"></span>
             </th>
-            <th style="width: 260px;" class="col-right">Actions</th>
+            <th class="col-right col-actions">Actions</th>
           </tr>
         </thead>
         <tbody id="songs-tbody">

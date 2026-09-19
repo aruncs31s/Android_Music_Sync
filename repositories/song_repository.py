@@ -1,23 +1,29 @@
 """
 Song Repository module with Redis caching and disk fallback.
 """
-import os
-import sys
-import socket
-import shutil
+
 import datetime
+import os
+import shutil
+import socket
+import sys
 import threading
 import time
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List, Optional
 
-from repositories.base_repository import BaseRepository
-import config_manager
-import over_ip.song_scanner as song_scanner
-import ui.stats_manager as ui_stats
 import audio_metadata
-import ui.db_manager as ui_db
+import config_manager
 import hide_list_db
-from repositories.deleted_song_repository import DeletedSongRepository, get_tmp_song_path
+import over_ip.song_scanner as song_scanner
+import ui.db_manager as ui_db
+import ui.stats_manager as ui_stats
+import utils
+from model.song import SongRecord
+from repositories.base_repository import BaseRepository
+from repositories.deleted_song_repository import (
+    DeletedSongRepository,
+    get_tmp_song_path,
+)
 from utils import get_logger
 
 logger = get_logger()
@@ -37,10 +43,12 @@ class SongRepository(BaseRepository):
     # callers wait for the active scan rather than returning empty lists.
     _scan_lock = threading.Lock()
     _listeners_lock = threading.Lock()
-    _progress_listeners: List[Any] = []
+    _progress_listeners: list[Any] = []
     _last_scan_time: float = 0.0
 
-    def get_all_songs(self, force_refresh: bool = False, progress_cb=None) -> List[Dict[str, Any]]:
+    def get_all_songs(
+        self, force_refresh: bool = False, progress_cb=None
+    ) -> list[dict[str, Any]]:
         """
         Fetch all local music library songs sorted by mtime descending.
         Checks Redis/in-memory cache first if enabled.
@@ -58,7 +66,9 @@ class SongRepository(BaseRepository):
             # Fast path 2: load instantaneously from SQLite local_songs table (< 5ms)
             db_songs = ui_db.get_stored_local_songs()
             if db_songs:
-                logger.info(f"[SongRepository] SQLite Hit: Loaded {len(db_songs)} songs from local_songs table.")
+                logger.info(
+                    f"[SongRepository] SQLite Hit: Loaded {len(db_songs)} songs from local_songs table."
+                )
                 self._cache_set(self.CACHE_KEY_ALL_SONGS, db_songs)
                 return db_songs
 
@@ -74,21 +84,32 @@ class SongRepository(BaseRepository):
                 now = time.time()
                 # If cached songs exist, and either not force_refresh or scan finished very recently (< 5s ago)
                 if cached is not None:
-                    if not force_refresh or (now - SongRepository._last_scan_time < 5.0):
-                        logger.info("[SongRepository] Reusing freshly scanned songs library.")
+                    if not force_refresh or (
+                        now - SongRepository._last_scan_time < 5.0
+                    ):
+                        logger.info(
+                            "[SongRepository] Reusing freshly scanned songs library."
+                        )
                         return cached
 
                 if not force_refresh:
                     db_songs = ui_db.get_stored_local_songs()
                     if db_songs:
-                        logger.info(f"[SongRepository] SQLite Hit: Loaded {len(db_songs)} songs.")
+                        logger.info(
+                            f"[SongRepository] SQLite Hit: Loaded {len(db_songs)} songs."
+                        )
                         self._cache_set(self.CACHE_KEY_ALL_SONGS, db_songs)
                         return db_songs
 
-                logger.info("[SongRepository] Cache miss / scan requested: Scanning disk directories...")
+                logger.info(
+                    "[SongRepository] Cache miss / scan requested: Scanning disk directories..."
+                )
                 cfg = config_manager.load_config()
                 folders = config_manager.get_local_sync_folders(cfg)
-                audio_exts = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"])
+                audio_exts = cfg.get(
+                    "audio_extensions",
+                    [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"],
+                )
 
                 def _broadcast_progress(msg: str):
                     with self._listeners_lock:
@@ -99,7 +120,9 @@ class SongRepository(BaseRepository):
                         except Exception:
                             pass
 
-                songs = song_scanner.scan_songs_from_paths(folders, audio_exts, progress_cb=_broadcast_progress)
+                songs = song_scanner.scan_songs_from_paths(
+                    folders, audio_exts, progress_cb=_broadcast_progress
+                )
 
                 # Persist scanned songs into SQLite table so subsequent queries load instantaneously
                 ui_db.save_local_songs(songs, purge_missing=True)
@@ -115,7 +138,9 @@ class SongRepository(BaseRepository):
                     except ValueError:
                         pass
 
-    def get_duplicates(self, force_refresh: bool = False, use_fingerprint: bool = False) -> Dict[str, Any]:
+    def get_duplicates(
+        self, force_refresh: bool = False, use_fingerprint: bool = False
+    ) -> Dict[str, Any]:
         """
         Detect duplicate song clusters across configured music directories.
         Checks Redis cache first if enabled; runs detection algorithm on cache miss.
@@ -124,7 +149,9 @@ class SongRepository(BaseRepository):
         if not force_refresh:
             cached = self._cache_get(cache_key)
             if cached is not None:
-                logger.info(f"[SongRepository] Redis Cache Hit: Loaded duplicate clusters ({'fingerprint' if use_fingerprint else 'tags'}).")
+                logger.info(
+                    f"[SongRepository] Redis Cache Hit: Loaded duplicate clusters ({'fingerprint' if use_fingerprint else 'tags'})."
+                )
                 return cached
 
         songs = self.get_all_songs(force_refresh=force_refresh)
@@ -142,7 +169,11 @@ class SongRepository(BaseRepository):
         """
         abs_path = os.path.abspath(filepath)
         if not os.path.exists(abs_path):
-            return {"status": "error", "message": f"File does not exist: {abs_path}", "code": 404}
+            return {
+                "status": "error",
+                "message": f"File does not exist: {abs_path}",
+                "code": 404,
+            }
 
         def _format_ts(ts):
             try:
@@ -162,7 +193,7 @@ class SongRepository(BaseRepository):
             "codec": None,
             "size_bytes": None,
             "file_created_at": None,
-            "file_modified_at": None
+            "file_modified_at": None,
         }
         try:
             st = os.stat(abs_path)
@@ -187,7 +218,11 @@ class SongRepository(BaseRepository):
                 shutil.move(abs_path, tmp_path)
             except Exception as e:
                 logger.error(f"[SongRepository] Failed to move file to trash: {e}")
-                return {"status": "error", "message": f"Failed to delete file: {e}", "code": 500}
+                return {
+                    "status": "error",
+                    "message": f"Failed to delete file: {e}",
+                    "code": 500,
+                }
 
             # Remove from hide lists if present
             ui_db.remove_hidden_file(abs_path)
@@ -211,11 +246,15 @@ class SongRepository(BaseRepository):
             logger.info(f"[SongRepository] Successfully deleted audio file: {abs_path}")
             return {
                 "status": "success",
-                "message": f"Successfully deleted {os.path.basename(abs_path)}"
+                "message": f"Successfully deleted {os.path.basename(abs_path)}",
             }
         except Exception as e:
             logger.error(f"[SongRepository] Error deleting song '{abs_path}': {e}")
-            return {"status": "error", "message": f"Failed to delete file: {e}", "code": 500}
+            return {
+                "status": "error",
+                "message": f"Failed to delete file: {e}",
+                "code": 500,
+            }
 
     def delete_songs_batch(self, filepaths: List[str]) -> Dict[str, Any]:
         """
@@ -224,13 +263,12 @@ class SongRepository(BaseRepository):
         all Redis song caches once after processing the batch.
         """
         if not filepaths:
-            return {"status": "success", "deleted_count": 0, "failed": [], "message": "No files to delete"}
-
-        def _format_ts(ts):
-            try:
-                return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
-            except Exception:
-                return None
+            return {
+                "status": "success",
+                "deleted_count": 0,
+                "failed": [],
+                "message": "No files to delete",
+            }
 
         deleted_count = 0
         failed = []
@@ -242,38 +280,40 @@ class SongRepository(BaseRepository):
                 failed.append({"filepath": fp, "error": "File does not exist"})
                 continue
 
-            record = {
-                "filepath": abs_path,
-                "filename": os.path.basename(abs_path),
-                "title": None,
-                "artist": None,
-                "album": None,
-                "bitrate_kbps": None,
-                "sample_rate_hz": None,
-                "codec": None,
-                "size_bytes": None,
-                "file_created_at": None,
-                "file_modified_at": None
-            }
+            record = SongRecord(
+                filepath=abs_path,
+                filename=os.path.basename(abs_path),
+                title=None,
+                artist=None,
+                album=None,
+                bitrate_kbps=None,
+                sample_rate_hz=None,
+                codec=None,
+                size_bytes=None,
+                file_created_at=None,
+                file_modified_at=None,
+            )
             try:
                 st = os.stat(abs_path)
-                record["size_bytes"] = st.st_size
-                record["file_created_at"] = _format_ts(st.st_ctime)
-                record["file_modified_at"] = _format_ts(st.st_mtime)
+                record.size_bytes = st.st_size
+                record.file_created_at = utils.format_ts(st.st_ctime)
+                record.file_modified_at = utils.format_ts(st.st_mtime)
             except OSError:
                 pass
 
             try:
                 meta = audio_metadata.extract_audio_metadata(abs_path)
-                record["bitrate_kbps"] = meta.get("bitrate")
-                record["sample_rate_hz"] = meta.get("sample_rate")
-                record["codec"] = meta.get("codec")
-            except Exception:
-                pass
+                record.bitrate_kbps = meta.get("bitrate")
+                record.sample_rate_hz = meta.get("sample_rate")
+                record.codec = meta.get("codec")
+            except Exception as e:
+                logger.warning(
+                    f"[SongRepository] Failed to extract metadata for '{abs_path}': {e}"
+                )
 
             try:
                 tmp_path = get_tmp_song_path(abs_path)
-                record["tmp_path"] = tmp_path
+                record.tmp_path = tmp_path
                 shutil.move(abs_path, tmp_path)
                 ui_db.remove_hidden_file(abs_path)
                 hide_list_db.remove_hidden_file(abs_path)
@@ -283,7 +323,9 @@ class SongRepository(BaseRepository):
                 deleted_count += 1
                 logger.info(f"[SongRepository] Batch deleted audio file: {abs_path}")
             except Exception as e:
-                logger.error(f"[SongRepository] Failed to delete file in batch '{abs_path}': {e}")
+                logger.error(
+                    f"[SongRepository] Failed to delete file in batch '{abs_path}': {e}"
+                )
                 failed.append({"filepath": fp, "error": str(e)})
 
         if deleted_count > 0:
@@ -293,7 +335,7 @@ class SongRepository(BaseRepository):
             "status": "success",
             "deleted_count": deleted_count,
             "failed": failed,
-            "message": f"Successfully deleted {deleted_count} files"
+            "message": f"Successfully deleted {deleted_count} files",
         }
 
     def invalidate_all_song_caches(self):

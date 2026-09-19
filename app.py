@@ -22,7 +22,7 @@ import fuzzy_matcher
 import utils.android.adb.adb_manager as adb_manager
 import fzf_tui
 import config_manager
-import syncer
+import utils.syncer as syncer
 import reverse_syncer
 import redis_cache
 import hide_list_db

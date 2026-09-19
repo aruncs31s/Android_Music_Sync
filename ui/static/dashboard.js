@@ -852,40 +852,47 @@ function renderLibraryPage() {
     `;
 
     let actionButtons = '';
+    const moreBtn = `
+      <button class="btn btn-secondary btn-sm action-btn-more" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="More actions">•••</button>
+    `;
+
     if (isLocalStorage) {
       const bitrateNum = parseInt(s.bitrate_kbps, 10) || 0;
       const convertBtn = (bitrateNum >= 256 || bitrateNum === 320) ? `
-        <button class="btn btn-secondary btn-sm" onclick="showTranscodeModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.bitrate_kbps || '')}')" title="Downconvert Audio">${SVG_CONVERT} Convert</button>
+        <button class="btn btn-secondary btn-sm action-btn-secondary" onclick="showTranscodeModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.bitrate_kbps || '')}')" title="Downconvert Audio">${SVG_CONVERT} <span class="btn-text">Convert</span></button>
       ` : '';
 
       actionButtons = `
         <div class="action-btn-group">
           ${likeBtn}
-          <button class="btn btn-secondary btn-sm" onclick="playOrToggleAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', ${startIdx + idx}, '${escapeJs(s.bitrate_kbps || '')}', 'local')" title="${playBtnText}">${playBtnIcon} ${playBtnText}</button>
-          <button class="btn btn-secondary btn-sm" onclick="openSyncSongModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', '${escapeJs(s.duration_formatted || '')}', '${escapeJs(s.size_formatted || '')}', '${escapeJs(s.bitrate_kbps || '')}', '${escapeJs(s.album || '')}')" title="Sync to target device">${SVG_SYNC} Sync</button>
+          <button class="btn btn-secondary btn-sm" onclick="playOrToggleAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', ${startIdx + idx}, '${escapeJs(s.bitrate_kbps || '')}', 'local')" title="${playBtnText}">${playBtnIcon} <span class="btn-text">${playBtnText}</span></button>
+          <button class="btn btn-secondary btn-sm action-btn-secondary" onclick="openSyncSongModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', '${escapeJs(s.duration_formatted || '')}', '${escapeJs(s.size_formatted || '')}', '${escapeJs(s.bitrate_kbps || '')}', '${escapeJs(s.album || '')}')" title="Sync to target device">${SVG_SYNC} <span class="btn-text">Sync</span></button>
           ${convertBtn}
-          <button class="btn btn-secondary btn-sm" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} Playlist</button>
-          <button class="btn btn-secondary btn-sm" onclick="hideSong('${escapeJs(s.filepath)}')" title="Hide song">${SVG_HIDE}</button>
-          <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
+          <button class="btn btn-secondary btn-sm action-btn-secondary" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} <span class="btn-text">Playlist</span></button>
+          <button class="btn btn-secondary btn-sm action-btn-secondary" onclick="hideSong('${escapeJs(s.filepath)}')" title="Hide song">${SVG_HIDE}</button>
+          <button class="btn btn-secondary btn-danger btn-sm action-btn-secondary" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
+          ${moreBtn}
         </div>
       `;
     } else if (isOverIp) {
       actionButtons = `
         <div class="action-btn-group">
           ${likeBtn}
-          <button class="btn btn-secondary btn-sm" style="color: var(--accent-yellow); border-color: rgba(250, 204, 21, 0.4);" onclick="playOrToggleAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', ${startIdx + idx}, '${escapeJs(s.bitrate_kbps || '')}', '${escapeJs(currentDeviceId)}')" title="${playBtnText}">${playBtnIcon} ${playBtnText}</button>
-          <button class="btn btn-secondary btn-sm" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} Playlist</button>
-          <button class="btn btn-secondary btn-sm" onclick="showToast('File: ${escapeJs(s.filepath || s.filename)}', 'info', 4000)" title="View Details">Details</button>
-          <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
+          <button class="btn btn-secondary btn-sm" style="color: var(--accent-yellow); border-color: rgba(250, 204, 21, 0.4);" onclick="playOrToggleAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', ${startIdx + idx}, '${escapeJs(s.bitrate_kbps || '')}', '${escapeJs(currentDeviceId)}')" title="${playBtnText}">${playBtnIcon} <span class="btn-text">${playBtnText}</span></button>
+          <button class="btn btn-secondary btn-sm action-btn-secondary" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} <span class="btn-text">Playlist</span></button>
+          <button class="btn btn-secondary btn-sm action-btn-secondary" onclick="showToast('File: ${escapeJs(s.filepath || s.filename)}', 'info', 4000)" title="View Details">Details</button>
+          <button class="btn btn-secondary btn-danger btn-sm action-btn-secondary" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
+          ${moreBtn}
         </div>
       `;
     } else {
       actionButtons = `
         <div class="action-btn-group">
           ${likeBtn}
-          <button class="btn btn-secondary btn-sm" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} Playlist</button>
-          <button class="btn btn-secondary btn-sm" onclick="showToast('File: ${escapeJs(s.filepath || s.filename)}', 'info', 4000)" title="View Details">Details</button>
-          <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
+          <button class="btn btn-secondary btn-sm action-btn-secondary" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} <span class="btn-text">Playlist</span></button>
+          <button class="btn btn-secondary btn-sm action-btn-secondary" onclick="showToast('File: ${escapeJs(s.filepath || s.filename)}', 'info', 4000)" title="View Details">Details</button>
+          <button class="btn btn-secondary btn-danger btn-sm action-btn-secondary" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
+          ${moreBtn}
         </div>
       `;
     }
@@ -901,19 +908,24 @@ function renderLibraryPage() {
         <td class="col-center">
           <input type="checkbox" class="lib-song-checkbox" data-path="${escapeHtml(s.filepath)}" ${isSelected ? 'checked' : ''} onchange="toggleLibrarySongSelection('${escapeJs(s.filepath)}', this.checked)">
         </td>
-        <td class="col-center text-tabular">${globalIdx}</td>
+        <td class="col-center text-tabular col-hide-sm">${globalIdx}</td>
         <td ${clickToSyncAttr}>
           <div class="track-meta-cell">
             <span class="track-title" title="${escapeHtml(s.title || 'Unknown')}">${eqHtml}${escapeHtml(s.title || 'Unknown')}</span>
             <span class="track-subtitle" title="${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}">${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}</span>
+            <div class="track-meta-mobile">
+              ${s.duration_formatted ? `<span class="meta-tag">${escapeHtml(s.duration_formatted)}</span>` : ''}
+              ${s.bitrate_kbps && s.bitrate_kbps !== 'Unknown' ? `<span class="meta-tag" style="color:var(--accent-yellow);font-weight:600;">${escapeHtml(s.bitrate_kbps)}</span>` : ''}
+              ${s.size_formatted ? `<span class="meta-tag">${escapeHtml(s.size_formatted)}</span>` : ''}
+            </div>
           </div>
         </td>
-        <td class="col-center text-tabular">${escapeHtml(s.duration_formatted || '00:00')}</td>
-        <td class="col-center text-tabular">${escapeHtml(s.size_formatted || '—')}</td>
-        <td class="col-center"><span class="badge badge-purple text-tabular">${escapeHtml(s.bitrate_kbps || 'Unknown')}</span></td>
-        <td class="col-center text-tabular"><small class="text-muted">${escapeHtml(s.ctime_str || '—')}</small></td>
-        <td class="col-center text-tabular"><small class="text-muted">${escapeHtml(s.mtime_str || '—')}</small></td>
-        <td class="col-right">${actionButtons}</td>
+        <td class="col-center text-tabular col-hide-xs">${escapeHtml(s.duration_formatted || '00:00')}</td>
+        <td class="col-center text-tabular col-hide-sm">${escapeHtml(s.size_formatted || '—')}</td>
+        <td class="col-center col-hide-md"><span class="badge badge-purple text-tabular">${escapeHtml(s.bitrate_kbps || 'Unknown')}</span></td>
+        <td class="col-center text-tabular col-hide-lg"><small class="text-muted">${escapeHtml(s.ctime_str || '—')}</small></td>
+        <td class="col-center text-tabular col-hide-lg"><small class="text-muted">${escapeHtml(s.mtime_str || '—')}</small></td>
+        <td class="col-right col-actions">${actionButtons}</td>
       </tr>
     `;
   });
@@ -2608,7 +2620,10 @@ function renderPlaylistsGrid() {
           ${plIcon}
         </div>
         <div style="margin-top: 1rem; display: flex; justify-content: space-between; align-items: center;" class="text-muted">
-          <small>${p.track_count || 0} tracks</small>
+          <div style="display: flex; align-items: center; gap: 0.35rem;">
+            <small>${p.track_count || 0} tracks</small>
+            ${p.absent_count > 0 ? `<span class="badge badge-red" style="font-size: 0.65rem; padding: 0.1rem 0.35rem;">${p.absent_count} absent</span>` : ''}
+          </div>
           <small>${p.created_at ? p.created_at.substring(0, 10) : ''}</small>
         </div>
       </div>
@@ -2653,9 +2668,12 @@ function renderPlaylistSidebar() {
             ${escapeHtml(p.name)}
           </span>
         </div>
-        <span style="font-size: 0.7rem; opacity: 0.75; flex-shrink: 0; margin-left: 0.4rem;">
-          ${p.track_count || 0}
-        </span>
+        <div style="display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; margin-left: 0.4rem;">
+          ${p.absent_count > 0 ? `<span class="badge badge-red" style="font-size: 0.6rem; padding: 0.05rem 0.25rem;">${p.absent_count}</span>` : ''}
+          <span style="font-size: 0.7rem; opacity: 0.75;">
+            ${p.track_count || 0}
+          </span>
+        </div>
       </div>
     `;
   });
@@ -2693,7 +2711,7 @@ async function selectPlaylist(playlistId, playlistName) {
   renderPlaylistSidebar();
 
   // 4. Update Absent Songs Right Panel
-  renderPlaylistAbsentRightPanel(playlistName);
+  renderPlaylistAbsentRightPanel(playlistId, playlistName);
 
   // 5. Load and Render Center Tracks
   const tbody = document.getElementById('playlist-tracks-tbody');
@@ -2734,14 +2752,28 @@ async function ensurePowerampReportLoaded() {
   }
 }
 
-async function renderPlaylistAbsentRightPanel(playlistName) {
-  await ensurePowerampReportLoaded();
-
+async function renderPlaylistAbsentRightPanel(playlistId, playlistName) {
   const container = document.getElementById('playlist-absent-list');
   const badge = document.getElementById('playlist-absent-count-badge');
   const searchInput = document.getElementById('playlist-absent-search');
   if (searchInput) searchInput.value = '';
+  if (badge) badge.textContent = '...';
 
+  // Fetch persistent absent tracks from SQLite for this playlist
+  try {
+    const res = await fetch(`/api/playlists/${playlistId}/absent`);
+    if (res.ok) {
+      const dbAbsent = await res.json();
+      if (Array.isArray(dbAbsent)) {
+        currentAbsentSongs = currentAbsentSongs.filter(s => s.playlist_id !== playlistId && s.playlist_name !== playlistName);
+        currentAbsentSongs = [...currentAbsentSongs, ...dbAbsent];
+      }
+    }
+  } catch (err) {
+    console.warn('Could not fetch playlist absent tracks:', err);
+  }
+
+  await ensurePowerampReportLoaded();
   filterPlaylistPageAbsentSongs();
 }
 
@@ -2752,10 +2784,14 @@ function filterPlaylistPageAbsentSongs() {
   if (!container) return;
 
   const currentPlName = selectedPlaylist ? selectedPlaylist.name : '';
+  const currentPlId = selectedPlaylist ? selectedPlaylist.id : null;
   const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
   // Filter absent songs for this playlist
   let matchingAbsent = currentAbsentSongs.filter(s => {
+    if (currentPlId && s.playlist_id) {
+      return s.playlist_id === currentPlId;
+    }
     return s.playlist_name && s.playlist_name.toLowerCase() === (currentPlName || '').toLowerCase();
   });
 
@@ -2768,17 +2804,6 @@ function filterPlaylistPageAbsentSongs() {
       const path = (item.original_path || '').toLowerCase();
       return name.includes(query) || fn.includes(query) || path.includes(query);
     });
-  }
-
-  if (!currentAbsentSongs || currentAbsentSongs.length === 0) {
-    container.innerHTML = `
-      <div style="font-size: 0.78rem; color: var(--text-muted); line-height: 1.5; padding: 0.5rem 0;">
-        No Poweramp backup imported yet.<br>
-        <button class="btn btn-secondary btn-sm" onclick="showPowerampImportModal()" style="margin-top: 0.5rem; font-size: 0.72rem;">
-          ↑ Import Poweramp Backup
-        </button>
-      </div>`;
-    return;
   }
 
   if (matchingAbsent.length === 0) {
@@ -2946,33 +2971,86 @@ function renderPlaylistTracks() {
 
   let html = '';
   currentPlaylistTracks.forEach((s, idx) => {
+    const isAbsent = (s.status === 'absent');
     const isThisTrackPlaying = (currentTrackPath === s.filepath && isPlaying);
     const playBtnIcon = isThisTrackPlaying ? SVG_PAUSE : SVG_PLAY;
     const playBtnText = isThisTrackPlaying ? 'Pause' : 'Play';
-    const rowClass = isThisTrackPlaying ? 'class="playing-row"' : '';
+    const rowClass = isThisTrackPlaying ? 'class="playing-row"' : (isAbsent ? 'class="absent-track-row" style="opacity: 0.88;"' : '');
+
+    const absentBadge = isAbsent
+      ? `<span class="badge badge-red" style="font-size: 0.65rem; margin-left: 0.4rem; vertical-align: middle;">ABSENT</span>`
+      : '';
+
+    const actionsHtml = isAbsent
+      ? `<div class="action-btn-group">
+           <button class="btn btn-secondary btn-sm" onclick="openResolveForTrack(${idx})" title="Resolve absent track in right panel">🔍 Resolve</button>
+           <button class="btn btn-secondary btn-danger btn-sm" onclick="removeTrackFromPlaylist(${selectedPlaylist.id}, '${escapeJs(s.filepath)}')" title="Remove from playlist">${SVG_TRASH} Remove</button>
+         </div>`
+      : `<div class="action-btn-group">
+           <button class="btn btn-secondary btn-sm btn-song-like ${likedSongPaths.has(s.filepath) ? 'btn-liked' : ''}" data-filepath="${escapeHtml(s.filepath)}" onclick="toggleLikeTrack('${escapeJs(s.filepath)}', '${escapeJs(s.title || s.filename)}', '${escapeJs(s.artist || '')}')" title="${likedSongPaths.has(s.filepath) ? 'Unlike' : 'Like'}">${likedSongPaths.has(s.filepath) ? SVG_HEART_FILLED : SVG_HEART}</button>
+           <button class="btn btn-secondary btn-sm" onclick="playPlaylistFromTrack(${idx})" title="${playBtnText}">${playBtnIcon} ${playBtnText}</button>
+           <button class="btn btn-secondary btn-danger btn-sm" onclick="removeTrackFromPlaylist(${selectedPlaylist.id}, '${escapeJs(s.filepath)}')" title="Remove from playlist">${SVG_TRASH} Remove</button>
+         </div>`;
 
     html += `
       <tr ${rowClass}>
         <td class="col-center text-tabular">${idx + 1}</td>
         <td>
           <div class="track-meta-cell">
-            <span class="track-title" title="${escapeHtml(s.title || s.filename)}">${escapeHtml(s.title || s.filename)}</span>
+            <span class="track-title" title="${escapeHtml(s.title || s.filename)}">
+              ${escapeHtml(s.title || s.filename)}
+              ${absentBadge}
+            </span>
             <span class="track-subtitle" title="${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}">${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}</span>
           </div>
         </td>
-        <td class="col-center text-tabular">${escapeHtml(s.duration_formatted || '00:00')}</td>
-        <td class="col-center text-tabular">${escapeHtml(s.size_formatted || '—')}</td>
+        <td class="col-center text-tabular">${escapeHtml(s.duration_formatted || (isAbsent ? 'N/A' : '00:00'))}</td>
+        <td class="col-center text-tabular">${escapeHtml(s.size_formatted || (isAbsent ? 'N/A' : '—'))}</td>
         <td class="col-right">
-          <div class="action-btn-group">
-            <button class="btn btn-secondary btn-sm btn-song-like ${likedSongPaths.has(s.filepath) ? 'btn-liked' : ''}" data-filepath="${escapeHtml(s.filepath)}" onclick="toggleLikeTrack('${escapeJs(s.filepath)}', '${escapeJs(s.title || s.filename)}', '${escapeJs(s.artist || '')}')" title="${likedSongPaths.has(s.filepath) ? 'Unlike' : 'Like'}">${likedSongPaths.has(s.filepath) ? SVG_HEART_FILLED : SVG_HEART}</button>
-            <button class="btn btn-secondary btn-sm" onclick="playPlaylistFromTrack(${idx})" title="${playBtnText}">${playBtnIcon} ${playBtnText}</button>
-            <button class="btn btn-secondary btn-danger btn-sm" onclick="removeTrackFromPlaylist(${selectedPlaylist.id}, '${escapeJs(s.filepath)}')" title="Remove from playlist">${SVG_TRASH} Remove</button>
-          </div>
+          ${actionsHtml}
         </td>
       </tr>
     `;
   });
   tbody.innerHTML = html;
+}
+
+function openResolveForTrack(idx) {
+  const track = currentPlaylistTracks[idx];
+  if (!track) return;
+
+  // Find or insert absent item into currentAbsentSongs
+  let absentItem = currentAbsentSongs.find(a =>
+    (track.id && a.id === track.id) ||
+    (track.original_path && a.original_path === track.original_path) ||
+    (a.original_path === track.filepath) ||
+    (a.filepath === track.filepath)
+  );
+
+  if (!absentItem) {
+    absentItem = {
+      playlist_id: selectedPlaylist ? selectedPlaylist.id : track.playlist_id,
+      playlist_name: selectedPlaylist ? selectedPlaylist.name : '',
+      filename: track.filename || track.title,
+      readable_name: track.title,
+      original_path: track.original_path || track.filepath,
+      filepath: track.filepath,
+      id: track.id
+    };
+    currentAbsentSongs.push(absentItem);
+    filterPlaylistPageAbsentSongs();
+  }
+
+  const globalIdx = currentAbsentSongs.indexOf(absentItem);
+  filterPlaylistPageAbsentSongs();
+  setTimeout(() => {
+    const card = document.getElementById(`right-absent-card-${globalIdx}`);
+    if (card) {
+      card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const btn = card.querySelector('button');
+      resolveRightAbsentSong(globalIdx, btn);
+    }
+  }, 50);
 }
 
 async function deleteCurrentPlaylist() {
@@ -4413,8 +4491,11 @@ async function confirmResolveMatch(globalIdx, filepath, songTitle, playlistName)
   const item = currentAbsentSongs[globalIdx];
   if (!item) return;
 
-  // Find playlist ID from allPlaylists
-  const playlist = allPlaylists.find(p => p.name && p.name.toLowerCase() === (playlistName || '').toLowerCase());
+  // Find playlist ID from allPlaylists or selectedPlaylist
+  const playlist = allPlaylists.find(p => p.name && p.name.toLowerCase() === (playlistName || '').toLowerCase())
+                   || (selectedPlaylist && selectedPlaylist.name === playlistName ? selectedPlaylist : null)
+                   || (selectedPlaylist ? selectedPlaylist : null);
+
   if (!playlist) {
     showToast(`Playlist "${playlistName}" not found locally. Import first to create the playlist.`, 'info');
     // Still mark as resolved in UI
@@ -4427,15 +4508,21 @@ async function confirmResolveMatch(globalIdx, filepath, songTitle, playlistName)
   }
 
   try {
-    const res = await fetch(`/api/playlists/${playlist.id}/add-track`, {
+    const res = await fetch(`/api/playlists/${playlist.id}/resolve`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filepath })
+      body: JSON.stringify({
+        resolved_filepath: filepath,
+        original_path: item.original_path || item.filepath,
+        track_id: item.id || null,
+        title: songTitle
+      })
     });
     const data = await res.json();
     if (data.status === 'success') {
       item._resolved_filepath = filepath;
       item._resolved_title = songTitle;
+      item.status = 'present';
 
       const resolveKey = `resolve-panel-${globalIdx}`;
       // Re-render the results panel showing ✓ Resolved state
@@ -4444,7 +4531,7 @@ async function confirmResolveMatch(globalIdx, filepath, songTitle, playlistName)
       renderResolveResults(resolveKey, matches, item, playlistName, globalIdx);
 
       updateAbsentRowResolved(globalIdx, songTitle);
-      showToast(`"${songTitle}" added to playlist "${playlistName}"!`, 'success');
+      showToast(`Resolved "${songTitle}" in playlist "${playlist.name}"!`, 'success');
       loadPlaylists();
       // If currently viewing this playlist in 3-column detail view, reload tracks & right panel
       if (selectedPlaylist && selectedPlaylist.id === playlist.id) {
@@ -4462,10 +4549,11 @@ async function confirmResolveMatch(globalIdx, filepath, songTitle, playlistName)
         filterPlaylistPageAbsentSongs();
       }
     } else {
-      showToast(`Failed to add track: ${data.error || 'Unknown error'}`, 'error');
+      showToast(`Failed to resolve track: ${data.error || 'Unknown error'}`, 'error');
     }
   } catch (err) {
-    showToast(`Error adding track: ${err.message}`, 'error');
+    console.error('Error resolving track:', err);
+    showToast('Failed to connect to server.', 'error');
   }
 }
 

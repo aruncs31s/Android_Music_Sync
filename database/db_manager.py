@@ -13,6 +13,8 @@ import os
 import sys
 import sqlite3
 from typing import List, Dict, Any, Optional, Set
+from device_providers import SongDeletable
+from model import RestoredSongRecord, SongRecord, PlaylistRecord, PlaylistTrackRecord
 from utils import get_logger
 
 logger = get_logger()
@@ -192,6 +194,23 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
                 UNIQUE(playlist_id, filepath)
             );
         """)
+        # Ensure playlist_tracks has status and metadata columns for absent track support
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(playlist_tracks)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        if "status" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN status TEXT DEFAULT 'present'")
+        if "original_path" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN original_path TEXT")
+        if "readable_name" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN readable_name TEXT")
+        if "title" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN title TEXT")
+        if "artist" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN artist TEXT")
+        if "album" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN album TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_playlist_tracks_status ON playlist_tracks(playlist_id, status);")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audio_fingerprints (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -555,13 +574,16 @@ def delete_playlist(playlist_id: int, db_path: Optional[str] = None) -> bool:
 
 
 def get_playlists(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Get all playlists with track counts."""
+    """Get all playlists with track counts, present counts, and absent counts."""
     conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT p.id, p.name, p.created_at, COUNT(pt.id) AS track_count
+            SELECT p.id, p.name, p.created_at,
+                   COUNT(pt.id) AS track_count,
+                   COUNT(CASE WHEN pt.status = 'absent' THEN 1 END) AS absent_count,
+                   COUNT(CASE WHEN pt.status != 'absent' OR pt.status IS NULL THEN pt.id END) AS present_count
             FROM playlists p
             LEFT JOIN playlist_tracks pt ON p.id = pt.playlist_id
             GROUP BY p.id, p.name, p.created_at
@@ -576,8 +598,18 @@ def get_playlists(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
             conn.close()
 
 
-def add_track_to_playlist(playlist_id: int, filepath: str, db_path: Optional[str] = None) -> bool:
-    """Add a track filepath to a playlist."""
+def add_track_to_playlist(
+    playlist_id: int,
+    filepath: str,
+    status: str = "present",
+    original_path: Optional[str] = None,
+    readable_name: Optional[str] = None,
+    title: Optional[str] = None,
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    db_path: Optional[str] = None
+) -> bool:
+    """Add a track to a playlist with status and metadata support."""
     conn = None
     try:
         conn = get_connection(db_path)
@@ -587,14 +619,27 @@ def add_track_to_playlist(playlist_id: int, filepath: str, db_path: Optional[str
             max_row = cursor.fetchone()
             next_order = (max_row[0] + 1) if (max_row and max_row[0] is not None) else 1
 
+            orig = original_path or filepath
+            t_name = title or readable_name or os.path.basename(filepath)
+
             conn.execute(
                 """
-                INSERT OR IGNORE INTO playlist_tracks (playlist_id, filepath, track_order)
-                VALUES (?, ?, ?)
+                INSERT INTO playlist_tracks (
+                    playlist_id, filepath, original_path, readable_name,
+                    title, artist, album, status, track_order
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(playlist_id, filepath) DO UPDATE SET
+                    original_path = COALESCE(excluded.original_path, playlist_tracks.original_path),
+                    readable_name = COALESCE(excluded.readable_name, playlist_tracks.readable_name),
+                    title = COALESCE(excluded.title, playlist_tracks.title),
+                    artist = COALESCE(excluded.artist, playlist_tracks.artist),
+                    album = COALESCE(excluded.album, playlist_tracks.album),
+                    status = excluded.status
                 """,
-                (playlist_id, filepath, next_order)
+                (playlist_id, filepath, orig, readable_name, t_name, artist, album, status, next_order)
             )
-        logger.info(f"[Central DB] Added track '{filepath}' to playlist ID {playlist_id}")
+        logger.info(f"[Central DB] Added track '{filepath}' (status: {status}) to playlist ID {playlist_id}")
         return True
     except Exception as e:
         logger.error(f"[Central DB] Error adding track to playlist: {e}")
@@ -624,22 +669,126 @@ def remove_track_from_playlist(playlist_id: int, filepath: str, db_path: Optiona
             conn.close()
 
 
+def resolve_playlist_track(
+    playlist_id: int,
+    original_path: str,
+    resolved_filepath: str,
+    title: Optional[str] = None,
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    track_id: Optional[int] = None,
+    db_path: Optional[str] = None
+) -> bool:
+    """Permanently marks an absent playlist track as present and updates its local filepath."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            if track_id is not None and track_id > 0:
+                conn.execute(
+                    """
+                    UPDATE playlist_tracks
+                    SET filepath = ?, status = 'present',
+                        title = COALESCE(?, title),
+                        artist = COALESCE(?, artist),
+                        album = COALESCE(?, album)
+                    WHERE id = ? AND playlist_id = ?
+                    """,
+                    (resolved_filepath, title, artist, album, track_id, playlist_id)
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE playlist_tracks
+                    SET filepath = ?, status = 'present',
+                        title = COALESCE(?, title),
+                        artist = COALESCE(?, artist),
+                        album = COALESCE(?, album)
+                    WHERE playlist_id = ? AND (original_path = ? OR filepath = ?)
+                    """,
+                    (resolved_filepath, title, artist, album, playlist_id, original_path, original_path)
+                )
+        logger.info(f"[Central DB] Resolved absent track in playlist {playlist_id} -> '{resolved_filepath}'")
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error resolving absent track: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_playlist_absent_tracks(playlist_id: Optional[int] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieve absent tracks for a specific playlist, or all playlists if playlist_id is None."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        if playlist_id is not None:
+            cursor.execute(
+                """
+                SELECT pt.id, pt.playlist_id, p.name as playlist_name,
+                       pt.filepath, pt.original_path, pt.readable_name,
+                       pt.title, pt.artist, pt.album, pt.status, pt.track_order, pt.added_at
+                FROM playlist_tracks pt
+                JOIN playlists p ON pt.playlist_id = p.id
+                WHERE pt.playlist_id = ? AND pt.status = 'absent'
+                ORDER BY pt.track_order ASC, pt.id ASC
+                """,
+                (playlist_id,)
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT pt.id, pt.playlist_id, p.name as playlist_name,
+                       pt.filepath, pt.original_path, pt.readable_name,
+                       pt.title, pt.artist, pt.album, pt.status, pt.track_order, pt.added_at
+                FROM playlist_tracks pt
+                JOIN playlists p ON pt.playlist_id = p.id
+                WHERE pt.status = 'absent'
+                ORDER BY p.name ASC, pt.track_order ASC, pt.id ASC
+                """
+            )
+        rows = [dict(row) for row in cursor.fetchall()]
+        for r in rows:
+            orig = r.get("original_path") or r.get("filepath") or ""
+            r["filename"] = os.path.basename(orig)
+            if not r.get("readable_name"):
+                r["readable_name"] = r.get("title") or r["filename"]
+            if not r.get("original_path"):
+                r["original_path"] = orig
+        return rows
+    except Exception as e:
+        logger.error(f"[Central DB] Error fetching absent tracks: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_playlist_tracks(playlist_id: int, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Retrieve all track filepaths in order for a playlist."""
+    """Retrieve all track filepaths and metadata in order for a playlist."""
     conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, playlist_id, filepath, track_order, added_at
+            SELECT id, playlist_id, filepath, original_path, readable_name,
+                   title, artist, album, status, track_order, added_at
             FROM playlist_tracks
             WHERE playlist_id = ?
             ORDER BY track_order ASC, id ASC
             """,
             (playlist_id,)
         )
-        return [dict(row) for row in cursor.fetchall()]
+        tracks = []
+        for row in cursor.fetchall():
+            d = dict(row)
+            if not d.get("status"):
+                d["status"] = "present"
+            tracks.append(d)
+        return tracks
     except Exception as e:
         logger.error(f"[Central DB] Error fetching tracks for playlist ID {playlist_id}: {e}")
         return []
@@ -650,7 +799,7 @@ def get_playlist_tracks(playlist_id: int, db_path: Optional[str] = None) -> List
 
 # --- DELETED SONGS METHODS ---
 
-def add_deleted_song(record: Dict[str, Any], db_path: Optional[str] = None) -> bool:
+def add_deleted_song(record: SongRecord, db_path: Optional[str] = None) -> bool:
     """Insert a deleted song record into the centralized database."""
     conn = None
     try:
@@ -790,7 +939,7 @@ def save_cached_fingerprint(
         with conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO audio_fingerprints 
+                INSERT OR REPLACE INTO audio_fingerprints
                 (filepath, file_size, file_mtime, duration, fingerprint, created_at)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
@@ -835,7 +984,7 @@ def get_all_cached_fingerprints_map(
 
 # --- LOCAL SONGS STORAGE & FAST QUERY METHODS ---
 
-def save_local_songs(songs: List[Dict[str, Any]], purge_missing: bool = True, db_path: Optional[str] = None) -> int:
+def save_local_songs(songs: list[RestoredSongRecord], purge_missing: bool = True, db_path: Optional[str] = None) -> int:
     """
     Save or update scanned local music library songs in database/db.db.
     Performs bulk upsert within an atomic transaction.
@@ -1026,6 +1175,3 @@ def delete_stored_local_songs_batch(filepaths: List[str], db_path: Optional[str]
     finally:
         if conn:
             conn.close()
-
-
-

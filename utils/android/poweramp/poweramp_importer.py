@@ -364,9 +364,9 @@ def import_poweramp_backup(
                     total_absent_count += 1
                     unique_absent_keys.add(f"{os.path.basename(t_path).lower()}::{clean_string_for_matching(t_rname)}")
 
-            # Sync matched tracks to database if requested
+            # Sync matched and absent tracks to database if requested
             synced_playlist_id = None
-            if sync_to_library and matched_tracks:
+            if sync_to_library and (matched_tracks or absent_tracks):
                 # Find or create playlist
                 existing_pls = playlist_repo.get_playlists()
                 target_pl = next((p for p in existing_pls if p["name"].strip().lower() == pl_name.lower()), None)
@@ -378,7 +378,24 @@ def import_poweramp_backup(
 
                 if synced_playlist_id:
                     for m in matched_tracks:
-                        playlist_repo.add_track_to_playlist(synced_playlist_id, m["matched_filepath"])
+                        playlist_repo.add_track_to_playlist(
+                            playlist_id=synced_playlist_id,
+                            filepath=m["matched_filepath"],
+                            status="present",
+                            original_path=m.get("poweramp_path"),
+                            readable_name=m.get("readable_name"),
+                            title=m.get("title"),
+                            artist=m.get("artist")
+                        )
+                    for a in absent_tracks:
+                        playlist_repo.add_track_to_playlist(
+                            playlist_id=synced_playlist_id,
+                            filepath=a["original_path"],
+                            status="absent",
+                            original_path=a["original_path"],
+                            readable_name=a.get("readable_name"),
+                            title=a.get("readable_name") or a.get("filename")
+                        )
 
             playlist_reports.append({
                 "name": pl_name,

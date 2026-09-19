@@ -5,6 +5,7 @@ Shared by Web UI and TUI modules.
 """
 from typing import List, Dict, Any, Optional, Set
 import database.db_manager as central_db
+from model.song import RestoredSongRecord, SongRecord
 
 
 def get_ui_db_path() -> str:
@@ -56,8 +57,20 @@ def get_playlists(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     return central_db.get_playlists(db_path)
 
 
-def add_track_to_playlist(playlist_id: int, filepath: str, db_path: Optional[str] = None) -> bool:
-    return central_db.add_track_to_playlist(playlist_id, filepath, db_path)
+def add_track_to_playlist(
+    playlist_id: int,
+    filepath: str,
+    status: str = "present",
+    original_path: Optional[str] = None,
+    readable_name: Optional[str] = None,
+    title: Optional[str] = None,
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    db_path: Optional[str] = None
+) -> bool:
+    return central_db.add_track_to_playlist(
+        playlist_id, filepath, status, original_path, readable_name, title, artist, album, db_path
+    )
 
 
 def remove_track_from_playlist(playlist_id: int, filepath: str, db_path: Optional[str] = None) -> bool:
@@ -68,11 +81,30 @@ def get_playlist_tracks(playlist_id: int, db_path: Optional[str] = None) -> List
     return central_db.get_playlist_tracks(playlist_id, db_path)
 
 
+def resolve_playlist_track(
+    playlist_id: int,
+    original_path: str,
+    resolved_filepath: str,
+    title: Optional[str] = None,
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    track_id: Optional[int] = None,
+    db_path: Optional[str] = None
+) -> bool:
+    return central_db.resolve_playlist_track(
+        playlist_id, original_path, resolved_filepath, title, artist, album, track_id, db_path
+    )
+
+
+def get_playlist_absent_tracks(playlist_id: Optional[int] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    return central_db.get_playlist_absent_tracks(playlist_id, db_path)
+
+
 def get_stored_ip_hosts(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     return central_db.get_stored_ip_hosts(db_path)
 
 
-def add_deleted_song(record: Dict[str, Any], db_path: Optional[str] = None) -> bool:
+def add_deleted_song(record: SongRecord, db_path: Optional[str] = None) -> bool:
     return central_db.add_deleted_song(record, db_path)
 
 
@@ -88,7 +120,7 @@ def clear_deleted_songs(db_path: Optional[str] = None) -> bool:
     return central_db.clear_deleted_songs(db_path)
 
 
-def save_local_songs(songs: List[Dict[str, Any]], purge_missing: bool = True, db_path: Optional[str] = None) -> int:
+def save_local_songs(songs: list[RestoredSongRecord], purge_missing: bool = True, db_path: Optional[str] = None) -> int:
     return central_db.save_local_songs(songs, purge_missing, db_path)
 
 
@@ -106,5 +138,3 @@ def delete_stored_local_song(filepath: str, db_path: Optional[str] = None) -> bo
 
 def delete_stored_local_songs_batch(filepaths: List[str], db_path: Optional[str] = None) -> int:
     return central_db.delete_stored_local_songs_batch(filepaths, db_path)
-
-

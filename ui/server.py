@@ -20,7 +20,7 @@ import over_ip.song_scanner as song_scanner
 import ui.db_manager as ui_db
 import ui.stats_manager as ui_stats
 import hide_list_db
-import syncer
+import utils.syncer as syncer
 import utils.android.adb.adb_pusher as adb_pusher
 import sync_checker
 from repositories import song_repo, playlist_repo, hide_repo, device_repo, deleted_repo
@@ -976,6 +976,50 @@ def remove_track_from_playlist(playlist_id: int):
     return jsonify({"status": "success", "message": f"Removed track from playlist {playlist_id}"})
 
 
+@app.route("/api/playlists/<int:playlist_id>/absent", methods=["GET"])
+def get_playlist_absent(playlist_id: int):
+    """Retrieve absent tracks for a specific playlist from SQLite."""
+    absent = playlist_repo.get_absent_tracks(playlist_id)
+    return jsonify(absent)
+
+
+@app.route("/api/playlists/absent-all", methods=["GET"])
+def get_all_absent_tracks():
+    """Retrieve absent tracks across all playlists from SQLite."""
+    absent = playlist_repo.get_absent_tracks()
+    return jsonify(absent)
+
+
+@app.route("/api/playlists/<int:playlist_id>/resolve", methods=["POST"])
+def resolve_playlist_track(playlist_id: int):
+    """Resolve an absent track in a playlist with a local filepath."""
+    data = request.get_json(silent=True) or {}
+    resolved_filepath = data.get("resolved_filepath")
+    original_path = data.get("original_path") or data.get("filepath", "")
+    track_id = data.get("track_id")
+    title = data.get("title")
+    artist = data.get("artist")
+    album = data.get("album")
+
+    if not resolved_filepath or (not original_path and not track_id):
+        return jsonify({"error": "Missing resolved_filepath or original_path/track_id"}), 400
+
+    resolved_filepath = os.path.abspath(resolved_filepath)
+    success = playlist_repo.resolve_absent_track(
+        playlist_id=playlist_id,
+        original_path=original_path,
+        resolved_filepath=resolved_filepath,
+        title=title,
+        artist=artist,
+        album=album,
+        track_id=track_id
+    )
+    if not success:
+        return jsonify({"error": "Failed to resolve track in database"}), 500
+
+    return jsonify({"status": "success", "message": "Track resolved successfully"})
+
+
 # --- POWERAMP IMPORT API ENDPOINTS ---
 
 _last_poweramp_report: Optional[Dict[str, Any]] = None
@@ -1013,10 +1057,22 @@ def import_poweramp():
 
 @app.route("/api/poweramp/status", methods=["GET"])
 def get_poweramp_status():
-    """Return the cached report of the last Poweramp import, if any."""
+    """Return the cached report of the last Poweramp import, or load persistent absent tracks from SQLite."""
     global _last_poweramp_report
     if _last_poweramp_report:
         return jsonify({"has_report": True, "report": _last_poweramp_report})
+
+    db_absent = playlist_repo.get_absent_tracks()
+    if db_absent:
+        synthetic_report = {
+            "status": "success",
+            "total_playlists": len(playlist_repo.get_playlists()),
+            "absent_tracks_count": len(db_absent),
+            "absent_songs": db_absent,
+            "persistent": True
+        }
+        return jsonify({"has_report": True, "report": synthetic_report})
+
     return jsonify({"has_report": False, "report": None})
 
 
@@ -1024,7 +1080,7 @@ def get_poweramp_status():
 def export_poweramp_absent_songs():
     """
     Generate and download a formatted text file report of absent songs.
-    Can use absent_songs list from POST JSON, or fallback to the last import report.
+    Can use absent_songs list from POST JSON, or fallback to the last import report or DB.
     """
     global _last_poweramp_report
     absent_list = []
@@ -1033,8 +1089,11 @@ def export_poweramp_absent_songs():
         data = request.get_json(silent=True) or {}
         absent_list = data.get("absent_songs", [])
 
-    if not absent_list and _last_poweramp_report:
-        absent_list = _last_poweramp_report.get("absent_songs", [])
+    if not absent_list:
+        if _last_poweramp_report:
+            absent_list = _last_poweramp_report.get("absent_songs", [])
+        if not absent_list:
+            absent_list = playlist_repo.get_absent_tracks()
 
     lines = []
     lines.append("================================================================================")
