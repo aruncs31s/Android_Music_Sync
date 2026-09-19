@@ -61,8 +61,9 @@ class TestSyncChecker(unittest.TestCase):
         diff_score = sync_checker.calculate_similarity_score(local_song, different_song)
         self.assertLess(diff_score, 50)
 
+    @patch("sync_checker.song_repo.get_all_songs", return_value=[])
     @patch("sync_checker.device_repo.get_device_songs")
-    def test_check_song_on_device_exact_and_similar(self, mock_get_songs):
+    def test_check_song_on_device_exact_and_similar(self, mock_get_songs, _mock_all_songs):
         mock_get_songs.return_value = {
             "device_id": "adb_TESTSERIAL",
             "device_name": "Android ADB: TestTablet",
@@ -107,8 +108,9 @@ class TestSyncChecker(unittest.TestCase):
         res = self.client.get("/api/sync/check-song?filepath=/nonexistent/song.mp3&device_id=adb_123")
         self.assertEqual(res.status_code, 404)
 
+    @patch("sync_checker.song_repo.get_all_songs", return_value=[])
     @patch("sync_checker.device_repo.get_device_songs")
-    def test_api_check_song_endpoint_success(self, mock_get_songs):
+    def test_api_check_song_endpoint_success(self, mock_get_songs, _mock_all_songs):
         mock_get_songs.return_value = {
             "device_id": "adb_123",
             "device_name": "ADB Device",

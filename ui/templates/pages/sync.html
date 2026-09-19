@@ -1,0 +1,46 @@
+<!-- Sync Now Tab -->
+<div id="tab-sync" class="tab-content" style="display: none;">
+  <div class="panel">
+    <div class="panel-title">
+      <span>Music Folder Sync to ADB Device</span>
+      <button class="btn" onclick="runSyncPreview()">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        Scan &amp; Compare
+      </button>
+    </div>
+
+    <div class="form-inline-row" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.75rem;">
+      <select id="sync-device-select" class="search-bar" style="max-width: 360px; min-width: 220px;">
+        <option value="">Loading ADB devices...</option>
+      </select>
+      <input type="text" id="sync-remote-dir" class="search-bar" placeholder="/storage/emulated/0/Music/ADB" style="max-width: 260px;">
+      <select id="sync-batch-quality" class="search-bar" style="max-width: 190px;" title="Downconvert High Bitrate Songs">
+        <option value="original">Quality: Original</option>
+        <option value="128">Quality: 128 kbps</option>
+        <option value="192">Quality: 192 kbps</option>
+        <option value="256">Quality: 256 kbps</option>
+        <option value="320">Quality: 320 kbps</option>
+      </select>
+      <label style="display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: var(--text-muted);">
+        <input type="checkbox" id="sync-force-checkbox"> Force sync (ignore already-synced)
+      </label>
+      <button class="btn btn-secondary" onclick="loadSyncDevices(false)">Refresh Devices</button>
+    </div>
+
+    <small id="sync-status" class="text-muted" style="display: block; min-height: 1.2rem;"></small>
+
+    <!-- Real-Time Sync Transfer Progress Bar -->
+    <div id="sync-progress-container" style="display: none; margin-top: 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; font-size: 0.85rem;">
+        <span id="sync-progress-label" style="font-weight: 600; color: var(--accent-yellow);">Pushing files to Android...</span>
+        <span id="sync-progress-percent" style="font-family: monospace; color: var(--text-muted);">0%</span>
+      </div>
+      <div class="sync-progress-track">
+        <div id="sync-progress-bar" class="sync-progress-fill" style="width: 0%;"></div>
+      </div>
+      <small id="sync-progress-current-file" class="text-muted" style="display: block; margin-top: 0.4rem; font-family: monospace; font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"></small>
+    </div>
+  </div>
+
+  <div id="sync-preview-panel" style="display: none;"></div>
+</div>

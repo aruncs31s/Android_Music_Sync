@@ -8,7 +8,7 @@ from typing import Optional
 
 from . import spotify_downloader
 from . import telegram_deezload
-import adb_pusher
+import utils.android.adb.adb_pusher as adb_pusher
 from utils import get_logger
 logger = get_logger()
 

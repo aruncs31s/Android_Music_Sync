@@ -11,12 +11,15 @@ import sys
 import re
 from typing import List, Dict, Any, Tuple, Optional
 
-import adb_manager
-import adb_pusher
+import utils.android.adb.adb_manager as adb_manager
+import utils.android.adb.adb_pusher as adb_pusher
 import song_parser
 import fuzzy_matcher
 import ranger_sync_tui
 import hide_list_db
+
+from utils import get_logger
+logger = get_logger()
 
 DEFAULT_AUDIO_EXTENSIONS = [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"]
 
@@ -40,7 +43,7 @@ def scan_local_music_folder(
     audio_files = []
 
     if not os.path.exists(folder_path):
-        print(f"[Syncer] Local directory '{folder_path}' does not exist.", file=sys.stderr)
+        logger.info(f"[Syncer] Local directory '{folder_path}' does not exist.", file=sys.stderr)
         return []
 
     for root, _, files in os.walk(folder_path):
@@ -81,7 +84,7 @@ def compare_local_files_with_device(
         raw_songs = adb_manager.query_songs_from_device(serial, redis_cfg=redis_cfg, refresh_cache=refresh_cache)
         device_songs = song_parser.parse_songs(raw_songs)
     except Exception as e:
-        print(f"[Syncer] Warning: Failed to query device MediaStore: {e}", file=sys.stderr)
+        logger.info(f"[Syncer] Warning: Failed to query device MediaStore: {e}", file=sys.stderr)
         device_songs = []
 
     # SQLite Hide List filtering
@@ -182,24 +185,24 @@ def run_sync_workflow(
     6. Else, prompt or auto-upload missing files to remote_dir.
     7. Broadcast MediaScanner refresh on remote directory.
     """
-    print(f"\n======================================================================", file=sys.stderr)
-    print(f"                     MUSIC FOLDER SYNCHRONIZER                        ", file=sys.stderr)
-    print(f"======================================================================", file=sys.stderr)
-    print(f" Local Sync Folder : {os.path.abspath(local_dir)}", file=sys.stderr)
-    print(f" Remote Destination: {remote_dir}", file=sys.stderr)
+    logger.info(f"\n======================================================================", file=sys.stderr)
+    logger.info(f"                     MUSIC FOLDER SYNCHRONIZER                        ", file=sys.stderr)
+    logger.info(f"======================================================================", file=sys.stderr)
+    logger.infor.info(f" Local Sync Folder : {os.path.abspath(local_dir)}", file=sys.stderr)
+    logger.info(f" Remote Destination: {remote_dir}", file=sys.stderr)
 
     if not os.path.exists(local_dir):
-        print(f"\n[ERROR] Local sync directory '{local_dir}' does not exist.", file=sys.stderr)
+        logger.info(f"\n[ERROR] Local sync directory '{local_dir}' does not exist.", file=sys.stderr)
         return
 
     try:
         devices = adb_manager.list_adb_devices()
     except Exception as e:
-        print(f"\n[ERROR] Could not list ADB devices: {e}", file=sys.stderr)
+        logger.info(f"\n[ERROR] Could not list ADB devices: {e}", file=sys.stderr)
         return
 
     if not devices:
-        print("\n[ERROR] No ADB devices connected. Please connect an Android device.", file=sys.stderr)
+        logger.info("\n[ERROR] No ADB devices connected. Please connect an Android device.", file=sys.stderr)
         return
 
     target_device = None
@@ -212,18 +215,18 @@ def run_sync_workflow(
         target_device = devices[0]
 
     serial = target_device["serial"]
-    print(f" Target ADB Device : {target_device['description']}", file=sys.stderr)
-    print(f"======================================================================\n", file=sys.stderr)
+    logger.info(f" Target ADB Device : {target_device['description']}", file=sys.stderr)
+    logger.info(f"======================================================================\n", file=sys.stderr)
 
-    print(f"Scanning local music files in '{local_dir}'...", file=sys.stderr)
+    logger.info(f"Scanning local music files in '{local_dir}'...", file=sys.stderr)
     local_files = scan_local_music_folder(local_dir, audio_extensions)
-    print(f"Found {len(local_files)} local audio files.", file=sys.stderr)
+    logger.info(f"Found {len(local_files)} local audio files.", file=sys.stderr)
 
     if not local_files:
-        print(f"No audio files found in '{local_dir}'. Nothing to sync.", file=sys.stderr)
+        logger.info(f"No audio files found in '{local_dir}'. Nothing to sync.", file=sys.stderr)
         return
 
-    print(f"Querying device music library & comparing local files...", file=sys.stderr)
+    logger.info(f"Querying device music library & comparing local files...", file=sys.stderr)
     already_present, to_sync, device_songs = compare_local_files_with_device(
         local_files, serial, remote_dir, redis_cfg=redis_cfg, refresh_cache=refresh_cache, show_hidden=show_hidden
     )
@@ -234,7 +237,7 @@ def run_sync_workflow(
         to_sync_final = to_sync
 
     if interactive:
-        print("\n[Syncer] Launching Ranger-Style Interactive Sync TUI (-i)...", file=sys.stderr)
+        logger.info("\n[Syncer] Launching Ranger-Style Interactive Sync TUI (-i)...", file=sys.stderr)
         res = ranger_sync_tui.run_ranger_sync_tui(
             to_sync_files=to_sync_final,
             device_songs=device_songs,
@@ -242,40 +245,40 @@ def run_sync_workflow(
             remote_dir=remote_dir,
             redis_cfg=redis_cfg
         )
-        print(f"\n[Syncer] Ranger TUI session finished. Synced {len(res['synced'])} files, Hidden {len(res.get('hidden', []))} files.", file=sys.stderr)
+        logger.info(f"\n[Syncer] Ranger TUI session finished. Synced {len(res['synced'])} files, Hidden {len(res.get('hidden', []))} files.", file=sys.stderr)
         adb_pusher.refresh_device_media_scanner(serial, remote_dir)
         return
 
-    print(f"\n----------------------------------------------------------------------", file=sys.stderr)
-    print(f" [SECTION 1] Already Present / Synced on Device (Skipped by default - {len(already_present)} files):", file=sys.stderr)
-    print(f"----------------------------------------------------------------------", file=sys.stderr)
+    logger.info(f"\n----------------------------------------------------------------------", file=sys.stderr)
+    logger.info(f" [SECTION 1] Already Present / Synced on Device (Skipped by default - {len(already_present)} files):", file=sys.stderr)
+    logger.info(f"----------------------------------------------------------------------", file=sys.stderr)
     if not already_present:
-        print("  (None found)", file=sys.stderr)
+        logger.info("  (None found)", file=sys.stderr)
     else:
         display_limit = 15
         for idx, item in enumerate(already_present[:display_limit], 1):
             loc = item["local"]
             reason = item["match_reason"]
-            print(f"  {idx:3d}. {loc['filename']} ({loc['size_formatted']})", file=sys.stderr)
-            print(f"       -> {reason}", file=sys.stderr)
+            logger.info(f"  {idx:3d}. {loc['filename']} ({loc['size_formatted']})", file=sys.stderr)
+            logger.info(f"       -> {reason}", file=sys.stderr)
         if len(already_present) > display_limit:
-            print(f"  ... and {len(already_present) - display_limit} more files already present/synced on device.", file=sys.stderr)
+            logger.info(f"  ... and {len(already_present) - display_limit} more files already present/synced on device.", file=sys.stderr)
 
-    print(f"\n----------------------------------------------------------------------", file=sys.stderr)
-    print(f" [SECTION 2] To Sync / Upload ({len(to_sync_final)} files):", file=sys.stderr)
-    print(f"----------------------------------------------------------------------", file=sys.stderr)
+    logger.info(f"\n----------------------------------------------------------------------", file=sys.stderr)
+    logger.info(f" [SECTION 2] To Sync / Upload ({len(to_sync_final)} files):", file=sys.stderr)
+    logger.info(f"----------------------------------------------------------------------", file=sys.stderr)
     if not to_sync_final:
-        print("  (No missing files to sync. All local files are already present/synced on device!)", file=sys.stderr)
-        print(f"======================================================================\n", file=sys.stderr)
+        logger.info("  (No missing files to sync. All local files are already present/synced on device!)", file=sys.stderr)
+        logger.info(f"======================================================================\n", file=sys.stderr)
         return
 
     display_limit_sync = 30
     for idx, item in enumerate(to_sync_final[:display_limit_sync], 1):
-        print(f"  {idx:3d}. {item['rel_path']} ({item['size_formatted']})", file=sys.stderr)
+        logger.info(f"  {idx:3d}. {item['rel_path']} ({item['size_formatted']})", file=sys.stderr)
     if len(to_sync_final) > display_limit_sync:
-        print(f"  ... and {len(to_sync_final) - display_limit_sync} more files to upload.", file=sys.stderr)
+        logger.info(f"  ... and {len(to_sync_final) - display_limit_sync} more files to upload.", file=sys.stderr)
 
-    print(f"======================================================================\n", file=sys.stderr)
+    logger.info(f"======================================================================\n", file=sys.stderr)
 
     should_sync = auto_confirm
     if not should_sync:
@@ -286,29 +289,29 @@ def run_sync_workflow(
             except (KeyboardInterrupt, EOFError):
                 should_sync = False
         else:
-            print("Non-interactive mode: Run with --yes or -y to auto-confirm sync.", file=sys.stderr)
+            logger.info("Non-interactive mode: Run with --yes or -y to auto-confirm sync.", file=sys.stderr)
             return
 
     if not should_sync:
-        print("Sync cancelled by user.", file=sys.stderr)
+        logger.info("Sync cancelled by user.", file=sys.stderr)
         return
 
     if not adb_pusher.ensure_remote_folder(serial, remote_dir):
-        print("[ERROR] Cannot proceed with sync because remote directory could not be prepared.", file=sys.stderr)
+        logger.info("[ERROR] Cannot proceed with sync because remote directory could not be prepared.", file=sys.stderr)
         return
 
-    print(f"\nUploading {len(to_sync_final)} file(s) to ADB device...", file=sys.stderr)
+    logger.info(f"\nUploading {len(to_sync_final)} file(s) to ADB device...", file=sys.stderr)
     success_count = 0
 
     for idx, item in enumerate(to_sync_final, 1):
         percent = (idx / len(to_sync_final)) * 100
-        print(f"\n[{idx}/{len(to_sync_final)} - {percent:.1f}%] Syncing: {item['filename']}", file=sys.stderr)
+        logger.info(f"\n[{idx}/{len(to_sync_final)} - {percent:.1f}%] Syncing: {item['filename']}", file=sys.stderr)
         pushed = adb_pusher.push_song_to_device(serial, item["path"], remote_dir, redis_cfg=redis_cfg)
         if pushed:
             success_count += 1
 
     adb_pusher.refresh_device_media_scanner(serial, remote_dir)
 
-    print(f"\n======================================================================", file=sys.stderr)
-    print(f" Sync Complete: {success_count}/{len(to_sync_final)} files uploaded successfully.", file=sys.stderr)
-    print(f"======================================================================\n", file=sys.stderr)
+    logger.info(f"\n======================================================================", file=sys.stderr)
+    logger.info(f" Sync Complete: {success_count}/{len(to_sync_final)} files uploaded successfully.", file=sys.stderr)
+    logger.info(f"======================================================================\n", file=sys.stderr)

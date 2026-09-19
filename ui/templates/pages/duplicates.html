@@ -1,0 +1,103 @@
+<!-- Duplicates Tab -->
+<div id="tab-duplicates" class="tab-content" style="display: none;">
+  <div class="panel">
+    <div class="panel-title" style="flex-wrap: wrap; gap: 0.75rem;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span>Duplicate Song Clusters</span>
+        <span id="duplicates-summary-badge" class="badge badge-purple" style="font-size: 0.8rem;">Scanning...</span>
+      </div>
+      <div class="panel-actions" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+        <input type="text" id="duplicates-search" class="search-bar" placeholder="Search duplicate clusters or files..." oninput="onDuplicatesSearchInput()">
+        <button class="btn btn-secondary" id="btn-rescan-duplicates" onclick="streamDuplicates()">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Analyze
+        </button>
+      </div>
+    </div>
+
+    <!-- Controls & Batch Deletion Bar -->
+    <div class="duplicates-toolbar" style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.85rem 1.15rem; margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem;">
+      <div style="display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+        <span style="font-size: 0.85rem; font-weight: 700; color: var(--text-main);">Duplicate Actions:</span>
+        <button class="btn" id="btn-select-all-duplicates" onclick="selectAllDuplicates()" title="Select duplicate copies while preserving exactly 1 copy per cluster">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+          Select All (Keep 1 copy)
+        </button>
+        <button class="btn btn-secondary" id="btn-deselect-all-duplicates" onclick="deselectAllDuplicates()">
+          Deselect All
+        </button>
+        <div style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.82rem; color: var(--text-muted);">
+          <label for="dup-keep-strategy" style="font-weight: 600;">Preserve:</label>
+          <select id="dup-keep-strategy" class="search-bar" style="padding: 0.35rem 0.65rem; font-size: 0.82rem; max-width: 180px;" onchange="onDuplicateStrategyChange()">
+            <option value="best_quality" selected>Best Quality / Size</option>
+            <option value="newest">Newest Modified</option>
+            <option value="oldest">Oldest File</option>
+          </select>
+        </div>
+        <label class="toggle-switch-label" style="display: inline-flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 600; cursor: pointer; color: var(--text-main); margin-left: 0.25rem;" title="Analyze audio waveforms with Chromaprint fpcalc to find duplicates even across different formats or bitrates">
+          <input type="checkbox" id="toggle-use-fingerprints" onchange="onToggleFingerprintMatching(this.checked)" style="accent-color: var(--accent-yellow); width: 1.1rem; height: 1.1rem; cursor: pointer;">
+          <span style="display: inline-flex; align-items: center; gap: 0.35rem;">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--accent-yellow);"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Acoustic Audio Fingerprinting
+          </span>
+        </label>
+      </div>
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span id="dup-selected-counter" class="badge badge-yellow" style="font-size: 0.82rem; font-weight: 700;">
+          0 files selected
+        </span>
+        <button class="btn btn-secondary btn-danger" id="btn-batch-delete-duplicates" onclick="openBatchDeleteDuplicatesModal()" disabled title="Delete selected duplicates">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Delete Selected (0)
+        </button>
+      </div>
+    </div>
+
+    <!-- Audio Fingerprint Missing / Fallback Alert -->
+    <div id="dup-fingerprint-warning" style="display: none; background: rgba(249, 226, 175, 0.12); border: 1px solid rgba(249, 226, 175, 0.4); border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.85rem; color: #f9e2af; align-items: center; gap: 0.6rem;">
+      <svg class="icon-svg" style="color: #f9e2af; flex-shrink: 0;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span id="dup-fingerprint-warning-text"></span>
+    </div>
+
+    <!-- Live Analysis Terminal Window (shown while SSE stream is active) -->
+    <div id="dup-terminal" class="dup-terminal" style="display: none;">
+      <div class="dup-terminal-header">
+        <div style="display: flex; align-items: center; gap: 0.5rem;">
+          <span class="dup-terminal-dot"></span>
+          <span class="dup-terminal-dot" style="background: var(--accent-yellow);"></span>
+          <span class="dup-terminal-dot"></span>
+          <span id="dup-terminal-title" style="margin-left: 0.5rem; font-size: 0.78rem; opacity: 0.75;">duplicate-scanner</span>
+        </div>
+        <span id="dup-terminal-counter" style="font-size: 0.75rem; opacity: 0.65;"></span>
+      </div>
+      <div id="dup-terminal-log" class="dup-terminal-log"></div>
+    </div>
+
+    <!-- Reclaimable Storage Banner -->
+    <div id="dup-reclaimable-banner" class="dup-reclaimable-card" style="display: none; justify-content: space-between; align-items: center; background: var(--bg-card); border: 1px solid var(--border-color); border-left: 4px solid var(--accent-yellow); border-radius: 10px; padding: 0.75rem 1.15rem; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 0.75rem;">
+      <div style="display: flex; align-items: center; gap: 0.65rem;">
+        <svg class="icon-svg" style="color: var(--accent-yellow);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+        <span style="font-size: 0.9rem; color: var(--text-main);">
+          Estimated Reclaimable Space: <strong id="dup-reclaimable-size" style="color: var(--accent-yellow);">0 MB</strong> across <strong id="dup-reclaimable-count">0</strong> redundant audio copies
+        </span>
+      </div>
+      <button class="btn btn-secondary btn-sm" id="btn-select-all-redundant" onclick="selectAllRedundantDuplicates()" title="Select all redundant duplicate files except the best keeper in each cluster">
+        Select All Redundant Copies
+      </button>
+    </div>
+
+    <div id="duplicates-container" class="table-responsive">
+      <p class="text-muted">No duplicate scan results yet. Click <strong>Analyze</strong> above to scan your music library.</p>
+    </div>
+
+    <!-- Duplicates Pagination Bar -->
+    <div class="pagination-bar" id="duplicates-pagination">
+      <div>Showing clusters <span id="dup-showing-start">0</span> - <span id="dup-showing-end">0</span> of <span id="dup-total-count">0</span></div>
+      <div class="pagination-controls">
+        <button class="page-btn" id="dup-prev-btn" onclick="changeDuplicatesPage(-1)"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:0.3rem;"><polyline points="15 18 9 12 15 6"/></svg>Previous</button>
+        <span class="page-info" id="dup-page-info">Page 1 of 1</span>
+        <button class="page-btn" id="dup-next-btn" onclick="changeDuplicatesPage(1)">Next<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:0.3rem;"><polyline points="9 18 15 12 9 6"/></svg></button>
+      </div>
+    </div>
+  </div>
+</div>

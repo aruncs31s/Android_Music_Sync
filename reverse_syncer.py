@@ -10,7 +10,7 @@ import subprocess
 import re
 from typing import List, Dict, Any, Tuple, Optional
 
-import adb_manager
+import utils.android.adb.adb_manager as adb_manager
 import song_parser
 import syncer
 import fuzzy_matcher

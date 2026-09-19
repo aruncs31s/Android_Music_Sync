@@ -1,0 +1,145 @@
+<!-- Music Library Tab -->
+<div id="tab-library" class="tab-content" style="display: none;">
+  <div class="panel">
+    <div class="panel-title" style="flex-wrap: wrap; gap: 1rem;">
+      <div style="display: flex; align-items: center; gap: 0.75rem;">
+        <span id="library-title-text">Music Library</span>
+        <span id="library-device-badge" class="badge badge-purple" style="font-size: 0.8rem;">Local Storage</span>
+      </div>
+      <div class="panel-actions" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+        <select id="library-device-select" class="search-bar" style="max-width: 260px; font-weight: 600;" onchange="onLibraryDeviceSelectChange(this.value)">
+          <option value="local">Local Music Folders</option>
+        </select>
+        <button class="btn btn-secondary" id="btn-upload-to-device" onclick="openDeviceUploadModal()" style="display: none;" title="Upload audio files directly to this device">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Upload Files
+        </button>
+        <button class="btn btn-secondary" id="btn-refresh-library" onclick="refreshCurrentDeviceLibrary()" title="Scan / Refresh Library">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Scan / Refresh
+        </button>
+        <button class="btn btn-secondary" onclick="switchTab('tab-overview')" title="Back to Devices">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>Back to Devices
+        </button>
+      </div>
+    </div>
+
+    <!-- Live Library Scan Terminal -->
+    <div id="lib-terminal" class="dup-terminal" style="display: none; margin-bottom: 1.25rem;">
+      <div class="dup-terminal-header">
+        <span class="dup-terminal-dot"></span>
+        <span class="dup-terminal-dot"></span>
+        <span class="dup-terminal-dot"></span>
+        <span style="margin-left: 0.5rem; font-size: 0.72rem; color: var(--text-muted);">library-scanner — live scan</span>
+      </div>
+      <div id="lib-terminal-log" class="dup-terminal-log"></div>
+    </div>
+
+    <!-- Format & Quality Quick-Filter Chips -->
+    <div class="filter-chips-row" style="display: flex; gap: 0.45rem; margin-bottom: 0.85rem; flex-wrap: wrap; align-items: center;">
+      <span style="font-size: 0.76rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-right: 0.25rem;">Filter:</span>
+      <button class="filter-chip active" data-filter="all" onclick="setLibraryFormatFilter('all', this)">All Songs</button>
+      <button class="filter-chip" data-filter="flac" onclick="setLibraryFormatFilter('flac', this)">FLAC / Lossless</button>
+      <button class="filter-chip" data-filter="highres" onclick="setLibraryFormatFilter('highres', this)">Hi-Res (≥320k)</button>
+      <button class="filter-chip" data-filter="mp3" onclick="setLibraryFormatFilter('mp3', this)">MP3</button>
+      <button class="filter-chip" data-filter="m4a" onclick="setLibraryFormatFilter('m4a', this)">M4A / AAC</button>
+      <button class="filter-chip" data-filter="other" onclick="setLibraryFormatFilter('other', this)">Other Formats</button>
+      <button class="filter-chip" data-filter="liked" onclick="setLibraryFormatFilter('liked', this)">❤️ Liked Music</button>
+    </div>
+
+    <!-- Search & Filter Controls -->
+    <div class="filter-controls-row" style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+      <div style="position: relative; flex: 1; min-width: 260px; display: flex; align-items: center;">
+        <input type="text" id="library-search" class="search-bar" placeholder="Search songs by title, artist, album, filename... (press '/' to focus)" oninput="onLibrarySearchInput()" style="width: 100%; padding-right: 2.25rem;">
+        <button id="library-search-clear" onclick="clearLibrarySearch()" style="position: absolute; right: 0.6rem; background: transparent; border: none; color: var(--text-muted); cursor: pointer; display: none; font-size: 1.1rem; line-height: 1;" title="Clear search">×</button>
+      </div>
+      <div class="sort-select-wrap" style="display: flex; align-items: center; gap: 0.5rem;">
+        <label for="library-sort" style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600; white-space: nowrap;">Sort By:</label>
+        <select id="library-sort" class="search-bar" style="max-width: 240px;" onchange="onLibrarySortChange(this.value)">
+          <option value="ctime_desc" selected>Created: Newest First</option>
+          <option value="ctime_asc">Created: Oldest First</option>
+          <option value="mtime_desc">Modified: Newest First</option>
+          <option value="mtime_asc">Modified: Oldest First</option>
+          <option value="bitrate_desc">Bitrate: Highest (kbps)</option>
+          <option value="bitrate_asc">Bitrate: Lowest (kbps)</option>
+          <option value="title_asc">Title: A to Z</option>
+          <option value="title_desc">Title: Z to A</option>
+          <option value="size_desc">Size: Largest First</option>
+          <option value="size_asc">Size: Smallest First</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 38px;" class="col-center">
+              <input type="checkbox" id="lib-select-all" onchange="toggleSelectAllLibrarySongs(this.checked)" title="Select all on this page">
+            </th>
+            <th style="width: 48px;" class="col-center">#</th>
+            <th onclick="toggleLibrarySort('title')" style="cursor: pointer; user-select: none; min-width: 220px;" title="Click to sort by Title">
+              Track & Details <span id="sort-icon-title"></span>
+            </th>
+            <th style="width: 85px;" class="col-center" onclick="toggleLibrarySort('duration')" style="cursor: pointer; user-select: none;" title="Click to sort by Duration">
+              Duration <span id="sort-icon-duration"></span>
+            </th>
+            <th style="width: 90px;" class="col-center" onclick="toggleLibrarySort('size')" style="cursor: pointer; user-select: none;" title="Click to sort by Size">
+              Size <span id="sort-icon-size"></span>
+            </th>
+            <th style="width: 100px;" class="col-center" onclick="toggleLibrarySort('bitrate')" style="cursor: pointer; user-select: none;" title="Click to sort by Bitrate">
+              Bitrate <span id="sort-icon-bitrate"></span>
+            </th>
+            <th style="width: 145px;" class="col-center" onclick="toggleLibrarySort('ctime')" style="cursor: pointer; user-select: none;" title="Click to sort by Created Time">
+              Created Time <span id="sort-icon-ctime"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+            </th>
+            <th style="width: 145px;" class="col-center" onclick="toggleLibrarySort('mtime')" style="cursor: pointer; user-select: none;" title="Click to sort by Modified Time">
+              Modified Time <span id="sort-icon-mtime"></span>
+            </th>
+            <th style="width: 260px;" class="col-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="songs-tbody">
+          <tr><td colspan="9" class="text-muted">Loading music library...</td></tr>
+        </tbody>
+      </table>
+    </div>
+    
+    <!-- Pagination Controls -->
+    <div class="pagination-bar" id="library-pagination">
+      <div>Showing <span id="library-showing-start">0</span> - <span id="library-showing-end">0</span> of <span id="library-total-count">0</span> tracks</div>
+      <div class="pagination-controls">
+        <button class="page-btn" id="lib-prev-btn" onclick="changeLibraryPage(-1)"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-right:0.3rem;"><polyline points="15 18 9 12 15 6"/></svg>Previous</button>
+        <span class="page-info" id="lib-page-info">Page 1 of 1</span>
+        <button class="page-btn" id="lib-next-btn" onclick="changeLibraryPage(1)">Next<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="margin-left:0.3rem;"><polyline points="9 18 15 12 9 6"/></svg></button>
+      </div>
+    </div>
+
+    <!-- Sticky Floating Bulk Actions Bar -->
+    <div id="lib-bulk-action-bar" class="bulk-action-bar" style="display: none;">
+      <div class="bulk-action-info">
+        <span class="badge badge-yellow" id="lib-bulk-selected-count" style="font-weight: 800; font-size: 0.85rem;">0</span>
+        <span style="font-size: 0.85rem; font-weight: 600;">songs selected</span>
+      </div>
+      <div class="bulk-action-buttons">
+        <button class="btn btn-secondary btn-sm" onclick="openBulkSyncModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Sync to Device
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="openBulkPlaylistModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add to Playlist
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="executeBulkHideSongs()">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+          Hide Selected
+        </button>
+        <button class="btn btn-secondary btn-danger btn-sm" onclick="openBulkDeleteLibraryModal()">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+          Delete Selected
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="clearLibrarySelection()" style="opacity: 0.75;">Clear</button>
+      </div>
+    </div>
+  </div>
+</div>

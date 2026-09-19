@@ -42,7 +42,7 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
         config_path = get_default_config_path()
 
     if not os.path.exists(config_path):
-        print(f"[ConfigManager] Configuration file not found. Creating default: {config_path}", file=sys.stderr)
+        logger.info(f"[ConfigManager] Configuration file not found. Creating default: {config_path}", file=sys.stderr)
         save_config(DEFAULT_CONFIG, config_path)
         return dict(DEFAULT_CONFIG)
 
@@ -54,7 +54,7 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
         merged_config.update(data)
         return merged_config
     except Exception as e:
-        print(f"[ConfigManager] Error reading config from {config_path}: {e}. Using defaults.", file=sys.stderr)
+        logger.info(f"[ConfigManager] Error reading config from {config_path}: {e}. Using defaults.", file=sys.stderr)
         return dict(DEFAULT_CONFIG)
 
 
@@ -67,7 +67,7 @@ def save_config(config_data: Dict[str, Any], config_path: str = None):
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=2)
     except Exception as e:
-        print(f"[ConfigManager] Error writing config to {config_path}: {e}", file=sys.stderr)
+        logger.info(f"[ConfigManager] Error writing config to {config_path}: {e}", file=sys.stderr)
 
 
 def get_local_sync_folders(cfg: Dict[str, Any]) -> list[str]:

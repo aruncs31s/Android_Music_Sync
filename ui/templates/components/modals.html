@@ -1,0 +1,388 @@
+<!-- Create Playlist Modal -->
+<div id="modal-create-playlist" class="modal-backdrop" style="display: none;">
+  <div class="modal-card">
+    <h3 style="margin-top: 0;">Create New Playlist</h3>
+    <input type="text" id="input-playlist-name" class="search-bar" placeholder="Playlist Name (e.g. Favorites, Workout, Chill)" style="width: 100%; margin: 1rem 0; box-sizing: border-box;">
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn-secondary" onclick="hideCreatePlaylistModal()">Cancel</button>
+      <button class="btn" onclick="submitCreatePlaylist()">Create Playlist</button>
+    </div>
+  </div>
+</div>
+
+<!-- Add Track To Playlist Modal -->
+<div id="modal-add-to-playlist" class="modal-backdrop" style="display: none;">
+  <div class="modal-card">
+    <h3 style="margin-top: 0;">Add Track to Playlist</h3>
+    <p id="modal-track-title" class="text-muted" style="margin-bottom: 1rem; word-break: break-all;"></p>
+    <select id="select-playlist-choice" class="search-bar" style="width: 100%; margin-bottom: 1.25rem; box-sizing: border-box; background: var(--bg-card); color: white;">
+      <option value="">Select a playlist...</option>
+    </select>
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn-secondary" onclick="hideAddToPlaylistModal()">Cancel</button>
+      <button class="btn" onclick="submitAddToPlaylist()">Add Track</button>
+    </div>
+  </div>
+</div>
+
+<!-- Poweramp Import Modal -->
+<div id="modal-poweramp-import" class="modal-backdrop" style="display: none;">
+  <div class="modal-card" style="max-width: 540px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--accent-yellow);">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Import Poweramp Backup
+      </h3>
+      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0;" onclick="hidePowerampImportModal()" title="Close" aria-label="Close">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <p class="text-muted" style="margin-top: 0; margin-bottom: 1.25rem; font-size: 0.88rem; line-height: 1.4;">
+      Import playlists and rated songs from a Poweramp backup archive (<code>*.poweramp-backup</code>, <code>*.zip</code>, or extensionless archive) or a <code>lists-export</code> database file.
+    </p>
+
+    <!-- Option 1: File Upload -->
+    <div style="margin-bottom: 1.25rem;">
+      <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem;">Choose Backup File or Database:</label>
+      <div style="display: flex; gap: 0.5rem; align-items: center;">
+        <input type="file" id="poweramp-file-input" style="display: none;" onchange="handlePowerampFileChosen(event)">
+        <button type="button" class="btn btn-secondary" onclick="document.getElementById('poweramp-file-input').click()" style="white-space: nowrap;">
+          Browse File...
+        </button>
+        <span id="poweramp-selected-filename" class="text-muted" style="font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">No file chosen</span>
+      </div>
+    </div>
+
+    <div style="display: flex; align-items: center; text-align: center; margin: 1rem 0;">
+      <hr style="flex-grow: 1; border: 0; border-top: 1px solid var(--border-color);">
+      <span style="padding: 0 0.75rem; font-size: 0.75rem; color: var(--text-muted); text-transform: uppercase;">OR server local path</span>
+      <hr style="flex-grow: 1; border: 0; border-top: 1px solid var(--border-color);">
+    </div>
+
+    <!-- Option 2: Local Path -->
+    <div style="margin-bottom: 1.25rem;">
+      <label for="poweramp-path-input" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem;">Path to Backup / lists-export:</label>
+      <input type="text" id="poweramp-path-input" class="search-bar" placeholder="/Users/.../lists-export or backup.zip" style="width: 100%; box-sizing: border-box;">
+    </div>
+
+    <!-- Status / Progress -->
+    <div id="poweramp-import-status" style="display: none; margin-bottom: 1rem; padding: 0.75rem; border-radius: 8px; font-size: 0.85rem; background: var(--bg-crust);">
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn-secondary" onclick="hidePowerampImportModal()">Cancel</button>
+      <button class="btn" id="btn-submit-poweramp-import" onclick="submitPowerampImport()">Import & Report</button>
+    </div>
+  </div>
+</div>
+
+<!-- Absent Songs Report Modal -->
+<div id="modal-absent-songs" class="modal-backdrop" style="display: none;">
+  <div class="modal-card" style="max-width: 780px; width: 95%;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--accent-yellow);">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Poweramp Import Summary & Absent Songs
+      </h3>
+      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0;" onclick="hideAbsentSongsModal()" title="Close" aria-label="Close">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <!-- Summary Stats Badges -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.75rem; margin-bottom: 1rem;">
+      <div style="background: var(--bg-crust); padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Playlists</div>
+        <div id="report-stat-playlists" style="font-size: 1.25rem; font-weight: 700; color: var(--text-main);">0</div>
+      </div>
+      <div style="background: var(--bg-crust); padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Matched Songs</div>
+        <div id="report-stat-matched" style="font-size: 1.25rem; font-weight: 700; color: var(--accent-green, #4ade80);">0</div>
+      </div>
+      <div style="background: var(--bg-crust); padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Absent Songs</div>
+        <div id="report-stat-absent" style="font-size: 1.25rem; font-weight: 700; color: var(--accent-red, #f87171);">0</div>
+      </div>
+      <div style="background: var(--bg-crust); padding: 0.6rem 0.8rem; border-radius: 8px; border: 1px solid var(--border-color); text-align: center;">
+        <div style="font-size: 0.75rem; color: var(--text-muted);">Liked Songs Synced</div>
+        <div id="report-stat-liked" style="font-size: 1.25rem; font-weight: 700; color: var(--accent-yellow);">0</div>
+      </div>
+    </div>
+
+    <!-- Filters & Search for Absent Songs -->
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 0.75rem; flex-wrap: wrap;">
+      <select id="absent-filter-playlist" class="search-bar" style="flex: 1; min-width: 180px; box-sizing: border-box; background: var(--bg-card); color: white;" onchange="filterAbsentSongs()">
+        <option value="">All Playlists</option>
+      </select>
+      <input type="text" id="absent-search-input" class="search-bar" placeholder="Search absent songs..." style="flex: 2; min-width: 200px; box-sizing: border-box;" oninput="filterAbsentSongs()">
+    </div>
+
+    <!-- Absent Songs Table Container -->
+    <div class="table-responsive" style="max-height: 380px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 1rem;">
+      <table style="width: 100%;">
+        <thead>
+          <tr>
+            <th style="width: 44px;" class="col-center">#</th>
+            <th>Song Title / Readable Name</th>
+            <th>Original Path</th>
+            <th style="width: 120px;">Playlist</th>
+            <th style="width: 90px;" class="col-center">Resolve</th>
+          </tr>
+        </thead>
+        <tbody id="absent-songs-tbody">
+          <tr><td colspan="5" class="text-muted col-center">No absent songs to display.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+      <span id="absent-count-label" class="text-muted" style="font-size: 0.82rem;">Showing 0 absent songs</span>
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="btn btn-secondary" onclick="downloadAbsentSongsReport()" id="btn-download-absent-report">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download Report (.txt)
+        </button>
+        <button class="btn btn-secondary" onclick="hideAbsentSongsModal()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Track Sync to Device Modal -->
+<div id="modal-sync-song" class="modal-backdrop" style="display: none;">
+  <div class="modal-card" style="max-width: 520px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--accent-yellow);">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Sync Track to Device
+      </h3>
+      <button class="btn btn-secondary btn-sm" style="width: 30px; height: 30px; padding: 0;" onclick="hideSyncSongModal()" title="Close" aria-label="Close">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <!-- Local Track Summary Card -->
+    <div id="sync-track-summary" style="background: var(--accent-yellow-alpha); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1rem;">
+      <div style="font-weight: 700; font-size: 1.05rem; margin-bottom: 0.2rem;" id="sync-local-title">Song Title</div>
+      <div class="text-muted" style="font-size: 0.85rem; margin-bottom: 0.4rem;" id="sync-local-artist-album">Artist | Album</div>
+      <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; font-size: 0.78rem;">
+        <span class="badge badge-purple" id="sync-local-bitrate">320 kbps</span>
+        <span class="badge" style="background: rgba(255,255,255,0.08); color: var(--text-main);" id="sync-local-duration">00:00</span>
+        <span class="badge" style="background: rgba(255,255,255,0.08); color: var(--text-main);" id="sync-local-size">0 MB</span>
+      </div>
+      <small class="text-muted" style="display: block; margin-top: 0.4rem; word-break: break-all; font-family: monospace; font-size: 0.75rem;" id="sync-local-path">/path/to/song.mp3</small>
+    </div>
+
+    <!-- Target Device Selection -->
+    <div style="margin-bottom: 1.25rem;">
+      <label for="sync-destination-device" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem;">Destination Device:</label>
+      <select id="sync-destination-device" class="search-bar" style="width: 100%; box-sizing: border-box; background: var(--bg-card); color: white;" onchange="onSyncDestinationDeviceChange()">
+        <option value="">Loading devices...</option>
+      </select>
+    </div>
+
+    <!-- Downconversion / Bitrate Quality Selector -->
+    <div style="margin-bottom: 1.25rem;">
+      <label for="sync-quality-bitrate" style="display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem;">
+        <span>Audio Quality / Downconversion:</span>
+        <span class="badge badge-yellow" id="sync-quality-badge" style="font-size: 0.72rem;">Original</span>
+      </label>
+      <select id="sync-quality-bitrate" class="search-bar" style="width: 100%; box-sizing: border-box; background: var(--bg-card); color: white;" onchange="onSyncQualityChange(this.value)">
+        <option value="original">Keep Original Quality (No Re-encoding)</option>
+        <option value="128">128 kbps (Mobile Space Saver ~1MB/min)</option>
+        <option value="192">192 kbps (Standard Quality - Recommended)</option>
+        <option value="256">256 kbps (High Quality)</option>
+        <option value="320">320 kbps (Maximum MP3 Quality)</option>
+      </select>
+      <small class="text-muted" style="display: block; margin-top: 0.3rem; font-size: 0.75rem;">
+        Tracks with bitrates higher than chosen will be downconverted using FFmpeg, preserving ID3 tags.
+      </small>
+    </div>
+
+    <!-- Device Check Results -->
+    <div id="sync-check-loading" style="display: none; text-align: center; padding: 1.5rem 0;">
+      <div style="display: inline-block; animation: spin 1s linear infinite; margin-bottom: 0.5rem;">
+        <svg class="icon-svg" style="width: 2rem; height: 2rem; color: var(--accent-yellow);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </div>
+      <p class="text-muted" style="font-size: 0.85rem; margin: 0;">Checking destination device for existing &amp; similar tracks...</p>
+    </div>
+
+    <div id="sync-check-results" style="display: none;">
+      <!-- Existence Status Banner -->
+      <div id="sync-status-banner" style="padding: 0.75rem 1rem; border-radius: 10px; margin-bottom: 1rem; font-size: 0.85rem;"></div>
+
+      <!-- Similar Songs Section -->
+      <div id="sync-similar-section" style="margin-bottom: 1.25rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+          <span style="font-weight: 700; font-size: 0.9rem; color: var(--text-main);">Similar Songs on Device</span>
+          <span class="badge badge-yellow" id="sync-similar-count">0 found</span>
+        </div>
+        <div id="sync-similar-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 220px; overflow-y: auto;"></div>
+      </div>
+    </div>
+
+    <!-- Status or Error Message -->
+    <div id="sync-action-status" style="font-size: 0.85rem; margin-bottom: 1rem; min-height: 1.2rem;"></div>
+
+    <!-- Action Buttons -->
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn-secondary" onclick="hideSyncSongModal()">Cancel</button>
+      <button class="btn" id="btn-execute-sync-song" onclick="submitSyncSongToDevice()">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        <span id="btn-execute-sync-text">Sync to Device</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Batch Delete Duplicates Confirmation Modal -->
+<div id="modal-delete-duplicates-confirm" class="modal-backdrop" style="display: none;">
+  <div class="modal-card" style="max-width: 540px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--status-offline);">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        Confirm Duplicate Deletion
+      </h3>
+      <button class="btn btn-secondary btn-sm" style="width: 30px; height: 30px; padding: 0;" onclick="hideBatchDeleteDuplicatesModal()" title="Close" aria-label="Close">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <p id="batch-delete-summary-text" style="font-size: 0.9rem; line-height: 1.5; margin-bottom: 1rem; color: var(--text-main);"></p>
+    
+    <div style="background: rgba(166, 227, 161, 0.12); border: 1px solid rgba(166, 227, 161, 0.3); border-radius: 8px; padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.82rem; color: var(--status-online);">
+      <strong>Safe Preservation Guarantee:</strong> Exactly 1 copy in each cluster will be preserved in your Local Music Library. Deleted duplicates will be moved to <code>tmp/deleted/</code> (Trash) and can be restored from the Deleted Songs tab.
+    </div>
+
+    <div id="batch-delete-files-preview" style="max-height: 180px; overflow-y: auto; background: var(--bg-crust); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; font-family: monospace; font-size: 0.75rem; margin-bottom: 1.25rem;">
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn-secondary" onclick="hideBatchDeleteDuplicatesModal()">Cancel</button>
+      <button class="btn btn-secondary btn-danger" id="btn-execute-batch-delete" onclick="executeBatchDeleteDuplicates()">
+        Confirm &amp; Delete Selected Files
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Direct Device Upload Modal -->
+<div id="modal-device-upload" class="modal-backdrop" style="display: none;">
+  <div class="modal-card" style="max-width: 520px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--accent-yellow);">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload to Device
+      </h3>
+      <button class="btn btn-secondary btn-sm" style="width: 30px; height: 30px; padding: 0;" onclick="hideDeviceUploadModal()" title="Close" aria-label="Close">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1rem;">
+      <span style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">Target: </span>
+      <span id="upload-device-name-badge" class="badge badge-purple">Over-IP Device</span>
+    </div>
+
+    <!-- File Picker -->
+    <div style="margin-bottom: 1.25rem;">
+      <label style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem;">Select Audio Files:</label>
+      <input type="file" id="upload-device-files-input" multiple accept="audio/*,.mp3,.m4a,.flac,.wav,.ogg,.aac" class="search-bar" style="width: 100%; box-sizing: border-box; background: var(--bg-card); color: white; padding: 0.5rem;" onchange="onUploadDeviceFilesSelected(this)">
+      <small id="upload-files-summary" class="text-muted" style="display: block; margin-top: 0.35rem; font-size: 0.75rem;">No files selected</small>
+    </div>
+
+    <!-- Downconversion Quality Selector -->
+    <div style="margin-bottom: 1.25rem;">
+      <label for="upload-device-quality" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem;">Audio Quality / Downconversion:</label>
+      <select id="upload-device-quality" class="search-bar" style="width: 100%; box-sizing: border-box; background: var(--bg-card); color: white;">
+        <option value="original">Keep Original Quality (No Re-encoding)</option>
+        <option value="128">128 kbps (Mobile Space Saver ~1MB/min)</option>
+        <option value="192" selected>192 kbps (Standard Quality - Recommended)</option>
+        <option value="256">256 kbps (High Quality)</option>
+        <option value="320">320 kbps (Maximum MP3 Quality)</option>
+      </select>
+      <small class="text-muted" style="display: block; margin-top: 0.3rem; font-size: 0.75rem;">
+        Tracks with higher bitrates will be downconverted using FFmpeg, preserving ID3 tags.
+      </small>
+    </div>
+
+    <!-- Upload Progress Indicator -->
+    <div id="upload-device-progress" style="display: none; margin-bottom: 1.25rem;">
+      <div style="display: flex; justify-content: space-between; font-size: 0.82rem; margin-bottom: 0.35rem;">
+        <span id="upload-progress-status">Uploading...</span>
+        <span id="upload-progress-percent">0%</span>
+      </div>
+      <div class="progress-bar-track">
+        <div id="upload-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+      </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn-secondary" onclick="hideDeviceUploadModal()">Cancel</button>
+      <button class="btn" id="btn-submit-device-upload" onclick="submitDeviceUpload()">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload to Device
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Local Transcode Modal -->
+<div id="modal-transcode-song" class="modal-backdrop" style="display: none;">
+  <div class="modal-card" style="max-width: 480px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <h3 style="margin: 0; display: flex; align-items: center; gap: 0.5rem; color: var(--accent-yellow);">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Downconvert Audio
+      </h3>
+      <button class="btn btn-secondary btn-sm" style="width: 30px; height: 30px; padding: 0;" onclick="hideTranscodeModal()" title="Close" aria-label="Close">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+
+    <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.85rem 1rem; margin-bottom: 1rem;">
+      <div id="transcode-song-title" style="font-weight: 700; font-size: 1rem; margin-bottom: 0.2rem;">Track Title</div>
+      <div id="transcode-song-bitrate" class="badge badge-purple" style="margin-top: 0.35rem;">Current: 320 kbps</div>
+    </div>
+
+    <div style="margin-bottom: 1.25rem;">
+      <label for="transcode-target-bitrate" style="display: block; font-size: 0.85rem; font-weight: 600; margin-bottom: 0.4rem;">Target Bitrate:</label>
+      <select id="transcode-target-bitrate" class="search-bar" style="width: 100%; box-sizing: border-box; background: var(--bg-card); color: white;">
+        <option value="128">128 kbps (Mobile Space Saver ~60% size reduction)</option>
+        <option value="192" selected>192 kbps (Standard Quality - Recommended)</option>
+        <option value="256">256 kbps (High Quality)</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom: 1.25rem;">
+      <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.85rem;">
+        <input type="checkbox" id="transcode-replace-original" style="accent-color: var(--accent-yellow);">
+        <span>Replace original file (creates <code>.orig.bak</code> backup)</span>
+      </label>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn-secondary" onclick="hideTranscodeModal()">Cancel</button>
+      <button class="btn" id="btn-execute-transcode" onclick="submitTranscode()">Downconvert</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic Confirmation Modal (replaces window.confirm) -->
+<div id="modal-confirm-action" class="modal-backdrop" style="display: none;">
+  <div class="modal-card" style="max-width: 480px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem;">
+      <h3 id="confirm-modal-title" style="margin: 0; color: var(--accent-yellow); font-size: 1.1rem; display: flex; align-items: center; gap: 0.5rem;">
+        Confirm Action
+      </h3>
+      <button class="btn btn-secondary btn-sm" style="width: 28px; height: 28px; padding: 0;" onclick="closeConfirmModal(false)" title="Close" aria-label="Close">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/></svg>
+      </button>
+    </div>
+    <p id="confirm-modal-message" style="font-size: 0.9rem; line-height: 1.5; margin-bottom: 1rem; color: var(--text-main);"></p>
+    <div id="confirm-modal-details" style="display: none; max-height: 140px; overflow-y: auto; background: var(--bg-crust); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem; font-family: monospace; font-size: 0.75rem; margin-bottom: 1rem;"></div>
+    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+      <button class="btn btn-secondary" onclick="closeConfirmModal(false)">Cancel</button>
+      <button class="btn" id="confirm-modal-ok-btn" onclick="closeConfirmModal(true)">Confirm</button>
+    </div>
+  </div>
+</div>

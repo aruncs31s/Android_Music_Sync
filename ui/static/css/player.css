@@ -1,0 +1,289 @@
+/* ==========================================================================
+   Music Player Tab CSS
+   Library source picker, songs list, responsive columns, and play queue panel
+   ========================================================================== */
+
+/* Library Picker Row */
+.player-tab-library-picker {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.player-lib-picker-label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent-yellow);
+  white-space: nowrap;
+}
+
+.player-lib-select {
+  flex: 1;
+  min-width: 200px;
+  max-width: 340px;
+  background: var(--bg-mantle);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 0.45rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.player-lib-select:focus {
+  outline: none;
+  border-color: var(--accent-yellow);
+}
+
+.player-lib-status {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* Two-column layout: song list + queue panel */
+.player-tab-layout {
+  display: grid;
+  grid-template-columns: 1fr 290px;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 860px) {
+  .player-tab-layout {
+    grid-template-columns: 1fr;
+  }
+  .player-queue-panel {
+    max-height: 300px !important;
+  }
+}
+
+/* Songs Panel */
+.player-songs-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.player-songs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  flex-wrap: wrap;
+}
+
+.player-songs-scroll {
+  overflow-y: auto;
+  max-height: calc(100vh - 320px);
+  min-height: 300px;
+}
+
+.player-songs-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+.player-songs-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.player-songs-scroll::-webkit-scrollbar-thumb {
+  background: var(--accent-yellow);
+  border-radius: 3px;
+}
+
+/* Song table */
+.player-songs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.83rem;
+}
+
+.player-songs-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-card);
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.player-songs-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+  transition: background 0.12s;
+}
+.player-songs-table tbody tr:hover {
+  background: var(--bg-card-hover);
+}
+.player-songs-table tbody tr.player-row-active {
+  background: var(--accent-yellow-alpha);
+}
+.player-songs-table tbody tr.player-row-active td {
+  color: var(--accent-yellow);
+  font-weight: 600;
+}
+
+.player-songs-table td {
+  padding: 0.5rem 0.75rem;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 0;
+}
+
+.player-songs-table td:first-child,
+.player-songs-table td:last-child {
+  max-width: none;
+}
+
+.player-songs-table td.col-right { text-align: right; }
+.player-songs-table td.col-center { text-align: center; }
+
+/* Small play button within song row */
+.player-row-play-btn {
+  background: var(--accent-yellow);
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  width: 32px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.12s, opacity 0.12s;
+  padding: 0;
+}
+.player-row-play-btn:hover {
+  transform: scale(1.12);
+  opacity: 0.9;
+}
+.player-row-play-btn.playing {
+  background: transparent;
+  border: 1.5px solid var(--accent-yellow);
+  color: var(--accent-yellow);
+}
+
+/* Responsive: hide columns on narrow viewports */
+@media (max-width: 720px) {
+  .col-hide-sm { display: none !important; }
+}
+@media (max-width: 960px) {
+  .col-hide-md { display: none !important; }
+}
+
+/* Queue Panel */
+.player-queue-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 290px);
+  overflow: hidden;
+  position: sticky;
+  top: 80px;
+}
+
+.player-queue-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--accent-yellow);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.player-queue-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.player-queue-list::-webkit-scrollbar {
+  width: 4px;
+}
+.player-queue-list::-webkit-scrollbar-thumb {
+  background: var(--accent-yellow);
+  border-radius: 3px;
+}
+
+.player-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.5rem 0.9rem;
+  font-size: 0.8rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background 0.1s;
+  overflow: hidden;
+}
+.player-queue-item:hover {
+  background: var(--bg-card-hover);
+}
+.player-queue-item.queue-active {
+  background: var(--accent-yellow-alpha);
+  color: var(--accent-yellow);
+  font-weight: 600;
+}
+.player-queue-item .q-num {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  min-width: 20px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.player-queue-item.queue-active .q-num {
+  color: var(--accent-yellow);
+}
+.player-queue-item .q-info {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+}
+.player-queue-item .q-title {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-queue-item .q-artist {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.player-queue-item.queue-active .q-artist {
+  color: var(--accent-yellow);
+  opacity: 0.75;
+}
+
+/* Shuffle button active state */
+#btn-player-shuffle.shuffle-on {
+  color: var(--accent-yellow);
+  text-shadow: 0 0 8px var(--accent-yellow);
+  opacity: 1;
+}

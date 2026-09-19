@@ -95,6 +95,48 @@ class DeletedSongRepository(BaseRepository):
         if not ui_db.remove_deleted_song(record_id):
             logger.warning(f"[DeletedSongRepository] Restored file but failed to remove record {record_id}.")
 
+        # Re-index restored song into SQLite local_songs table
+        try:
+            from over_ip.song_scanner import format_mtime
+            import audio_metadata
+            st = os.stat(filepath)
+            meta = audio_metadata.extract_audio_metadata(filepath)
+            filename = os.path.basename(filepath)
+            title = meta.get("title") or os.path.splitext(filename)[0]
+            artist = meta.get("artist") or "Unknown"
+            album = meta.get("album") or "Unknown"
+            bitrate_str = meta.get("bitrate", "Unknown")
+            bitrate_val = 0
+            try:
+                if "kbps" in str(bitrate_str):
+                    bitrate_val = int(str(bitrate_str).replace("kbps", "").strip())
+            except Exception:
+                pass
+            restored_song = {
+                "filepath": filepath,
+                "filename": filename,
+                "title": title,
+                "artist": artist,
+                "album": album,
+                "size": st.st_size,
+                "size_formatted": meta.get("size", f"{st.st_size / (1024*1024):.1f} MB"),
+                "mtime": st.st_mtime,
+                "mtime_str": format_mtime(st.st_mtime),
+                "ctime": getattr(st, "st_birthtime", st.st_ctime),
+                "ctime_str": format_mtime(getattr(st, "st_birthtime", st.st_ctime)),
+                "duration_sec": 0.0,
+                "duration_formatted": meta.get("duration", "00:00"),
+                "bitrate_kbps": bitrate_str,
+                "bitrate_val": bitrate_val,
+                "sample_rate_hz": meta.get("sample_rate", "Unknown"),
+                "channels": meta.get("channels", "Stereo"),
+                "codec": meta.get("codec", os.path.splitext(filename)[1].lstrip(".")),
+                "searchable_text": f"{title} {artist} {album} {filename}".lower()
+            }
+            ui_db.save_local_songs([restored_song], purge_missing=False)
+        except Exception as e:
+            logger.warning(f"[DeletedSongRepository] Note re-indexing restored song: {e}")
+
         self._cache_delete(self.CACHE_KEY_DELETED)
         self._cache_delete("cache:songs:all")
         self._cache_delete("cache:songs:duplicates")

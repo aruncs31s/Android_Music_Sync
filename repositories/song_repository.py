@@ -7,6 +7,7 @@ import socket
 import shutil
 import datetime
 import threading
+import time
 from typing import List, Dict, Any, Optional
 
 from repositories.base_repository import BaseRepository
@@ -31,50 +32,88 @@ class SongRepository(BaseRepository):
     CACHE_KEY_ALL_SONGS = "cache:songs:all"
     CACHE_KEY_DUPLICATES = "cache:songs:duplicates"
 
-    # Guard so concurrent requests (e.g. overlapping SSE scans) do not launch
-    # multiple full disk scans at once.
+    # Concurrency control: serialize disk scans so concurrent requests
+    # do not run multiple heavy disk scans simultaneously, while ensuring
+    # callers wait for the active scan rather than returning empty lists.
     _scan_lock = threading.Lock()
-    _scan_active = False
+    _listeners_lock = threading.Lock()
+    _progress_listeners: List[Any] = []
+    _last_scan_time: float = 0.0
 
     def get_all_songs(self, force_refresh: bool = False, progress_cb=None) -> List[Dict[str, Any]]:
         """
         Fetch all local music library songs sorted by mtime descending.
-        Checks Redis cache first if enabled; scans disk folders on cache miss.
-        Concurrent scans are skipped (existing in-memory data is reused) so the
-        queue/SSE client is not flooded with duplicate work.
+        Checks Redis/in-memory cache first if enabled.
+        When a disk scan is required or in-flight, callers synchronize on _scan_lock
+        rather than returning empty results. Any registered progress_cb receives
+        live scan progress broadcast from the active scanner thread.
         """
+        # Fast path 1: return warm in-memory/Redis cache if not force_refresh
         if not force_refresh:
             cached = self._cache_get(self.CACHE_KEY_ALL_SONGS)
             if cached is not None:
                 logger.info("[SongRepository] Cache Hit: Loaded songs library.")
                 return cached
 
-        if self._scan_active:
-            cached = self._cache_get(self.CACHE_KEY_ALL_SONGS)
-            if cached is not None:
-                logger.info("[SongRepository] Scan already in progress — reusing loaded songs library.")
-                return cached
-            return []
+            # Fast path 2: load instantaneously from SQLite local_songs table (< 5ms)
+            db_songs = ui_db.get_stored_local_songs()
+            if db_songs:
+                logger.info(f"[SongRepository] SQLite Hit: Loaded {len(db_songs)} songs from local_songs table.")
+                self._cache_set(self.CACHE_KEY_ALL_SONGS, db_songs)
+                return db_songs
 
-        with self._scan_lock:
-            if self._scan_active:
-                cached = self._cache_get(self.CACHE_KEY_ALL_SONGS)
-                if cached is not None:
-                    logger.info("[SongRepository] Concurrent scan finished — reusing loaded songs library.")
-                    return cached
-                return []
-            self._scan_active = True
+        listener_registered = False
+        if progress_cb:
+            with self._listeners_lock:
+                self._progress_listeners.append(progress_cb)
+                listener_registered = True
+
         try:
-            logger.info("[SongRepository] Cache miss / scan requested: Scanning disk directories...")
-            cfg = config_manager.load_config()
-            folders = config_manager.get_local_sync_folders(cfg)
-            audio_exts = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"])
-            songs = song_scanner.scan_songs_from_paths(folders, audio_exts, progress_cb=progress_cb)
+            with self._scan_lock:
+                cached = self._cache_get(self.CACHE_KEY_ALL_SONGS)
+                now = time.time()
+                # If cached songs exist, and either not force_refresh or scan finished very recently (< 5s ago)
+                if cached is not None:
+                    if not force_refresh or (now - SongRepository._last_scan_time < 5.0):
+                        logger.info("[SongRepository] Reusing freshly scanned songs library.")
+                        return cached
 
-            self._cache_set(self.CACHE_KEY_ALL_SONGS, songs)
-            return songs
+                if not force_refresh:
+                    db_songs = ui_db.get_stored_local_songs()
+                    if db_songs:
+                        logger.info(f"[SongRepository] SQLite Hit: Loaded {len(db_songs)} songs.")
+                        self._cache_set(self.CACHE_KEY_ALL_SONGS, db_songs)
+                        return db_songs
+
+                logger.info("[SongRepository] Cache miss / scan requested: Scanning disk directories...")
+                cfg = config_manager.load_config()
+                folders = config_manager.get_local_sync_folders(cfg)
+                audio_exts = cfg.get("audio_extensions", [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"])
+
+                def _broadcast_progress(msg: str):
+                    with self._listeners_lock:
+                        listeners = list(self._progress_listeners)
+                    for listener in listeners:
+                        try:
+                            listener(msg)
+                        except Exception:
+                            pass
+
+                songs = song_scanner.scan_songs_from_paths(folders, audio_exts, progress_cb=_broadcast_progress)
+
+                # Persist scanned songs into SQLite table so subsequent queries load instantaneously
+                ui_db.save_local_songs(songs, purge_missing=True)
+
+                self._cache_set(self.CACHE_KEY_ALL_SONGS, songs)
+                SongRepository._last_scan_time = time.time()
+                return songs
         finally:
-            self._scan_active = False
+            if listener_registered:
+                with self._listeners_lock:
+                    try:
+                        self._progress_listeners.remove(progress_cb)
+                    except ValueError:
+                        pass
 
     def get_duplicates(self, force_refresh: bool = False, use_fingerprint: bool = False) -> Dict[str, Any]:
         """
@@ -157,6 +196,9 @@ class SongRepository(BaseRepository):
             # Invalidate in-memory metadata cache
             audio_metadata.METADATA_CACHE.pop(abs_path, None)
 
+            # Remove from local_songs in SQLite table
+            ui_db.delete_stored_local_song(abs_path)
+
             # Try to log the deletion in the deleted songs log (best-effort).
             try:
                 DeletedSongRepository().record_deleted_song(record)
@@ -236,6 +278,7 @@ class SongRepository(BaseRepository):
                 ui_db.remove_hidden_file(abs_path)
                 hide_list_db.remove_hidden_file(abs_path)
                 audio_metadata.METADATA_CACHE.pop(abs_path, None)
+                ui_db.delete_stored_local_song(abs_path)
                 deleted_repo.record_deleted_song(record)
                 deleted_count += 1
                 logger.info(f"[SongRepository] Batch deleted audio file: {abs_path}")
@@ -258,6 +301,7 @@ class SongRepository(BaseRepository):
         self._cache_delete(self.CACHE_KEY_ALL_SONGS)
         self._cache_delete(self.CACHE_KEY_DUPLICATES)
         self._cache_delete_pattern(f"{self.CACHE_KEY_DUPLICATES}*")
+        SongRepository._last_scan_time = 0.0
         # Clear legacy redis hostname key if present
         try:
             hostname_key = f"over_ip_songs:{socket.gethostname()}"

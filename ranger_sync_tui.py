@@ -18,7 +18,7 @@ import curses
 from typing import List, Dict, Any, Optional
 
 import fuzzy_matcher
-import adb_pusher
+import utils.android.adb.adb_pusher as adb_pusher
 import fzf_tui
 import audio_metadata
 import hide_list_db

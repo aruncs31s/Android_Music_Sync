@@ -31,14 +31,26 @@ def scan_songs_from_paths(
     folder_paths: List[str],
     audio_extensions: List[str] = None,
     progress_cb=None,
+    existing_metadata_map: Dict[str, Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """
     Recursively scan a list of local folder paths for audio files.
     Returns list of song dictionaries sorted by modification time (mtime descending).
     Optional progress_cb(msg: str) reports files as they are discovered.
+    If existing_metadata_map is provided (or loaded from SQLite), unchanged files
+    (matching mtime & size) reuse cached metadata without slow mutagen disk parsing.
     """
     if audio_extensions is None:
         audio_extensions = [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"]
+
+    if existing_metadata_map is None:
+        try:
+            import database.db_manager as central_db
+            stored = central_db.get_stored_local_songs()
+            if stored:
+                existing_metadata_map = {s["filepath"]: s for s in stored}
+        except Exception:
+            existing_metadata_map = None
 
     valid_extensions = set(ext.lower() for ext in audio_extensions)
     songs: List[Dict[str, Any]] = []
@@ -94,6 +106,20 @@ def scan_songs_from_paths(
                         ctime = 0.0
                         size = 0
 
+                    # Fast path: if file mtime and size are unchanged in SQLite, reuse metadata
+                    if existing_metadata_map and full_path in existing_metadata_map:
+                        existing = existing_metadata_map[full_path]
+                        if abs(existing.get("mtime", 0.0) - mtime) < 0.01 and existing.get("size") == size:
+                            song = dict(existing)
+                            song["_id"] = len(songs) + 1
+                            songs.append(song)
+                            if progress_cb and len(songs) % PROGRESS_EVERY == 0:
+                                try:
+                                    progress_cb(f"[SCAN] Indexed {len(songs)} audio files (verified: {file})...")
+                                except Exception:
+                                    pass
+                            continue
+
                     meta = audio_metadata.extract_audio_metadata(full_path)
 
                     filename = os.path.basename(full_path)
@@ -134,9 +160,9 @@ def scan_songs_from_paths(
                     }
                     songs.append(song)
 
-                    if progress_cb and scanned_in_folder % PROGRESS_EVERY == 0:
+                    if progress_cb and len(songs) % PROGRESS_EVERY == 0:
                         try:
-                            progress_cb(f"[SCAN]  Scanned {scanned_in_folder} audio files in {folder_abs}...")
+                            progress_cb(f"[SCAN] Scanned {len(songs)} audio files (current: {filename})...")
                         except Exception:
                             pass
 

@@ -1,0 +1,29 @@
+/* ==========================================================================
+   Modals & Progress Bars CSS
+   ========================================================================== */
+
+/* Sync Progress Bar */
+.sync-progress-track {
+  width: 100%;
+  height: 8px;
+  background: #1a1a1a;
+  border-radius: 4px;
+  overflow: hidden;
+  position: relative;
+}
+
+.sync-progress-fill {
+  height: 100%;
+  background: var(--accent-yellow);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+/* Modals on Mobile */
+@media (max-width: 768px) {
+  .modal-card {
+    width: 94%;
+    max-width: 100%;
+    padding: 1.25rem;
+  }
+}

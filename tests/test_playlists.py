@@ -9,6 +9,7 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 import database.db_manager as db_manager
+from unittest.mock import patch
 from ui.server import app
 
 
@@ -64,7 +65,8 @@ class TestPlaylists(unittest.TestCase):
         self.assertTrue(del_success)
         self.assertEqual(len(db_manager.get_playlists(db_path=self.tmp_db_path)), 0)
 
-    def test_playlist_api_endpoints(self):
+    @patch("over_ip.song_scanner.scan_songs_from_paths", return_value=[])
+    def test_playlist_api_endpoints(self, _mock_scan):
         # Create via API
         res = self.app_client.post("/api/playlists/create", json={"name": "Roadtrip Hits"})
         self.assertEqual(res.status_code, 200)

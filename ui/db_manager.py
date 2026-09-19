@@ -87,3 +87,24 @@ def remove_deleted_song(record_id: int, db_path: Optional[str] = None) -> bool:
 def clear_deleted_songs(db_path: Optional[str] = None) -> bool:
     return central_db.clear_deleted_songs(db_path)
 
+
+def save_local_songs(songs: List[Dict[str, Any]], purge_missing: bool = True, db_path: Optional[str] = None) -> int:
+    return central_db.save_local_songs(songs, purge_missing, db_path)
+
+
+def get_stored_local_songs(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    return central_db.get_stored_local_songs(db_path)
+
+
+def get_local_songs_count(db_path: Optional[str] = None) -> int:
+    return central_db.get_local_songs_count(db_path)
+
+
+def delete_stored_local_song(filepath: str, db_path: Optional[str] = None) -> bool:
+    return central_db.delete_stored_local_song(filepath, db_path)
+
+
+def delete_stored_local_songs_batch(filepaths: List[str], db_path: Optional[str] = None) -> int:
+    return central_db.delete_stored_local_songs_batch(filepaths, db_path)
+
+
