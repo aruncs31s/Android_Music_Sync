@@ -379,7 +379,7 @@ def sync_preview():
             show_hidden=False
         )
     except Exception as e:
-        print(f"[Web Sync] Error comparing files with device: {e}", file=sys.stderr)
+        logger.error(f"[Web Sync] Error comparing files with device: {e}")
         return jsonify({"error": f"Failed to compare files with device: {e}"}), 500
 
     if force:
@@ -398,8 +398,8 @@ def sync_preview():
             "device_path": dm.get("_data", "")
         })
 
-    print(f"[Web Sync] Preview for [{serial}]: {len(local_files)} local, "
-          f"{len(already_serializable)} already present, {len(to_sync)} to sync.", file=sys.stderr)
+    logger.info(f"[Web Sync] Preview for [{serial}]: {len(local_files)} local, "
+                f"{len(already_serializable)} already present, {len(to_sync)} to sync.")
 
     return jsonify({
         "status": "success",
@@ -454,7 +454,7 @@ def sync_run():
             failed_count += 1
         results.append(result_entry)
 
-    print(f"[Web Sync] Pushed {success_count}/{len(file_paths)} files to [{serial}] ({remote_dir}).", file=sys.stderr)
+    logger.info(f"[Web Sync] Pushed {success_count}/{len(file_paths)} files to [{serial}] ({remote_dir}).")
 
     return jsonify({
         "status": "success",
@@ -710,5 +710,5 @@ def remove_track_from_playlist(playlist_id: int):
 
 def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False):
     """Start Flask Web Dashboard server."""
-    print(f"[Web UI Dashboard] Launching web interface on http://{host}:{port}...", flush=True)
+    logger.info(f"[Web UI Dashboard] Launching web interface on http://{host}:{port}...")
     app.run(host=host, port=port, debug=debug, threaded=True)

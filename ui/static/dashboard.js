@@ -19,6 +19,120 @@ const SVG_CHECK = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke=
 const SVG_ALERT = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>`;
 const SVG_WAVEFORM = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>`;
 
+// HTML Escaping Utility
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function escapeJs(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+// --- TOAST NOTIFICATIONS SYSTEM (Non-blocking) ---
+function showToast(message, type = 'info', duration = 3500) {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+
+  const toast = document.createElement('div');
+  toast.className = `toast toast-${type}`;
+
+  let icon = SVG_ALERT;
+  if (type === 'success') {
+    icon = SVG_CHECK;
+  } else if (type === 'error') {
+    icon = SVG_ALERT;
+  }
+
+  toast.innerHTML = `
+    <div class="toast-message">
+      <span style="display: inline-flex; align-items: center; flex-shrink: 0;">${icon}</span>
+      <span>${escapeHtml(message)}</span>
+    </div>
+    <button class="toast-close-btn" title="Dismiss">×</button>
+  `;
+
+  const closeBtn = toast.querySelector('.toast-close-btn');
+  const dismiss = () => {
+    toast.classList.add('toast-fade-out');
+    setTimeout(() => {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 220);
+  };
+
+  if (closeBtn) {
+    closeBtn.addEventListener('click', dismiss);
+  }
+
+  container.appendChild(toast);
+
+  if (duration > 0) {
+    setTimeout(dismiss, duration);
+  }
+}
+
+// --- GENERIC CONFIRMATION MODAL SYSTEM (Replaces window.confirm) ---
+let pendingConfirmCallback = null;
+
+function showConfirmModal({ title = 'Confirm Action', message = 'Are you sure?', details = null, confirmText = 'Confirm', confirmClass = 'btn', onConfirm = null }) {
+  const modal = document.getElementById('modal-confirm-action');
+  const titleEl = document.getElementById('confirm-modal-title');
+  const msgEl = document.getElementById('confirm-modal-message');
+  const detailsEl = document.getElementById('confirm-modal-details');
+  const okBtn = document.getElementById('confirm-modal-ok-btn');
+
+  if (!modal) {
+    if (confirm(message)) {
+      if (onConfirm) onConfirm();
+    }
+    return;
+  }
+
+  if (titleEl) titleEl.textContent = title;
+  if (msgEl) msgEl.textContent = message;
+
+  if (detailsEl) {
+    if (details) {
+      detailsEl.style.display = 'block';
+      if (Array.isArray(details)) {
+        detailsEl.innerHTML = details.map(d => `<div style="padding: 2px 0;">${escapeHtml(d)}</div>`).join('');
+      } else {
+        detailsEl.textContent = details;
+      }
+    } else {
+      detailsEl.style.display = 'none';
+      detailsEl.innerHTML = '';
+    }
+  }
+
+  if (okBtn) {
+    okBtn.textContent = confirmText;
+    okBtn.className = confirmClass || 'btn';
+  }
+
+  pendingConfirmCallback = onConfirm;
+  modal.style.display = 'flex';
+}
+
+function closeConfirmModal(confirmed = false) {
+  const modal = document.getElementById('modal-confirm-action');
+  if (modal) modal.style.display = 'none';
+
+  if (confirmed && typeof pendingConfirmCallback === 'function') {
+    const cb = pendingConfirmCallback;
+    pendingConfirmCallback = null;
+    cb();
+  } else {
+    pendingConfirmCallback = null;
+  }
+}
+
 // Theme Management System
 function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
@@ -54,6 +168,8 @@ let allSongs = [];
 let filteredSongs = [];
 let libPage = 1;
 const libPageSize = 15;
+let currentFormatFilter = 'all';
+let selectedSongPaths = new Set();
 
 let allClusters = [];
 let filteredClusters = [];
@@ -65,6 +181,8 @@ let dupEventSource = null; // active SSE connection for live analysis
 // Global Audio Player & Playlist State
 let currentTrackPath = null;
 let isPlaying = false;
+let isScrubbing = false;
+let isPlayerLooping = false;
 let activeQueue = [];
 let queueIndex = 0;
 
@@ -93,17 +211,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function initTabs() {
   const btns = document.querySelectorAll('.tab-btn');
-  const sections = document.querySelectorAll('.tab-content');
 
   btns.forEach(btn => {
     btn.addEventListener('click', () => {
-      btns.forEach(b => b.classList.remove('active'));
-      sections.forEach(s => s.style.display = 'none');
-
-      btn.classList.add('active');
       const targetId = btn.getAttribute('data-tab');
-      const targetSec = document.getElementById(targetId);
-      if (targetSec) targetSec.style.display = 'block';
+      switchTab(targetId);
     });
   });
 }
@@ -117,6 +229,26 @@ async function loadDashboardStats() {
     document.getElementById('stat-synced-count').textContent = data.synced_count || 0;
     document.getElementById('stat-hidden-count').textContent = data.hidden_count || 0;
     document.getElementById('stat-duplicates-count').textContent = data.duplicates_count || 0;
+
+    // Update dynamic duplicate badge in nav bar
+    const dupBadge = document.getElementById('nav-badge-duplicates');
+    if (dupBadge) {
+      const dupCount = data.duplicates_count || 0;
+      dupBadge.textContent = dupCount;
+      dupBadge.style.display = dupCount > 0 ? 'inline-flex' : 'none';
+    }
+
+    // Update trash badge in nav bar
+    try {
+      const delRes = await fetch('/api/deleted');
+      const delSongs = await delRes.json();
+      const trashBadge = document.getElementById('nav-badge-trash');
+      if (trashBadge) {
+        const trashCount = Array.isArray(delSongs) ? delSongs.length : 0;
+        trashBadge.textContent = trashCount;
+        trashBadge.style.display = trashCount > 0 ? 'inline-flex' : 'none';
+      }
+    } catch (_) {}
 
     renderDeviceBreakdown(data.device_counts || []);
   } catch (err) {
@@ -132,17 +264,31 @@ let currentSortCriteria = 'ctime_desc';
 let availableDevicesList = [];
 
 function switchTab(tabId) {
+  let activeTabId = tabId;
+  let activeBtnTab = tabId;
+
+  // Map legacy/sub-tabs gracefully
+  if (tabId === 'tab-devices') {
+    activeTabId = 'tab-overview';
+    activeBtnTab = 'tab-overview';
+  } else if (tabId === 'tab-hidden') {
+    activeTabId = 'tab-hidden';
+    activeBtnTab = 'tab-deleted';
+  }
+
   const btns = document.querySelectorAll('.tab-btn');
   const sections = document.querySelectorAll('.tab-content');
+
   btns.forEach(b => {
-    if (b.getAttribute('data-tab') === tabId) {
+    if (b.getAttribute('data-tab') === activeBtnTab) {
       b.classList.add('active');
     } else {
       b.classList.remove('active');
     }
   });
+
   sections.forEach(s => {
-    s.style.display = (s.id === tabId) ? 'block' : 'none';
+    s.style.display = (s.id === activeTabId) ? 'block' : 'none';
   });
 }
 
@@ -407,13 +553,50 @@ function updateSortIcons(criteria) {
   });
 }
 
+function setLibraryFormatFilter(filter, btnEl) {
+  currentFormatFilter = filter;
+  document.querySelectorAll('.filter-chip').forEach(chip => {
+    chip.classList.toggle('active', chip === btnEl || chip.dataset.filter === filter);
+  });
+  applyLibraryFilterAndSort();
+}
+
+function clearLibrarySearch() {
+  const input = document.getElementById('library-search');
+  if (input) {
+    input.value = '';
+    applyLibraryFilterAndSort();
+    input.focus();
+  }
+}
+
 function applyLibraryFilterAndSort() {
-  const query = (document.getElementById('library-search')?.value || '').trim().toLowerCase();
+  const searchInput = document.getElementById('library-search');
+  const query = (searchInput?.value || '').trim().toLowerCase();
+  const clearBtn = document.getElementById('library-search-clear');
+  if (clearBtn) {
+    clearBtn.style.display = query ? 'block' : 'none';
+  }
+
   let list = allSongs;
   if (query) {
     list = allSongs.filter(s => {
       const text = `${s.title || ''} ${s.artist || ''} ${s.album || ''} ${s.filename || ''} ${s.filepath || ''}`.toLowerCase();
       return text.includes(query);
+    });
+  }
+
+  // Format Filter
+  if (currentFormatFilter && currentFormatFilter !== 'all') {
+    list = list.filter(s => {
+      const ext = (s.filepath || s.filename || '').split('.').pop().toLowerCase();
+      const bitVal = s.bitrate_val || 0;
+      if (currentFormatFilter === 'flac') return ext === 'flac' || ext === 'wav';
+      if (currentFormatFilter === 'highres') return bitVal >= 320 || ext === 'flac' || ext === 'wav';
+      if (currentFormatFilter === 'mp3') return ext === 'mp3';
+      if (currentFormatFilter === 'm4a') return ext === 'm4a' || ext === 'aac';
+      if (currentFormatFilter === 'other') return !['flac', 'wav', 'mp3', 'm4a', 'aac'].includes(ext);
+      return true;
     });
   }
 
@@ -460,12 +643,158 @@ function changeLibraryPage(delta) {
   renderLibraryPage();
 }
 
+function toggleLibrarySongSelection(filepath, isChecked) {
+  if (isChecked) {
+    selectedSongPaths.add(filepath);
+  } else {
+    selectedSongPaths.delete(filepath);
+  }
+  updateLibrarySelectionUI();
+  const startIdx = (libPage - 1) * libPageSize;
+  const pageSongs = filteredSongs.slice(startIdx, startIdx + libPageSize);
+  const masterCb = document.getElementById('lib-select-all');
+  if (masterCb) {
+    masterCb.checked = (pageSongs.length > 0 && pageSongs.every(s => selectedSongPaths.has(s.filepath)));
+  }
+}
+
+function toggleSelectAllLibrarySongs(isChecked) {
+  const startIdx = (libPage - 1) * libPageSize;
+  const pageSongs = filteredSongs.slice(startIdx, startIdx + libPageSize);
+  pageSongs.forEach(s => {
+    if (isChecked) {
+      selectedSongPaths.add(s.filepath);
+    } else {
+      selectedSongPaths.delete(s.filepath);
+    }
+  });
+  renderLibraryPage();
+  updateLibrarySelectionUI();
+}
+
+function clearLibrarySelection() {
+  selectedSongPaths.clear();
+  const masterCb = document.getElementById('lib-select-all');
+  if (masterCb) masterCb.checked = false;
+  renderLibraryPage();
+  updateLibrarySelectionUI();
+}
+
+function updateLibrarySelectionUI() {
+  const bar = document.getElementById('lib-bulk-action-bar');
+  const countEl = document.getElementById('lib-bulk-selected-count');
+  const count = selectedSongPaths.size;
+
+  if (countEl) countEl.textContent = count;
+  if (bar) bar.style.display = (count > 0) ? 'flex' : 'none';
+}
+
+function openBulkDeleteLibraryModal() {
+  const count = selectedSongPaths.size;
+  if (count === 0) return;
+  const paths = Array.from(selectedSongPaths);
+
+  showConfirmModal({
+    title: 'Delete Selected Songs',
+    message: `Move ${count} selected song(s) to Trash (tmp/deleted/)?`,
+    details: paths.slice(0, 8).map(p => p.split('/').pop() || p),
+    confirmText: `Delete ${count} Songs`,
+    confirmClass: 'btn btn-secondary btn-danger',
+    onConfirm: async () => {
+      try {
+        const res = await fetch('/api/songs/batch-delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filepaths: paths })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          showToast(`Moved ${data.deleted_count} songs to Trash`, 'success', 3500);
+          clearLibrarySelection();
+          await loadDeviceSongs(currentDeviceId, true);
+          loadDashboardStats();
+        } else {
+          showToast(`Error deleting songs: ${data.error || data.message || 'Failed'}`, 'error', 4000);
+        }
+      } catch (err) {
+        showToast('Network error while deleting songs.', 'error', 4000);
+      }
+    }
+  });
+}
+
+function executeBulkHideSongs() {
+  const count = selectedSongPaths.size;
+  if (count === 0) return;
+  const paths = Array.from(selectedSongPaths);
+
+  showConfirmModal({
+    title: 'Hide Selected Songs',
+    message: `Hide ${count} selected song(s) from sync lists?`,
+    details: paths.slice(0, 8).map(p => p.split('/').pop() || p),
+    confirmText: `Hide ${count} Songs`,
+    confirmClass: 'btn',
+    onConfirm: async () => {
+      let hiddenCount = 0;
+      for (const fp of paths) {
+        try {
+          await fetch('/api/hide', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ filepath: fp })
+          });
+          hiddenCount++;
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      showToast(`Hid ${hiddenCount} song(s) from sync lists`, 'success', 3500);
+      clearLibrarySelection();
+      loadHiddenFiles();
+      loadDashboardStats();
+    }
+  });
+}
+
+function openBulkPlaylistModal() {
+  const count = selectedSongPaths.size;
+  if (count === 0) return;
+  const paths = Array.from(selectedSongPaths);
+
+  const modal = document.getElementById('modal-add-to-playlist');
+  const titleEl = document.getElementById('modal-track-title');
+  if (titleEl) titleEl.textContent = `Batch adding ${count} selected song(s)`;
+  targetTrackForPlaylist = { filepath: paths[0], filepaths: paths };
+  if (modal) modal.style.display = 'flex';
+}
+
+function openBulkSyncModal() {
+  const count = selectedSongPaths.size;
+  if (count === 0) return;
+  const paths = Array.from(selectedSongPaths);
+  const firstSong = allSongs.find(s => s.filepath === paths[0]) || { filepath: paths[0], title: paths[0].split('/').pop() };
+
+  openSyncSongModal(
+    firstSong.filepath,
+    `${count} Selected Tracks (Batch Sync)`,
+    firstSong.artist || 'Multiple Artists',
+    firstSong.duration_formatted || '',
+    '',
+    '',
+    ''
+  );
+  const syncModal = document.getElementById('modal-sync-song');
+  if (syncModal) {
+    syncModal.dataset.batchPaths = JSON.stringify(paths);
+  }
+}
+
 function renderLibraryPage() {
   const tbody = document.getElementById('songs-tbody');
   if (!tbody) return;
 
   if (!filteredSongs || filteredSongs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">No songs matching search query.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="text-muted">No songs matching search query.</td></tr>';
     updateLibraryPaginationInfo(0, 0, 0, 1);
     return;
   }
@@ -483,12 +812,15 @@ function renderLibraryPage() {
     const playBtnIcon = isThisTrackPlaying ? SVG_PAUSE : SVG_PLAY;
     const playBtnText = isThisTrackPlaying ? 'Pause' : 'Play';
     const rowClass = isThisTrackPlaying ? 'class="playing-row"' : '';
+    const eqHtml = isThisTrackPlaying ? '<span class="playing-equalizer"><span></span><span></span><span></span></span>' : '';
+
+    const isSelected = selectedSongPaths.has(s.filepath);
 
     let actionButtons = '';
     if (isLocalStorage) {
       actionButtons = `
         <div class="action-btn-group">
-          <button class="btn btn-secondary btn-sm" onclick="playOrToggleAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}')" title="${playBtnText}">${playBtnIcon} ${playBtnText}</button>
+          <button class="btn btn-secondary btn-sm" onclick="playOrToggleAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', ${startIdx + idx}, '${escapeJs(s.bitrate_kbps || '')}')" title="${playBtnText}">${playBtnIcon} ${playBtnText}</button>
           <button class="btn btn-secondary btn-sm" onclick="openSyncSongModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}', '${escapeJs(s.duration_formatted || '')}', '${escapeJs(s.size_formatted || '')}', '${escapeJs(s.bitrate_kbps || '')}', '${escapeJs(s.album || '')}')" title="Sync to target device">${SVG_SYNC} Sync</button>
           <button class="btn btn-secondary btn-sm" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} Playlist</button>
           <button class="btn btn-secondary btn-sm" onclick="hideSong('${escapeJs(s.filepath)}')" title="Hide song">${SVG_HIDE}</button>
@@ -499,7 +831,7 @@ function renderLibraryPage() {
       actionButtons = `
         <div class="action-btn-group">
           <button class="btn btn-secondary btn-sm" onclick="showAddToPlaylistModal('${escapeJs(s.filepath)}', '${escapeJs(s.title)}')" title="Add to Playlist">${SVG_PLUS} Playlist</button>
-          <button class="btn btn-secondary btn-sm" onclick="alert('File: ${escapeJs(s.filepath || s.filename)}')" title="View Details">Details</button>
+          <button class="btn btn-secondary btn-sm" onclick="showToast('File: ${escapeJs(s.filepath || s.filename)}', 'info', 4000)" title="View Details">Details</button>
           <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDeviceId)}', '${escapeJs(s._id || '')}', '${escapeJs(s.filename || '')}')" title="Delete song">${SVG_TRASH}</button>
         </div>
       `;
@@ -509,10 +841,13 @@ function renderLibraryPage() {
 
     html += `
       <tr ${rowClass}>
+        <td class="col-center">
+          <input type="checkbox" class="lib-song-checkbox" data-path="${escapeHtml(s.filepath)}" ${isSelected ? 'checked' : ''} onchange="toggleLibrarySongSelection('${escapeJs(s.filepath)}', this.checked)">
+        </td>
         <td class="col-center text-tabular">${globalIdx}</td>
         <td ${clickToSyncAttr}>
           <div class="track-meta-cell">
-            <span class="track-title" title="${escapeHtml(s.title || 'Unknown')}">${escapeHtml(s.title || 'Unknown')}</span>
+            <span class="track-title" title="${escapeHtml(s.title || 'Unknown')}">${eqHtml}${escapeHtml(s.title || 'Unknown')}</span>
             <span class="track-subtitle" title="${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}">${escapeHtml(s.artist || 'Unknown')} • ${escapeHtml(s.album || 'Unknown')}</span>
           </div>
         </td>
@@ -526,6 +861,11 @@ function renderLibraryPage() {
     `;
   });
   tbody.innerHTML = html;
+
+  const masterCb = document.getElementById('lib-select-all');
+  if (masterCb) {
+    masterCb.checked = (pageSongs.length > 0 && pageSongs.every(s => selectedSongPaths.has(s.filepath)));
+  }
 
   updateLibraryPaginationInfo(startIdx + 1, Math.min(startIdx + pageSongs.length, filteredSongs.length), filteredSongs.length, totalPages);
 }
@@ -835,7 +1175,7 @@ function onDuplicateCheckboxChange(filepath, isChecked, clusterIndex) {
       const otherSongs = cluster.songs.filter(s => s.filepath !== filepath);
       const allOthersSelected = otherSongs.every(s => selectedDuplicatePaths.has(s.filepath));
       if (allOthersSelected && otherSongs.length > 0) {
-        alert("Safety Limit: At least one copy in this cluster must be kept so the song is not lost from your library.");
+        showToast("Safety Limit: At least one copy in this cluster must be kept so the song is not lost.", 'error');
         const cb = document.querySelector(`input.dup-checkbox[data-path="${CSS.escape(filepath)}"]`);
         if (cb) cb.checked = false;
         return;
@@ -872,7 +1212,68 @@ function changeDuplicatesPage(delta) {
   renderDuplicatesPage();
 }
 
+function updateDuplicatesReclaimableSummary() {
+  const banner = document.getElementById('dup-reclaimable-banner');
+  const sizeEl = document.getElementById('dup-reclaimable-size');
+  const countEl = document.getElementById('dup-reclaimable-count');
+  if (!banner || !sizeEl || !countEl) return;
+
+  if (!allClusters || allClusters.length === 0) {
+    banner.style.display = 'none';
+    return;
+  }
+
+  let redundantCount = 0;
+  let redundantBytes = 0;
+
+  allClusters.forEach(c => {
+    const keeper = findKeeperInCluster(c, currentDupKeepStrategy);
+    if (c.songs && c.songs.length > 1) {
+      c.songs.forEach(s => {
+        if (keeper && s.filepath === keeper.filepath) return;
+        redundantCount++;
+        if (typeof s.size === 'number') {
+          redundantBytes += s.size;
+        }
+      });
+    }
+  });
+
+  if (redundantCount > 0) {
+    sizeEl.textContent = formatBytes(redundantBytes);
+    countEl.textContent = redundantCount;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function selectAllRedundantDuplicates() {
+  if (!allClusters || allClusters.length === 0) {
+    showToast('No duplicate clusters found.', 'info');
+    return;
+  }
+
+  selectedDuplicatePaths.clear();
+  let count = 0;
+  allClusters.forEach(c => {
+    const keeper = findKeeperInCluster(c, currentDupKeepStrategy);
+    if (c.songs && c.songs.length > 1) {
+      c.songs.forEach(s => {
+        if (keeper && s.filepath === keeper.filepath) return;
+        selectedDuplicatePaths.add(s.filepath);
+        count++;
+      });
+    }
+  });
+
+  updateDuplicatesSelectionUI();
+  renderDuplicatesPage();
+  showToast(`Selected ${count} redundant copies across all clusters (best copies preserved).`, 'success');
+}
+
 function renderDuplicatesPage() {
+  updateDuplicatesReclaimableSummary();
   const container = document.getElementById('duplicates-container');
   if (!container) return;
 
@@ -1029,18 +1430,18 @@ async function executeBatchDeleteDuplicates() {
     const data = await res.json();
     if (data.status === 'success') {
       hideBatchDeleteDuplicatesModal();
-      alert(`Successfully deleted ${data.deleted_count} duplicate files!\nExactly 1 copy in each cluster has been preserved.`);
+      showToast(`Deleted ${data.deleted_count} duplicate files. Exactly 1 copy in each cluster preserved!`, 'success');
       selectedDuplicatePaths.clear();
       updateDuplicatesSelectionUI();
       loadDuplicates();
       loadSongs();
       loadDashboardStats();
     } else {
-      alert(`Error deleting duplicate files: ${data.error || data.message || 'Batch delete failed'}`);
+      showToast(`Error deleting duplicate files: ${data.error || data.message || 'Batch delete failed'}`, 'error');
     }
   } catch (err) {
     console.error('Error executing batch duplicate deletion:', err);
-    alert('Connection error while batch deleting duplicate files.');
+    showToast('Connection error while batch deleting duplicate files.', 'error');
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -1258,53 +1659,98 @@ function toggleAlreadySection() {
 
 async function pushSelectedSyncFiles() {
   const checkedBoxes = [...document.querySelectorAll('.sync-file-checkbox:checked')];
-  if (checkedBoxes.length === 0) return;
+  if (checkedBoxes.length === 0) {
+    showToast('No files selected to sync.', 'info');
+    return;
+  }
 
   const serial = document.getElementById('sync-device-select')?.value || '';
   const remoteDir = document.getElementById('sync-remote-dir')?.value || '';
   const statusEl = document.getElementById('sync-status');
+  const progressContainer = document.getElementById('sync-progress-container');
+  const progressBar = document.getElementById('sync-progress-bar');
+  const progressLabel = document.getElementById('sync-progress-label');
+  const progressPercent = document.getElementById('sync-progress-percent');
+  const progressCurrentFile = document.getElementById('sync-progress-current-file');
+  const pushBtn = document.getElementById('btn-push-sync');
 
-  if (!serial) return;
+  if (!serial) {
+    showToast('Please select a destination ADB device.', 'error');
+    return;
+  }
 
   const files = checkedBoxes.map(cb => cb.dataset.path);
-  if (!confirm(`Push ${files.length} file(s) to device ${serial}?\n\nRemote folder:\n${remoteDir}`)) return;
 
-  if (statusEl) statusEl.textContent = `Pushing ${files.length} file(s) to ${serial}...`;
+  showConfirmModal({
+    title: 'Push Files to ADB Device',
+    message: `Push ${files.length} file(s) to device [${serial}]?`,
+    details: `Destination: ${remoteDir}`,
+    confirmText: 'Push Files',
+    confirmClass: 'btn',
+    onConfirm: async () => {
+      if (pushBtn) pushBtn.disabled = true;
+      if (statusEl) statusEl.textContent = `Starting sync of ${files.length} file(s)...`;
 
-  const pushBtn = document.getElementById('btn-push-sync');
-  if (pushBtn) pushBtn.disabled = true;
+      if (progressContainer) {
+        progressContainer.style.display = 'block';
+        if (progressBar) progressBar.style.width = '0%';
+        if (progressPercent) progressPercent.textContent = '0%';
+        if (progressLabel) progressLabel.textContent = `Syncing to ${serial}...`;
+      }
 
-  try {
-    const res = await fetch('/api/sync/run', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ serial: serial, remote_dir: remoteDir, files: files })
-    });
-    const data = await res.json();
-    if (data.status !== 'success') {
-      if (statusEl) statusEl.textContent = `Error: ${data.error || 'Failed to run sync'}`;
-      return;
+      let successCount = 0;
+      let failCount = 0;
+
+      for (let i = 0; i < files.length; i++) {
+        const fp = files[i];
+        const fn = fp.split('/').pop();
+        const currentIdx = i + 1;
+        const pct = Math.round((currentIdx / files.length) * 100);
+
+        if (progressLabel) progressLabel.textContent = `Pushing ${currentIdx} of ${files.length} (${pct}%)`;
+        if (progressPercent) progressPercent.textContent = `${pct}%`;
+        if (progressBar) progressBar.style.width = `${pct}%`;
+        if (progressCurrentFile) progressCurrentFile.textContent = fn;
+
+        try {
+          const res = await fetch('/api/sync/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ serial: serial, remote_dir: remoteDir, files: [fp] })
+          });
+          const data = await res.json();
+          if (data.status === 'success' && data.pushed > 0) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        } catch (err) {
+          console.error(`Failed to push ${fp}:`, err);
+          failCount++;
+        }
+      }
+
+      if (pushBtn) pushBtn.disabled = false;
+      if (progressLabel) progressLabel.textContent = `Completed (${successCount} succeeded, ${failCount} failed)`;
+      if (statusEl) statusEl.textContent = `Sync completed: ${successCount} pushed, ${failCount} failed.`;
+
+      if (successCount > 0) {
+        showToast(`Synced ${successCount} file(s) to ${serial}!`, 'success');
+      }
+      if (failCount > 0) {
+        showToast(`${failCount} file(s) failed to sync. Check server logs.`, 'error');
+      }
+
+      setTimeout(() => {
+        if (progressContainer) progressContainer.style.display = 'none';
+      }, 3500);
+
+      loadSyncedHistory();
+      loadDashboardStats();
+      loadSyncDevices(false);
+      runSyncPreview();
     }
-
-    if (statusEl) statusEl.textContent = `Sync complete: ${data.pushed}/${data.total} files pushed to ${serial}.`;
-
-    const failures = (data.results || []).filter(r => !r.success);
-    if (failures.length > 0) {
-      const names = failures.slice(0, 5).map(f => f.filepath.split('/').pop()).join(', ');
-      console.warn('Sync failures:', failures);
-      if (statusEl) statusEl.textContent += ` ${failures.length} failed (${names}${failures.length > 5 ? ', ...' : ''}). Check server logs.`;
-    }
-
-    loadSyncedHistory();
-    loadDashboardStats();
-    loadSyncDevices(false);
-    runSyncPreview();
-  } catch (err) {
-    console.error('Error pushing sync files:', err);
-    if (statusEl) statusEl.textContent = 'Error pushing files. See server logs.';
-  } finally {
-    if (pushBtn) pushBtn.disabled = false;
-  }
+  });
 }
 
 // --- FILE DELETION, HIDING & OTHER UTILITIES ---
@@ -1321,71 +1767,75 @@ async function deleteSong(filepath, evt, deviceId, songId, filename) {
   }
 
   const songName = filename || filepath.split('/').pop() || 'this audio file';
-  if (!confirm(`Are you sure you want to permanently delete '${songName}' from ${devLabel}?\n\nRemote/Local Path:\n${filepath}`)) {
-    return;
-  }
 
-  let targetEl = null;
-  if (evt && evt.target) {
-    targetEl = evt.target.closest('li, tr');
-    if (targetEl) {
-      targetEl.style.transition = 'all 0.3s ease';
-      targetEl.style.opacity = '0.2';
-      targetEl.style.filter = 'blur(4px)';
-    }
-  }
-
-  try {
-    const res = await fetch('/api/song/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filepath: filepath,
-        device_id: targetDevice,
-        song_id: songId,
-        filename: filename
-      })
-    });
-    const data = await res.json();
-    if (data.status === 'success') {
-      if (targetEl) targetEl.remove();
-
-      // Update in-memory lists if viewing this device
-      if (allSongs && allSongs.length > 0) {
-        allSongs = allSongs.filter(s => s.filepath !== filepath);
-        filteredSongs = filteredSongs.filter(s => s.filepath !== filepath);
-        // If we filtered or searched, update pagination counter
-        updateLibraryPaginationInfo(
-          1,
-          Math.min(libPageSize, filteredSongs.length),
-          filteredSongs.length,
-          Math.ceil(filteredSongs.length / libPageSize) || 1
-        );
+  showConfirmModal({
+    title: 'Delete Audio File',
+    message: `Permanently delete '${songName}' from ${devLabel}?`,
+    details: filepath,
+    confirmText: 'Delete Song',
+    confirmClass: 'btn btn-danger',
+    onConfirm: async () => {
+      let targetEl = null;
+      if (evt && evt.target) {
+        targetEl = evt.target.closest('li, tr');
+        if (targetEl) {
+          targetEl.style.transition = 'all 0.3s ease';
+          targetEl.style.opacity = '0.2';
+          targetEl.style.filter = 'blur(4px)';
+        }
       }
 
-      if (targetDevice === 'local') {
-        loadDuplicates();
-        loadSongs();
-      } else {
-        // Force-refresh device query so that Android MediaStore count updates
-        loadDeviceSongs(targetDevice, true);
+      try {
+        const res = await fetch('/api/song/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filepath: filepath,
+            device_id: targetDevice,
+            song_id: songId,
+            filename: filename
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          if (targetEl) targetEl.remove();
+
+          if (allSongs && allSongs.length > 0) {
+            allSongs = allSongs.filter(s => s.filepath !== filepath);
+            filteredSongs = filteredSongs.filter(s => s.filepath !== filepath);
+            updateLibraryPaginationInfo(
+              1,
+              Math.min(libPageSize, filteredSongs.length),
+              filteredSongs.length,
+              Math.ceil(filteredSongs.length / libPageSize) || 1
+            );
+          }
+
+          if (targetDevice === 'local') {
+            loadDuplicates();
+            loadSongs();
+          } else {
+            loadDeviceSongs(targetDevice, true);
+          }
+          loadDashboardStats();
+          showToast(`Deleted '${songName}' successfully.`, 'success');
+        } else {
+          if (targetEl) {
+            targetEl.style.opacity = '1';
+            targetEl.style.filter = 'none';
+          }
+          showToast(`Error deleting file: ${data.error || data.message || 'Failed to delete file'}`, 'error');
+        }
+      } catch (err) {
+        console.error('Error deleting song:', err);
+        if (targetEl) {
+          targetEl.style.opacity = '1';
+          targetEl.style.filter = 'none';
+        }
+        showToast('Error connecting to server to delete file.', 'error');
       }
-      loadDashboardStats();
-    } else {
-      if (targetEl) {
-        targetEl.style.opacity = '1';
-        targetEl.style.filter = 'none';
-      }
-      alert(`Error deleting file: ${data.error || data.message || 'Failed to delete file'}`);
     }
-  } catch (err) {
-    console.error('Error deleting song:', err);
-    if (targetEl) {
-      targetEl.style.opacity = '1';
-      targetEl.style.filter = 'none';
-    }
-    alert('Error connecting to server to delete file.');
-  }
+  });
 }
 
 async function loadHiddenFiles() {
@@ -1550,13 +2000,240 @@ async function addOverIpDevice() {
   }
 }
 
+// --- BESPOKE AUDIO PLAYER ENGINE ---
+
+function formatDuration(sec) {
+  if (isNaN(sec) || !isFinite(sec) || sec < 0) return '0:00';
+  const minutes = Math.floor(sec / 60);
+  const seconds = Math.floor(sec % 60);
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+}
+
+const SVG_VOL_HIGH = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>`;
+const SVG_VOL_MUTED = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>`;
+
 function initAudioPlayer() {
   const player = document.getElementById('audio-player');
+  const scrubber = document.getElementById('player-scrubber');
+  const curTimeEl = document.getElementById('player-current-time');
+  const totalTimeEl = document.getElementById('player-total-time');
+  const volSlider = document.getElementById('player-volume');
   if (!player) return;
+
+  // Restore saved volume
+  const savedVol = localStorage.getItem('antigravity_player_volume');
+  if (savedVol !== null) {
+    const v = parseFloat(savedVol);
+    player.volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
+    if (volSlider) volSlider.value = player.volume;
+  }
+  updatePlayerVolumeIcon();
 
   player.onplay = () => setPlayerPlayState(true);
   player.onpause = () => setPlayerPlayState(false);
   player.onended = () => handleTrackEnded();
+
+  player.ontimeupdate = () => {
+    if (!isScrubbing && scrubber && player.duration) {
+      scrubber.value = player.currentTime;
+      if (curTimeEl) curTimeEl.textContent = formatDuration(player.currentTime);
+      updateScrubberProgress(player.currentTime, player.duration);
+    }
+  };
+
+  player.onloadedmetadata = () => {
+    if (scrubber) {
+      scrubber.min = 0;
+      scrubber.max = player.duration || 100;
+      scrubber.value = player.currentTime || 0;
+    }
+    if (totalTimeEl) {
+      totalTimeEl.textContent = formatDuration(player.duration);
+    }
+    updateScrubberProgress(player.currentTime || 0, player.duration || 100);
+  };
+
+  player.onvolumechange = () => {
+    if (volSlider) volSlider.value = player.muted ? 0 : player.volume;
+    updatePlayerVolumeIcon();
+  };
+
+  setupPlayerKeyboardHotkeys();
+}
+
+function updateScrubberProgress(current, total) {
+  const scrubber = document.getElementById('player-scrubber');
+  if (!scrubber || !total) return;
+  const pct = Math.min(100, Math.max(0, (current / total) * 100));
+  scrubber.style.background = `linear-gradient(to right, var(--accent-yellow) ${pct}%, #262626 ${pct}%)`;
+}
+
+function onScrubberInput(val) {
+  isScrubbing = true;
+  const player = document.getElementById('audio-player');
+  const curTimeEl = document.getElementById('player-current-time');
+  const v = parseFloat(val);
+  if (curTimeEl) curTimeEl.textContent = formatDuration(v);
+  if (player && player.duration) {
+    updateScrubberProgress(v, player.duration);
+  }
+}
+
+function onScrubberChange(val) {
+  const player = document.getElementById('audio-player');
+  if (player) {
+    player.currentTime = parseFloat(val);
+  }
+  isScrubbing = false;
+}
+
+function onVolumeInput(val) {
+  const player = document.getElementById('audio-player');
+  if (!player) return;
+  const v = parseFloat(val);
+  player.volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
+  player.muted = false;
+  localStorage.setItem('antigravity_player_volume', player.volume);
+  updatePlayerVolumeIcon();
+}
+
+function togglePlayerMute() {
+  const player = document.getElementById('audio-player');
+  const volSlider = document.getElementById('player-volume');
+  if (!player) return;
+  player.muted = !player.muted;
+  if (volSlider) {
+    volSlider.value = player.muted ? 0 : player.volume;
+  }
+  updatePlayerVolumeIcon();
+}
+
+function updatePlayerVolumeIcon() {
+  const player = document.getElementById('audio-player');
+  const icon = document.getElementById('player-vol-icon');
+  if (!player || !icon) return;
+  const isMuted = player.muted || player.volume === 0;
+  icon.innerHTML = isMuted ? SVG_VOL_MUTED : SVG_VOL_HIGH;
+}
+
+function togglePlayerLoop() {
+  isPlayerLooping = !isPlayerLooping;
+  const player = document.getElementById('audio-player');
+  if (player) player.loop = isPlayerLooping;
+  const loopBtn = document.getElementById('btn-player-loop');
+  if (loopBtn) {
+    if (isPlayerLooping) {
+      loopBtn.style.color = 'var(--accent-yellow)';
+      loopBtn.title = 'Repeat Mode: Active (Loop)';
+    } else {
+      loopBtn.style.color = '';
+      loopBtn.title = 'Toggle Repeat Mode';
+    }
+  }
+}
+
+function seekRelative(sec) {
+  const player = document.getElementById('audio-player');
+  if (!player || !player.duration) return;
+  player.currentTime = Math.max(0, Math.min(player.duration, player.currentTime + sec));
+}
+
+function playPreviousTrack() {
+  const player = document.getElementById('audio-player');
+  if (player && player.currentTime > 3) {
+    player.currentTime = 0;
+    return;
+  }
+  if (activeQueue && activeQueue.length > 0) {
+    if (queueIndex > 0) {
+      queueIndex--;
+      const prevTrack = activeQueue[queueIndex];
+      playAudio(prevTrack.filepath, prevTrack.title, prevTrack.artist, activeQueue, queueIndex, prevTrack.bitrate_kbps);
+    } else if (isPlayerLooping) {
+      queueIndex = activeQueue.length - 1;
+      const lastTrack = activeQueue[queueIndex];
+      playAudio(lastTrack.filepath, lastTrack.title, lastTrack.artist, activeQueue, queueIndex, lastTrack.bitrate_kbps);
+    } else if (player) {
+      player.currentTime = 0;
+    }
+  }
+}
+
+function playNextTrack() {
+  if (activeQueue && activeQueue.length > 0) {
+    if (queueIndex + 1 < activeQueue.length) {
+      queueIndex++;
+      const nextTrack = activeQueue[queueIndex];
+      playAudio(nextTrack.filepath, nextTrack.title, nextTrack.artist, activeQueue, queueIndex, nextTrack.bitrate_kbps);
+    } else if (isPlayerLooping) {
+      queueIndex = 0;
+      const firstTrack = activeQueue[0];
+      playAudio(firstTrack.filepath, firstTrack.title, firstTrack.artist, activeQueue, 0, firstTrack.bitrate_kbps);
+    } else {
+      setPlayerPlayState(false);
+    }
+  } else {
+    setPlayerPlayState(false);
+  }
+}
+
+function closeAudioPlayer() {
+  const player = document.getElementById('audio-player');
+  const playerBar = document.getElementById('audio-player-bar');
+  if (player) {
+    player.pause();
+    player.src = '';
+  }
+  if (playerBar) {
+    playerBar.style.display = 'none';
+  }
+  currentTrackPath = null;
+  setPlayerPlayState(false);
+}
+
+function setupPlayerKeyboardHotkeys() {
+  document.addEventListener('keydown', (e) => {
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable)) {
+      if (e.key === 'Escape') {
+        active.blur();
+      }
+      return;
+    }
+
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();
+      togglePlayPause();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      seekRelative(-5);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      seekRelative(5);
+    } else if (e.key === 'j' || e.key === 'J') {
+      e.preventDefault();
+      playPreviousTrack();
+    } else if (e.key === 'k' || e.key === 'K') {
+      e.preventDefault();
+      playNextTrack();
+    } else if (e.key === 'm' || e.key === 'M') {
+      e.preventDefault();
+      togglePlayerMute();
+    } else if (e.key === 'Escape') {
+      closeConfirmModal(false);
+      hideAddToPlaylistModal();
+      hideCreatePlaylistModal();
+      hideBatchDeleteDuplicatesModal();
+      closeAudioPlayer();
+    } else if (e.key === '/') {
+      const searchInput = document.getElementById('lib-search');
+      if (searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+    }
+  });
 }
 
 function setPlayerPlayState(playing) {
@@ -1564,7 +2241,7 @@ function setPlayerPlayState(playing) {
   const playPauseBtn = document.getElementById('btn-player-playpause');
   if (playPauseBtn) {
     playPauseBtn.innerHTML = isPlaying ? SVG_PAUSE : SVG_PLAY;
-    playPauseBtn.title = isPlaying ? 'Pause' : 'Play';
+    playPauseBtn.title = isPlaying ? 'Pause (Space)' : 'Play (Space)';
   }
   renderLibraryPage();
   if (selectedPlaylist) {
@@ -1577,26 +2254,33 @@ function togglePlayPause() {
   if (!player || !player.src) return;
 
   if (player.paused) {
-    player.play();
+    player.play().catch(err => console.warn('Play error:', err));
   } else {
     player.pause();
   }
 }
 
-function playOrToggleAudio(filepath, title, artist) {
+function playOrToggleAudio(filepath, title, artist, index = -1, bitrate = '') {
   const player = document.getElementById('audio-player');
   if (currentTrackPath === filepath && player && player.src) {
     togglePlayPause();
   } else {
-    playAudio(filepath, title, artist);
+    let queue = null;
+    let qIdx = 0;
+    if (index >= 0 && filteredSongs && filteredSongs.length > 0) {
+      queue = filteredSongs;
+      qIdx = index;
+    }
+    playAudio(filepath, title, artist, queue, qIdx, bitrate);
   }
 }
 
-function playAudio(filepath, title, artist, queue = null, index = 0) {
+function playAudio(filepath, title, artist, queue = null, index = 0, bitrate = null) {
   const player = document.getElementById('audio-player');
   const playerBar = document.getElementById('audio-player-bar');
   const titleEl = document.getElementById('player-title');
   const artistEl = document.getElementById('player-artist');
+  const badgeEl = document.getElementById('player-quality-badge');
 
   if (player && playerBar) {
     currentTrackPath = filepath;
@@ -1604,23 +2288,34 @@ function playAudio(filepath, title, artist, queue = null, index = 0) {
       activeQueue = queue;
       queueIndex = index;
     } else {
-      activeQueue = [{ filepath, title, artist }];
+      activeQueue = [{ filepath, title, artist, bitrate_kbps: bitrate }];
       queueIndex = 0;
     }
 
     player.src = `/api/song/stream?filepath=${encodeURIComponent(filepath)}`;
     if (titleEl) titleEl.textContent = title || 'Unknown Title';
     if (artistEl) artistEl.textContent = artist || 'Unknown Artist';
+
+    const bVal = bitrate || (activeQueue[queueIndex] && activeQueue[queueIndex].bitrate_kbps);
+    if (badgeEl) {
+      if (bVal && bVal !== 'Unknown') {
+        badgeEl.textContent = bVal;
+        badgeEl.style.display = 'inline-block';
+      } else {
+        badgeEl.style.display = 'none';
+      }
+    }
+
     playerBar.style.display = 'flex';
-    player.play();
+    player.play().catch(err => console.warn('Playback error:', err));
   }
 }
 
 function handleTrackEnded() {
   if (activeQueue && queueIndex + 1 < activeQueue.length) {
-    queueIndex++;
-    const nextTrack = activeQueue[queueIndex];
-    playAudio(nextTrack.filepath, nextTrack.title, nextTrack.artist, activeQueue, queueIndex);
+    playNextTrack();
+  } else if (isPlayerLooping && activeQueue && activeQueue.length > 0) {
+    playNextTrack();
   } else {
     setPlayerPlayState(false);
   }
@@ -1689,7 +2384,7 @@ async function submitCreatePlaylist() {
   const name = input ? input.value.trim() : '';
 
   if (!name) {
-    alert('Please enter a playlist name!');
+    showToast('Please enter a playlist name!', 'error');
     return;
   }
 
@@ -1706,12 +2401,13 @@ async function submitCreatePlaylist() {
       if (data.playlist) {
         selectPlaylist(data.playlist.id, data.playlist.name);
       }
+      showToast(`Playlist "${name}" created successfully.`, 'success');
     } else {
-      alert(`Error creating playlist: ${data.error || 'Failed to create'}`);
+      showToast(`Error creating playlist: ${data.error || 'Failed to create'}`, 'error');
     }
   } catch (err) {
     console.error('Error creating playlist:', err);
-    alert('Error connecting to server.');
+    showToast('Error connecting to server.', 'error');
   }
 }
 
@@ -1779,28 +2475,39 @@ function renderPlaylistTracks() {
 
 async function deleteCurrentPlaylist() {
   if (!selectedPlaylist) return;
-  if (!confirm(`Are you sure you want to delete the playlist "${selectedPlaylist.name}"?`)) return;
+  const pName = selectedPlaylist.name;
+  const pId = selectedPlaylist.id;
 
-  try {
-    const res = await fetch('/api/playlists/delete', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ playlist_id: selectedPlaylist.id })
-    });
-    const data = await res.json();
-    if (data.status === 'success') {
-      selectedPlaylist = null;
-      currentPlaylistTracks = [];
-      const detailsPanel = document.getElementById('playlist-details-panel');
-      if (detailsPanel) detailsPanel.style.display = 'none';
-      loadPlaylists();
-    } else {
-      alert(`Error deleting playlist: ${data.error || 'Failed to delete'}`);
+  showConfirmModal({
+    title: 'Delete Playlist',
+    message: `Are you sure you want to delete playlist "${pName}"?`,
+    details: 'This will delete the playlist only; your audio files remain intact.',
+    confirmText: 'Delete Playlist',
+    confirmClass: 'btn btn-danger',
+    onConfirm: async () => {
+      try {
+        const res = await fetch('/api/playlists/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ playlist_id: pId })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          selectedPlaylist = null;
+          currentPlaylistTracks = [];
+          const detailsPanel = document.getElementById('playlist-details-panel');
+          if (detailsPanel) detailsPanel.style.display = 'none';
+          loadPlaylists();
+          showToast(`Playlist "${pName}" deleted.`, 'success');
+        } else {
+          showToast(`Error deleting playlist: ${data.error || 'Failed to delete'}`, 'error');
+        }
+      } catch (err) {
+        console.error('Error deleting playlist:', err);
+        showToast('Error connecting to server.', 'error');
+      }
     }
-  } catch (err) {
-    console.error('Error deleting playlist:', err);
-    alert('Error connecting to server.');
-  }
+  });
 }
 
 function showAddToPlaylistModal(filepath, title) {
@@ -1833,9 +2540,11 @@ async function submitAddToPlaylist() {
   const playlistId = select ? select.value : null;
 
   if (!playlistId || !targetTrackForPlaylist) {
-    alert('Please select a playlist!');
+    showToast('Please select a playlist!', 'error');
     return;
   }
+
+  const trackTitle = targetTrackForPlaylist.title;
 
   try {
     const res = await fetch(`/api/playlists/${playlistId}/add-track`, {
@@ -1850,12 +2559,13 @@ async function submitAddToPlaylist() {
       if (selectedPlaylist && selectedPlaylist.id == playlistId) {
         selectPlaylist(selectedPlaylist.id, selectedPlaylist.name);
       }
+      showToast(`Added "${trackTitle}" to playlist.`, 'success');
     } else {
-      alert(`Error adding track: ${data.error || 'Failed to add track'}`);
+      showToast(`Error adding track: ${data.error || 'Failed to add track'}`, 'error');
     }
   } catch (err) {
     console.error('Error adding track to playlist:', err);
-    alert('Error connecting to server.');
+    showToast('Error connecting to server.', 'error');
   }
 }
 
@@ -1872,12 +2582,13 @@ async function removeTrackFromPlaylist(playlistId, filepath) {
       if (selectedPlaylist && selectedPlaylist.id == playlistId) {
         selectPlaylist(selectedPlaylist.id, selectedPlaylist.name);
       }
+      showToast('Track removed from playlist.', 'info');
     } else {
-      alert(`Error removing track: ${data.error || 'Failed to remove'}`);
+      showToast(`Error removing track: ${data.error || 'Failed to remove'}`, 'error');
     }
   } catch (err) {
     console.error('Error removing track from playlist:', err);
-    alert('Error connecting to server.');
+    showToast('Error connecting to server.', 'error');
   }
 }
 
@@ -1958,55 +2669,60 @@ function formatBytes(bytes) {
 }
 
 async function restoreDeletedSong(recordId) {
-  if (!confirm(`Restore this deleted song to its original location?`)) return;
-
-  try {
-    const res = await fetch('/api/deleted/restore', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: recordId })
-    });
-    const data = await res.json();
-    if (data.status === 'success') {
-      alert(`Restored ${data.message || 'song'}`);
-      loadDeletedSongs();
-      loadSongs();
-      loadDuplicates();
-      loadDashboardStats();
-    } else {
-      alert(`Error restoring song: ${data.error || data.message || 'Failed to restore'}`);
-      loadDeletedSongs();
+  showConfirmModal({
+    title: 'Restore Deleted Track',
+    message: 'Restore this audio file back to its original location?',
+    confirmText: 'Restore Track',
+    confirmClass: 'btn',
+    onConfirm: async () => {
+      try {
+        const res = await fetch('/api/deleted/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: recordId })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          showToast(`Restored ${data.message || 'song successfully.'}`, 'success');
+          loadDeletedSongs();
+          loadSongs();
+          loadDuplicates();
+          loadDashboardStats();
+        } else {
+          showToast(`Error restoring song: ${data.error || data.message || 'Failed to restore'}`, 'error');
+          loadDeletedSongs();
+        }
+      } catch (err) {
+        console.error('Error restoring deleted song:', err);
+        showToast('Error connecting to server.', 'error');
+      }
     }
-  } catch (err) {
-    console.error('Error restoring deleted song:', err);
-    alert('Error connecting to server.');
-  }
+  });
 }
 
 async function clearDeletedHistory() {
-  if (!confirm('Empty the trash?\n\nThis PERMANENTLY deletes all files kept in tmp/deleted/ and clears the history. This cannot be undone.')) return;
-
-  try {
-    const res = await fetch('/api/deleted/clear', { method: 'POST' });
-    const data = await res.json();
-    if (data.status === 'success') {
-      alert(data.message || 'Trash emptied.');
-      loadDeletedSongs();
-    } else {
-      alert(`Error emptying trash: ${data.error || data.message || 'Failed to clear history'}`);
+  showConfirmModal({
+    title: 'Empty Trash',
+    message: 'Empty the trash and permanently purge all deleted files?',
+    details: 'This will permanently remove all cached files in tmp/deleted/ and clear the deletion history. This action cannot be undone.',
+    confirmText: 'Empty Trash',
+    confirmClass: 'btn btn-danger',
+    onConfirm: async () => {
+      try {
+        const res = await fetch('/api/deleted/clear', { method: 'POST' });
+        const data = await res.json();
+        if (data.status === 'success') {
+          showToast(data.message || 'Trash emptied successfully.', 'success');
+          loadDeletedSongs();
+        } else {
+          showToast(`Error emptying trash: ${data.error || data.message || 'Failed to clear history'}`, 'error');
+        }
+      } catch (err) {
+        console.error('Error clearing deleted songs history:', err);
+        showToast('Error connecting to server.', 'error');
+      }
     }
-  } catch (err) {
-    console.error('Error clearing deleted songs history:', err);
-    alert('Error connecting to server.');
-  }
-}
-
-function escapeHtml(str) {
-  return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-function escapeJs(str) {
-  return String(str || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  });
 }
 
 // --- SYNC TRACK TO DEVICE MODAL & EXISTENCE CHECKING ---
@@ -2205,7 +2921,7 @@ async function submitSyncSongToDevice() {
   const statusEl = document.getElementById('sync-action-status');
 
   if (!selectEl || !selectEl.value || !syncCurrentSong) {
-    alert('Please select a valid destination device.');
+    showToast('Please select a valid destination device.', 'error');
     return;
   }
 
