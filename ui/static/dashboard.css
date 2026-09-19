@@ -1228,7 +1228,6 @@ tr.playing-row {
 .dup-terminal-line {
   display: block;
   white-space: pre;
-  animation: termFadeIn 0.12s ease-out;
 }
 
 .dup-terminal-line.log-cache  { color: #888; }

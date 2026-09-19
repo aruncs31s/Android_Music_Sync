@@ -13,6 +13,10 @@ from utils import get_logger
 
 logger = get_logger()
 
+# Emit at most one progress line per this many files to avoid flooding the
+# SSE client with per-file events (which froze the browser during large scans).
+PROGRESS_EVERY = 25
+
 
 def format_mtime(ts: float) -> str:
     """Format Unix timestamp as ISO-like date string."""
@@ -79,12 +83,6 @@ def scan_songs_from_paths(
                     seen_paths.add(full_path)
                     scanned_in_folder += 1
 
-                    if progress_cb:
-                        try:
-                            progress_cb(f"[SCAN]  ({scanned_in_folder}) {file}")
-                        except Exception:
-                            pass
-
                     try:
                         st = os.stat(full_path)
                         mtime = st.st_mtime
@@ -135,9 +133,19 @@ def scan_songs_from_paths(
                         "searchable_text": f"{title} {artist} {album} {filename}".lower()
                     }
                     songs.append(song)
-                    scanned_in_folder += 1
+
+                    if progress_cb and scanned_in_folder % PROGRESS_EVERY == 0:
+                        try:
+                            progress_cb(f"[SCAN]  Scanned {scanned_in_folder} audio files in {folder_abs}...")
+                        except Exception:
+                            pass
 
         logger.info(f"Finished scanning '{folder_abs}': Found {scanned_in_folder} audio files.")
+        if progress_cb:
+            try:
+                progress_cb(f"[SCAN]  Finished folder: {folder_abs} — {scanned_in_folder} audio files.")
+            except Exception:
+                pass
 
     # Sort songs by mtime descending (newest modified files first)
     songs.sort(key=lambda s: s.get("mtime", 0.0), reverse=True)
@@ -147,4 +155,9 @@ def scan_songs_from_paths(
         s["_id"] = idx
 
     logger.info(f"Scan complete. Total songs loaded & sorted by mtime: {len(songs)}")
+    if progress_cb:
+        try:
+            progress_cb(f"[SCAN]  Scan complete — {len(songs)} audio files loaded.")
+        except Exception:
+            pass
     return songs

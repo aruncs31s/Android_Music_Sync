@@ -375,7 +375,24 @@ function refreshCurrentDeviceLibrary() {
 
 let libEventSource = null;
 
-function streamDeviceSongs(deviceId = 'local') {
+function applyDeviceLibraryData(data) {
+  currentDeviceName = data.device_name || currentDeviceId;
+  currentDeviceType = data.device_type || 'Storage';
+  allSongs = data.songs || [];
+
+  const titleEl = document.getElementById('library-title-text');
+  if (titleEl) titleEl.textContent = currentDeviceName;
+
+  const badgeEl = document.getElementById('library-device-badge');
+  if (badgeEl) badgeEl.textContent = `${currentDeviceType} (${allSongs.length} songs)`;
+
+  const selectEl = document.getElementById('library-device-select');
+  if (selectEl) selectEl.value = currentDeviceId;
+
+  applyLibraryFilterAndSort();
+}
+
+function streamDeviceSongs(deviceId = 'local', showTerminal = true, forceRefresh = showTerminal) {
   currentDeviceId = deviceId;
   if (libEventSource) {
     libEventSource.close();
@@ -387,28 +404,22 @@ function streamDeviceSongs(deviceId = 'local') {
   const termLog = document.getElementById('lib-terminal-log');
   const tbody = document.getElementById('songs-tbody');
 
-  if (terminal) terminal.style.display = 'block';
-  if (termLog) termLog.innerHTML = '';
-  if (btn) {
+  if (showTerminal && terminal) terminal.style.display = 'block';
+  if (showTerminal && termLog) termLog.innerHTML = '';
+  if (btn && showTerminal) {
     btn.disabled = true;
     btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scanning…`;
   }
   if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Scanning music library…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Loading music library…</td></tr>';
   }
 
-  const url = `/api/devices/${encodeURIComponent(deviceId)}/songs/stream`;
+  const url = `/api/devices/${encodeURIComponent(deviceId)}/songs/stream?refresh=${forceRefresh ? 'true' : 'false'}`;
   const evtSource = new EventSource(url);
   libEventSource = evtSource;
 
   function appendLibLog(msg) {
-    if (!termLog) return;
-    const line = document.createElement('span');
-    line.className = 'dup-terminal-line ' + _dupTerminalLineClass(msg);
-    line.textContent = msg;
-    termLog.appendChild(line);
-    termLog.appendChild(document.createTextNode('\n'));
-    termLog.scrollTop = termLog.scrollHeight;
+    pushTermLine(termLog, msg);
   }
 
   evtSource.onmessage = (e) => {
@@ -428,28 +439,16 @@ function streamDeviceSongs(deviceId = 'local') {
       }
 
       const data = payload.result || {};
-      currentDeviceName = data.device_name || currentDeviceId;
-      currentDeviceType = data.device_type || 'Storage';
-      allSongs = data.songs || [];
+      applyDeviceLibraryData(data);
 
-      const titleEl = document.getElementById('library-title-text');
-      if (titleEl) titleEl.textContent = currentDeviceName;
+      if (showTerminal) {
+        loadDashboardStats();
 
-      const badgeEl = document.getElementById('library-device-badge');
-      if (badgeEl) badgeEl.textContent = `${currentDeviceType} (${allSongs.length} songs)`;
-
-      const selectEl = document.getElementById('library-device-select');
-      if (selectEl) selectEl.value = currentDeviceId;
-
-      applyLibraryFilterAndSort();
-
-      // Refresh overview counters as well
-      loadDashboardStats();
-
-      // Collapse terminal after 2.5 seconds
-      setTimeout(() => {
-        if (terminal) terminal.style.display = 'none';
-      }, 2500);
+        // Collapse terminal after 2.5 seconds
+        setTimeout(() => {
+          if (terminal) terminal.style.display = 'none';
+        }, 2500);
+      }
     } else if (payload.type === 'error') {
       appendLibLog('[ERROR] ' + (payload.msg || 'Scan failed.'));
       evtSource.close();
@@ -466,12 +465,20 @@ function streamDeviceSongs(deviceId = 'local') {
 
   evtSource.onerror = () => {
     if (evtSource.readyState === EventSource.CLOSED) return;
-    appendLibLog('[ERROR] Connection to server lost.');
     evtSource.close();
     libEventSource = null;
+    appendLibLog('[ERROR] Connection to server lost.');
     if (btn) {
       btn.disabled = false;
       btn.innerHTML = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg> Scan / Refresh`;
+    }
+    if (!showTerminal) {
+      // Quiet loads should never block on a cold cache: fall back to the cached
+      // library fetch once if the stream could not be established.
+      fetch(`/api/devices/${encodeURIComponent(deviceId)}/songs`)
+        .then(r => r.json())
+        .then(data => { applyDeviceLibraryData(data); })
+        .catch(() => {});
     }
   };
 }
@@ -480,36 +487,7 @@ function streamDeviceSongs(deviceId = 'local') {
 
 async function loadDeviceSongs(deviceId = 'local', forceRefresh = false) {
   currentDeviceId = deviceId;
-  const tbody = document.getElementById('songs-tbody');
-  if (tbody) {
-    tbody.innerHTML = '<tr><td colspan="8" class="text-muted">Loading songs for device...</td></tr>';
-  }
-
-  try {
-    const url = `/api/devices/${encodeURIComponent(deviceId)}/songs${forceRefresh ? '?refresh=true' : ''}`;
-    const res = await fetch(url);
-    const data = await res.json();
-
-    currentDeviceName = data.device_name || currentDeviceId;
-    currentDeviceType = data.device_type || 'Storage';
-    allSongs = data.songs || [];
-
-    const titleEl = document.getElementById('library-title-text');
-    if (titleEl) titleEl.textContent = currentDeviceName;
-
-    const badgeEl = document.getElementById('library-device-badge');
-    if (badgeEl) badgeEl.textContent = `${currentDeviceType} (${allSongs.length} songs)`;
-
-    const selectEl = document.getElementById('library-device-select');
-    if (selectEl) selectEl.value = currentDeviceId;
-
-    applyLibraryFilterAndSort();
-  } catch (err) {
-    console.error('Error loading device songs:', err);
-    if (tbody) {
-      tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="color: var(--status-offline) !important;">Failed to load songs from device.</td></tr>';
-    }
-  }
+  streamDeviceSongs(deviceId, Boolean(forceRefresh), Boolean(forceRefresh));
 }
 
 async function loadSongs() {
@@ -937,16 +915,30 @@ function _dupTerminalLineClass(msg) {
   return '';
 }
 
-function _dupTerminalAppend(msg) {
-  const log = document.getElementById('dup-terminal-log');
-  if (!log) return;
+// Terminal render helper — caps the number of DOM nodes and coalesces the
+// auto-scroll into a single per-frame update so progress bursts cannot freeze
+// the tab's main thread.
+function pushTermLine(logEl, msg) {
+  if (!logEl) return;
   const line = document.createElement('span');
   line.className = 'dup-terminal-line ' + _dupTerminalLineClass(msg);
   line.textContent = msg;
-  log.appendChild(line);
-  log.appendChild(document.createTextNode('\n'));
-  // auto-scroll to bottom
-  log.scrollTop = log.scrollHeight;
+  logEl.appendChild(line);
+  logEl.appendChild(document.createTextNode('\n'));
+  while (logEl.childElementCount > 250) {
+    logEl.removeChild(logEl.firstElementChild);
+  }
+  if (logEl._scrollFrame == null) {
+    logEl._scrollFrame = requestAnimationFrame(() => {
+      logEl._scrollFrame = null;
+      logEl.scrollTop = logEl.scrollHeight;
+    });
+  }
+}
+
+function _dupTerminalAppend(msg) {
+  const log = document.getElementById('dup-terminal-log');
+  pushTermLine(log, msg);
 }
 
 function streamDuplicates() {
