@@ -5,3 +5,5 @@ database/db.db
 config.json
 database/db.db-shm
 database/db.db-wal
+logs/
+*.log

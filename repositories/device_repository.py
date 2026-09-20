@@ -5,11 +5,13 @@ import os
 from typing import List, Dict, Any, Optional
 
 from repositories.base_repository import BaseRepository
+from repositories.exceptions import ValidationError
 import ui.db_manager as ui_db
 import ui.stats_manager as ui_stats
 import over_ip.db as over_ip_db
 from device_providers.registry import DeviceProviderRegistry
 from services.audio_transcoder import AudioTranscoder
+from model import DeviceRecord, DeviceType
 from utils import get_logger
 
 logger = get_logger()
@@ -33,7 +35,19 @@ class DeviceRepository(BaseRepository):
             logger.info("[DeviceRepository] Redis Cache Hit: Loaded IP hosts.")
             return cached
 
-        hosts = ui_db.get_stored_ip_hosts()
+        raw_hosts = ui_db.get_stored_ip_hosts()
+        hosts = [
+            DeviceRecord(
+                serial=r.get("ip_address", ""),
+                description=r.get("alias", "") or r.get("ip_address", ""),
+                device_type=DeviceType.OVER_IP.value,
+                is_online=bool(r.get("is_online", 1)),
+                last_seen=r.get("last_seen"),
+                ip_address=r.get("ip_address"),
+                port=r.get("port", 5000)
+            ).to_dict()
+            for r in raw_hosts
+        ]
         self._cache_set(self.CACHE_KEY_IP_HOSTS, hosts)
         return hosts
 

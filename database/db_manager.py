@@ -14,7 +14,7 @@ import sys
 import sqlite3
 from typing import List, Dict, Any, Optional, Set
 from device_providers import SongDeletable
-from model import RestoredSongRecord, SongRecord, PlaylistRecord, PlaylistTrackRecord
+from model import RestoredSongRecord, SongRecord, PlaylistRecord, PlaylistTrackRecord, TrackStatus
 from utils import get_logger
 
 logger = get_logger()
@@ -97,7 +97,7 @@ def _migrate_legacy_data(conn: sqlite3.Connection):
 
             old_conn.close()
         except Exception as e:
-            logger.info(f"[Central DB] Migration note from {legacy}: {e}", file=sys.stderr)
+            logger.info(f"[Central DB] Migration note from {legacy}: {e}")
 
     try:
         conn.execute(
@@ -326,7 +326,7 @@ def get_hidden_paths_set(db_path: Optional[str] = None) -> Set[str]:
         cursor.execute("SELECT filepath FROM hidden_files")
         return set(row["filepath"] for row in cursor.fetchall())
     except Exception as e:
-        logger.info(f"[Central DB] Error fetching hidden set: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching hidden set: {e}")
         return set()
     finally:
         if conn:
@@ -342,7 +342,7 @@ def get_all_hidden_records(db_path: Optional[str] = None) -> List[Dict[str, Any]
         cursor.execute("SELECT id, filepath, filename, hidden_at FROM hidden_files ORDER BY id DESC")
         return [dict(r) for r in cursor.fetchall()]
     except Exception as e:
-        logger.info(f"[Central DB] Error fetching hidden records: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching hidden records: {e}")
         return []
     finally:
         if conn:
@@ -372,10 +372,10 @@ def add_synced_file(
                 """,
                 (filepath, filename, device_serial, remote_dir)
             )
-        logger.info(f"[Central DB] Recorded synced track for [{device_serial}]: {filename}", file=sys.stderr)
+        logger.info(f"[Central DB] Recorded synced track for [{device_serial}]: {filename}")
         return True
     except Exception as e:
-        logger.info(f"[Central DB] Error recording synced file: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error recording synced file: {e}")
         return False
     finally:
         if conn:
@@ -391,7 +391,7 @@ def get_synced_paths_set(device_serial: str, db_path: Optional[str] = None) -> S
         cursor.execute("SELECT filepath FROM synced_files WHERE device_serial = ?", (device_serial,))
         return set(row["filepath"] for row in cursor.fetchall())
     except Exception as e:
-        logger.infor.info(f"[Central DB] Error fetching synced set: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching synced set: {e}")
         return set()
     finally:
         if conn:
@@ -415,7 +415,7 @@ def get_all_synced_records(device_serial: Optional[str] = None, db_path: Optiona
             )
         return [dict(r) for r in cursor.fetchall()]
     except Exception as e:
-        logger.infor.info(f"[Central DB] Error fetching synced records: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching synced records: {e}")
         return []
     finally:
         if conn:
@@ -434,7 +434,7 @@ def remove_synced_file(device_serial: str, filename: str, db_path: Optional[str]
             )
             return cursor.rowcount > 0
     except Exception as e:
-        logger.infor.infor.info(f"[Central DB] Error removing synced record: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error removing synced record: {e}")
         return False
     finally:
         if conn:
@@ -484,10 +484,10 @@ def remove_ip_host(ip_address: str, db_path: Optional[str] = None) -> bool:
         conn = get_connection(db_path)
         with conn:
             conn.execute("DELETE FROM ip_hosts WHERE ip_address = ?", (ip_address.strip(),))
-        logger.info(f"[Central DB] Removed IP host: {ip_address}", file=sys.stderr)
+        logger.info(f"[Central DB] Removed IP host: {ip_address}")
         return True
     except Exception as e:
-        logger.info(f"[Central DB] Error removing IP host: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error removing IP host: {e}")
         return False
     finally:
         if conn:
@@ -503,7 +503,7 @@ def get_stored_ip_hosts(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
         cursor.execute("SELECT id, ip_address, port, alias, last_seen, is_online FROM ip_hosts ORDER BY last_seen DESC")
         return [dict(r) for r in cursor.fetchall()]
     except Exception as e:
-        logger.info(f"[Central DB] Error fetching stored IP hosts: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching stored IP hosts: {e}")
         return []
     finally:
         if conn:
@@ -522,7 +522,7 @@ def update_ip_status(ip_address: str, is_online: bool, db_path: Optional[str] = 
             )
         return True
     except Exception as e:
-        logger.info(f"[Central DB] Error updating IP status: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error updating IP status: {e}")
         return False
     finally:
         if conn:
@@ -601,7 +601,7 @@ def get_playlists(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
 def add_track_to_playlist(
     playlist_id: int,
     filepath: str,
-    status: str = "present",
+    status: str = TrackStatus.PRESENT.value,
     original_path: Optional[str] = None,
     readable_name: Optional[str] = None,
     title: Optional[str] = None,

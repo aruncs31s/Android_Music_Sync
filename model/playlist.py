@@ -1,10 +1,12 @@
 import os
 from dataclasses import dataclass
 from typing import Optional
+from model.base import DictLikeRecord
+from model.enums import TrackStatus
 
 
 @dataclass
-class PlaylistRecord:
+class PlaylistRecord(DictLikeRecord):
     id: Optional[int] = None
     name: str = ""
     created_at: Optional[str] = None
@@ -14,7 +16,7 @@ class PlaylistRecord:
 
 
 @dataclass
-class PlaylistTrackRecord:
+class PlaylistTrackRecord(DictLikeRecord):
     playlist_id: int
     filepath: str
     id: Optional[int] = None
@@ -24,7 +26,7 @@ class PlaylistTrackRecord:
     artist: Optional[str] = None
     album: Optional[str] = None
     readable_name: Optional[str] = None
-    status: str = "present"  # "present" or "absent"
+    status: str = TrackStatus.PRESENT.value  # "present" or "absent"
     track_order: int = 0
     added_at: Optional[str] = None
     duration_formatted: Optional[str] = None

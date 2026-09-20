@@ -1,12 +1,14 @@
 import os
 from dataclasses import dataclass
 
+from model.base import DictLikeRecord
+
 
 @dataclass
-class SongRecord:
+class SongRecord(DictLikeRecord):
     filepath: str
     filename: str
-    title: str| None = None
+    title: str | None = None
     artist: str | None = None
     album: str | None = None
     bitrate_kbps: int | None = None
@@ -16,18 +18,11 @@ class SongRecord:
     file_created_at: str | None = None
     file_modified_at: str | None = None
     tmp_path: str | None = None
+
     def __post_init__(self):
         # Ensure that the filepath is absolute
         self.filepath = os.path.abspath(self.filepath)
         self.filename = os.path.basename(self.filepath)
-
-    def get(self, key: str, default=None):
-        return getattr(self, key, default)
-
-    def __getitem__(self, key: str):
-        if hasattr(self, key):
-            return getattr(self, key)
-        raise KeyError(key)
 
 
 @dataclass

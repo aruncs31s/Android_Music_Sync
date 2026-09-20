@@ -13,18 +13,14 @@ from utils import get_logger
 
 logger = get_logger()
 
-# Emit at most one progress line per this many files to avoid flooding the
-# SSE client with per-file events (which froze the browser during large scans).
+from utils.time import format_ts as _format_ts
+
 PROGRESS_EVERY = 25
 
 
 def format_mtime(ts: float) -> str:
     """Format Unix timestamp as ISO-like date string."""
-    try:
-        dt = datetime.datetime.fromtimestamp(ts)
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return ""
+    return _format_ts(ts, default="")
 
 
 def scan_songs_from_paths(

@@ -9,7 +9,7 @@ from repositories.base_repository import BaseRepository
 import ui.db_manager as ui_db
 import config_manager
 import over_ip.song_scanner as song_scanner
-from model import PlaylistRecord, PlaylistTrackRecord
+from model import PlaylistRecord, PlaylistTrackRecord, TrackStatus
 from utils import get_logger
 
 logger = get_logger()
@@ -38,14 +38,14 @@ class PlaylistRepository(BaseRepository):
         logger.info("[PlaylistRepository] Cache miss: Querying SQLite database for playlists...")
         raw_playlists = ui_db.get_playlists()
         playlists = [
-            asdict(PlaylistRecord(
+            PlaylistRecord(
                 id=p.get("id"),
                 name=p.get("name", ""),
                 created_at=p.get("created_at"),
                 track_count=p.get("track_count", 0),
                 present_count=p.get("present_count", 0),
                 absent_count=p.get("absent_count", 0)
-            ))
+            ).to_dict()
             for p in raw_playlists
         ]
         self._cache_set(self.CACHE_KEY_PLAYLISTS, playlists)
@@ -94,11 +94,11 @@ class PlaylistRepository(BaseRepository):
         full_tracks = []
         for rt in raw_tracks:
             fp = rt.get("filepath", "")
-            status = rt.get("status") or "present"
+            status = rt.get("status") or TrackStatus.PRESENT.value
             orig = rt.get("original_path") or fp
             rname = rt.get("readable_name") or ""
 
-            if status == "present" and fp in song_map:
+            if status == TrackStatus.PRESENT.value and fp in song_map:
                 sm = song_map[fp]
                 record = PlaylistTrackRecord(
                     playlist_id=playlist_id,
@@ -110,13 +110,13 @@ class PlaylistRepository(BaseRepository):
                     artist=sm.get("artist") or rt.get("artist") or "Unknown Artist",
                     album=sm.get("album") or rt.get("album") or "Unknown Album",
                     readable_name=rname,
-                    status="present",
+                    status=TrackStatus.PRESENT.value,
                     track_order=rt.get("track_order", 0),
                     added_at=rt.get("added_at", ""),
                     duration_formatted=sm.get("duration_formatted", "00:00"),
                     size_formatted=sm.get("size_formatted", "N/A")
                 )
-            elif status == "absent":
+            elif status == TrackStatus.ABSENT.value:
                 record = PlaylistTrackRecord(
                     playlist_id=playlist_id,
                     filepath=fp,
@@ -127,7 +127,7 @@ class PlaylistRepository(BaseRepository):
                     artist=rt.get("artist") or "Unknown Artist",
                     album=rt.get("album") or "Unknown Album",
                     readable_name=rname,
-                    status="absent",
+                    status=TrackStatus.ABSENT.value,
                     track_order=rt.get("track_order", 0),
                     added_at=rt.get("added_at", ""),
                     duration_formatted="N/A",
@@ -144,13 +144,13 @@ class PlaylistRepository(BaseRepository):
                     artist=rt.get("artist") or "Unknown Artist",
                     album=rt.get("album") or "Unknown Album",
                     readable_name=rname,
-                    status="present",
+                    status=TrackStatus.PRESENT.value,
                     track_order=rt.get("track_order", 0),
                     added_at=rt.get("added_at", ""),
                     duration_formatted="00:00",
                     size_formatted="N/A"
                 )
-            full_tracks.append(asdict(record))
+            full_tracks.append(record.to_dict())
 
         self._cache_set(cache_key, full_tracks)
         return full_tracks
@@ -159,7 +159,7 @@ class PlaylistRepository(BaseRepository):
         self,
         playlist_id: int,
         filepath: str,
-        status: str = "present",
+        status: str = TrackStatus.PRESENT.value,
         original_path: Optional[str] = None,
         readable_name: Optional[str] = None,
         title: Optional[str] = None,
@@ -251,13 +251,13 @@ class PlaylistRepository(BaseRepository):
                 artist=r.get("artist") or "Unknown Artist",
                 album=r.get("album") or "Unknown Album",
                 readable_name=rname,
-                status="absent",
+                status=TrackStatus.ABSENT.value,
                 track_order=r.get("track_order", 0),
                 added_at=r.get("added_at", ""),
                 duration_formatted="N/A",
                 size_formatted="N/A"
             )
-            d = asdict(rec)
+            d = rec.to_dict()
             d["playlist_name"] = r.get("playlist_name", "")
             absent.append(d)
 

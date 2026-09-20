@@ -7,6 +7,18 @@ from repositories.hide_list_repository import HideListRepository
 from repositories.device_repository import DeviceRepository
 from repositories.deleted_song_repository import DeletedSongRepository
 
+from repositories.exceptions import (
+    MusicSyncError,
+    ResourceNotFoundError,
+    PlaylistNotFoundError,
+    TrackNotFoundError,
+    DeviceNotFoundError,
+    ValidationError,
+    DatabaseOperationError,
+    TrashFileMissingError,
+    FileMoveError,
+)
+
 # Export singleton instances
 song_repo = SongRepository()
 playlist_repo = PlaylistRepository()
@@ -25,4 +37,13 @@ __all__ = [
     "hide_repo",
     "device_repo",
     "deleted_repo",
+    "MusicSyncError",
+    "ResourceNotFoundError",
+    "PlaylistNotFoundError",
+    "TrackNotFoundError",
+    "DeviceNotFoundError",
+    "ValidationError",
+    "DatabaseOperationError",
+    "TrashFileMissingError",
+    "FileMoveError",
 ]

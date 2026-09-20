@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional
 
 import audio_metadata
 import config_manager
-import hide_list_db
 import over_ip.song_scanner as song_scanner
 import ui.db_manager as ui_db
 import ui.stats_manager as ui_stats
@@ -175,45 +174,39 @@ class SongRepository(BaseRepository):
                 "code": 404,
             }
 
-        def _format_ts(ts):
-            try:
-                return datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
-            except Exception:
-                return None
-
         # Best-effort capture of file stats & technical metadata BEFORE moving.
-        record = {
-            "filepath": abs_path,
-            "filename": os.path.basename(abs_path),
-            "title": None,
-            "artist": None,
-            "album": None,
-            "bitrate_kbps": None,
-            "sample_rate_hz": None,
-            "codec": None,
-            "size_bytes": None,
-            "file_created_at": None,
-            "file_modified_at": None,
-        }
+        record = SongRecord(
+            filepath=abs_path,
+            filename=os.path.basename(abs_path),
+            title=None,
+            artist=None,
+            album=None,
+            bitrate_kbps=None,
+            sample_rate_hz=None,
+            codec=None,
+            size_bytes=None,
+            file_created_at=None,
+            file_modified_at=None,
+        )
         try:
             st = os.stat(abs_path)
-            record["size_bytes"] = st.st_size
-            record["file_created_at"] = _format_ts(st.st_ctime)
-            record["file_modified_at"] = _format_ts(st.st_mtime)
+            record.size_bytes = st.st_size
+            record.file_created_at = utils.format_ts(st.st_ctime)
+            record.file_modified_at = utils.format_ts(st.st_mtime)
         except OSError:
             pass
 
         try:
             meta = audio_metadata.extract_audio_metadata(abs_path)
-            record["bitrate_kbps"] = meta.get("bitrate")
-            record["sample_rate_hz"] = meta.get("sample_rate")
-            record["codec"] = meta.get("codec")
+            record.bitrate_kbps = meta.get("bitrate")
+            record.sample_rate_hz = meta.get("sample_rate")
+            record.codec = meta.get("codec")
         except Exception:
             pass
 
         try:
             tmp_path = get_tmp_song_path(abs_path)
-            record["tmp_path"] = tmp_path
+            record.tmp_path = tmp_path
             try:
                 shutil.move(abs_path, tmp_path)
             except Exception as e:
@@ -226,7 +219,6 @@ class SongRepository(BaseRepository):
 
             # Remove from hide lists if present
             ui_db.remove_hidden_file(abs_path)
-            hide_list_db.remove_hidden_file(abs_path)
 
             # Invalidate in-memory metadata cache
             audio_metadata.METADATA_CACHE.pop(abs_path, None)
@@ -316,7 +308,6 @@ class SongRepository(BaseRepository):
                 record.tmp_path = tmp_path
                 shutil.move(abs_path, tmp_path)
                 ui_db.remove_hidden_file(abs_path)
-                hide_list_db.remove_hidden_file(abs_path)
                 audio_metadata.METADATA_CACHE.pop(abs_path, None)
                 ui_db.delete_stored_local_song(abs_path)
                 deleted_repo.record_deleted_song(record)

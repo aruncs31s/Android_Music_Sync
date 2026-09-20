@@ -1,6 +1,8 @@
-// Antigravity Web Dashboard JS with Playlists, Search, Pagination & SVG Icons
+// =============================================================================
+// CORE MODULE: Icons, Escaping, Toasts, Confirmation Modal, Theme & Tabs
+// =============================================================================
 
-// SVG Icon Templates
+// --- SVG Icon Templates ---
 const SVG_PLAY = `<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>`;
 const SVG_PAUSE = `<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
 const SVG_PLUS = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`;
@@ -22,7 +24,7 @@ const SVG_CONVERT = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" strok
 const SVG_HEART = `<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
 const SVG_HEART_FILLED = `<svg class="icon-svg" viewBox="0 0 24 24" fill="#ff0055" stroke="#ff0055" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>`;
 
-// HTML Escaping Utility
+// --- String & HTML Escaping Helpers ---
 function escapeHtml(str) {
   if (str === null || str === undefined) return '';
   return String(str)
@@ -38,7 +40,41 @@ function escapeJs(str) {
   return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
 }
 
-// --- TOAST NOTIFICATIONS SYSTEM (Non-blocking) ---
+function escHtml(str) {
+  if (typeof str !== 'string') return String(str || '');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Terminal line classifier and updater
+function _dupTerminalLineClass(msg) {
+  if (!msg) return '';
+  const lower = msg.toLowerCase();
+  if (lower.includes('error') || lower.includes('fail')) return 'dup-line-error';
+  if (lower.includes('warning') || lower.includes('warn') || lower.includes('skip')) return 'dup-line-warn';
+  if (lower.includes('complete') || lower.includes('saved') || lower.includes('success') || lower.includes('found') || lower.includes('done')) return 'dup-line-success';
+  if (lower.startsWith('---') || lower.startsWith('===')) return 'dup-line-header';
+  return 'dup-line-info';
+}
+
+function pushTermLine(logEl, msg) {
+  if (!logEl) return;
+  const line = document.createElement('span');
+  line.className = 'dup-terminal-line ' + _dupTerminalLineClass(msg);
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.appendChild(document.createTextNode('\n'));
+  while (logEl.childElementCount > 250) {
+    logEl.removeChild(logEl.firstElementChild);
+  }
+  if (logEl._scrollFrame == null) {
+    logEl._scrollFrame = requestAnimationFrame(() => {
+      logEl._scrollFrame = null;
+      logEl.scrollTop = logEl.scrollHeight;
+    });
+  }
+}
+
+// --- Toast Notifications System ---
 function showToast(message, type = 'info', duration = 3500) {
   const container = document.getElementById('toast-container');
   if (!container) return;
@@ -80,7 +116,7 @@ function showToast(message, type = 'info', duration = 3500) {
   }
 }
 
-// --- GENERIC CONFIRMATION MODAL SYSTEM (Replaces window.confirm) ---
+// --- Generic Confirmation Modal System ---
 let pendingConfirmCallback = null;
 
 function showConfirmModal({ title = 'Confirm Action', message = 'Are you sure?', details = null, confirmText = 'Confirm', confirmClass = 'btn', onConfirm = null }) {
@@ -136,7 +172,7 @@ function closeConfirmModal(confirmed = false) {
   }
 }
 
-// Theme Management System
+// --- Theme Management System ---
 function initTheme() {
   const saved = localStorage.getItem('theme') || 'dark';
   applyTheme(saved);
@@ -166,59 +202,49 @@ function toggleTheme() {
   applyTheme(newTheme);
 }
 
-// Global Search & Pagination State
-let allSongs = [];
-let filteredSongs = [];
-let libPage = 1;
-const libPageSize = 15;
-let currentFormatFilter = 'all';
-let selectedSongPaths = new Set();
+// --- Shared Global State ---
+var allSongs = [];
+var filteredSongs = [];
+var libPage = 1;
+var libPageSize = 15;
+var currentFormatFilter = 'all';
+var selectedSongPaths = new Set();
 
-let allClusters = [];
-let filteredClusters = [];
-let dupPage = 1;
-const dupPageSize = 5;
-let useAudioFingerprinting = localStorage.getItem('antigravity_use_audio_fingerprint') === 'true';
-let dupEventSource = null; // active SSE connection for live analysis
+var allClusters = [];
+var filteredClusters = [];
+var dupPage = 1;
+var dupPageSize = 5;
+var useAudioFingerprinting = localStorage.getItem('antigravity_use_audio_fingerprint') === 'true';
+var dupEventSource = null;
 
-// Global Audio Player & Playlist State
-let currentTrackPath = null;
-let isPlaying = false;
-let isScrubbing = false;
-let isPlayerLooping = false;
-let isShuffled = false;
-let originalQueue = []; // stores un-shuffled queue for restoring
-let activeQueue = [];
-let queueIndex = 0;
+var currentTrackPath = null;
+var isPlaying = false;
+var isScrubbing = false;
+var isPlayerLooping = false;
+var isShuffled = false;
+var originalQueue = [];
+var activeQueue = [];
+var queueIndex = 0;
 
-let allPlaylists = [];
-let selectedPlaylist = null;
-let currentPlaylistTracks = [];
-let targetTrackForPlaylist = null;
+var allPlaylists = [];
+var selectedPlaylist = null;
+var currentPlaylistTracks = [];
+var targetTrackForPlaylist = null;
 
-let likedPlaylistId = null;
-let likedSongPaths = new Set();
+var likedPlaylistId = null;
+var likedSongPaths = new Set();
 
-document.addEventListener('DOMContentLoaded', () => {
-  initTheme();
-  const fpToggle = document.getElementById('toggle-use-fingerprints');
-  if (fpToggle) {
-    fpToggle.checked = useAudioFingerprinting;
-  }
-  initTabs();
-  initAudioPlayer();
-  initPlayerTab();
-  loadDashboardStats();
-  loadSongs();
-  loadDuplicates();
-  loadHiddenFiles();
-  loadSyncedHistory();
-  loadPlaylists();
-  loadLikedMusicSet();
-  loadSyncDevices();
-  loadDeletedSongs();
-});
+var currentDeviceId = 'local';
+var currentDeviceName = 'Local Music Folders';
+var currentDeviceType = 'Local Storage';
+var currentSortCriteria = 'ctime_desc';
+var availableDevicesList = [];
 
+var playerTabSongs = [];
+var playerTabFiltered = [];
+var playerTabDeviceId = 'local';
+
+// --- Tab Navigation Router ---
 function initTabs() {
   const btns = document.querySelectorAll('.tab-btn');
 
@@ -229,6 +255,59 @@ function initTabs() {
     });
   });
 }
+
+function switchTab(tabId) {
+  let activeTabId = tabId;
+  let activeBtnTab = tabId;
+
+  // Map legacy/sub-tabs gracefully
+  if (tabId === 'tab-devices') {
+    activeTabId = 'tab-overview';
+    activeBtnTab = 'tab-overview';
+  } else if (tabId === 'tab-hidden') {
+    activeTabId = 'tab-hidden';
+    activeBtnTab = 'tab-deleted';
+  }
+
+  const btns = document.querySelectorAll('.tab-btn');
+  const sections = document.querySelectorAll('.tab-content');
+
+  btns.forEach(b => {
+    if (b.getAttribute('data-tab') === activeBtnTab) {
+      b.classList.add('active');
+    } else {
+      b.classList.remove('active');
+    }
+  });
+
+  sections.forEach(s => {
+    s.style.display = (s.id === activeTabId) ? 'block' : 'none';
+  });
+
+  if (activeTabId === 'tab-library') {
+    if (allSongs && allSongs.length > 0) {
+      if (typeof renderLibraryPage === 'function') renderLibraryPage();
+    } else {
+      if (typeof loadDeviceSongs === 'function') loadDeviceSongs(currentDeviceId, false);
+    }
+  }
+
+  if (activeTabId === 'tab-player') {
+    if (typeof refreshPlayerLibraryList === 'function') {
+      refreshPlayerLibraryList(false).then(() => {
+        const sel = document.getElementById('player-library-select');
+        const devId = (sel && sel.value) ? sel.value : (playerTabDeviceId || 'local');
+        if (!playerTabSongs || playerTabSongs.length === 0 || playerTabDeviceId !== devId) {
+          if (typeof loadPlayerLibrary === 'function') loadPlayerLibrary(devId);
+        }
+      });
+    }
+    if (typeof renderQueuePanel === 'function') renderQueuePanel();
+  }
+}
+// =============================================================================
+// OVERVIEW MODULE: Dashboard Metric Stats, Devices Breakdown, Over-IP Peers
+// =============================================================================
 
 async function loadDashboardStats() {
   try {
@@ -263,55 +342,6 @@ async function loadDashboardStats() {
     renderDeviceBreakdown(data.device_counts || []);
   } catch (err) {
     console.error('Error fetching dashboard stats:', err);
-  }
-}
-
-// Active Device State & Sorting State
-let currentDeviceId = 'local';
-let currentDeviceName = 'Local Music Folders';
-let currentDeviceType = 'Local Storage';
-let currentSortCriteria = 'ctime_desc';
-let availableDevicesList = [];
-
-function switchTab(tabId) {
-  let activeTabId = tabId;
-  let activeBtnTab = tabId;
-
-  // Map legacy/sub-tabs gracefully
-  if (tabId === 'tab-devices') {
-    activeTabId = 'tab-overview';
-    activeBtnTab = 'tab-overview';
-  } else if (tabId === 'tab-hidden') {
-    activeTabId = 'tab-hidden';
-    activeBtnTab = 'tab-deleted';
-  }
-
-  const btns = document.querySelectorAll('.tab-btn');
-  const sections = document.querySelectorAll('.tab-content');
-
-  btns.forEach(b => {
-    if (b.getAttribute('data-tab') === activeBtnTab) {
-      b.classList.add('active');
-    } else {
-      b.classList.remove('active');
-    }
-  });
-
-  sections.forEach(s => {
-    s.style.display = (s.id === activeTabId) ? 'block' : 'none';
-  });
-
-  if (activeTabId === 'tab-library') {
-    if (allSongs && allSongs.length > 0) {
-      renderLibraryPage();
-    } else {
-      loadDeviceSongs(currentDeviceId, false);
-    }
-  }
-
-  if (activeTabId === 'tab-player') {
-    refreshPlayerLibraryList();
-    renderQueuePanel();
   }
 }
 
@@ -391,6 +421,891 @@ function onLibraryDeviceSelectChange(deviceId) {
   currentDeviceId = deviceId;
   loadDeviceSongs(deviceId);
 }
+
+
+async function scanAdbDevices() {
+  const statusEl = document.getElementById('ip-add-status');
+  if (statusEl) statusEl.textContent = 'Scanning connected ADB devices...';
+  try {
+    const res = await fetch('/api/devices/scan-adb', { method: 'POST' });
+    const data = await res.json();
+    if (statusEl) statusEl.textContent = `Scanned ${data.devices ? data.devices.length : 0} ADB devices.`;
+    loadDashboardStats();
+  } catch (err) {
+    console.error('Error scanning ADB devices:', err);
+    if (statusEl) statusEl.textContent = 'Error scanning ADB devices.';
+  }
+}
+
+async function scanIpHosts() {
+  const statusEl = document.getElementById('ip-add-status');
+  if (statusEl) statusEl.textContent = 'Pinging saved Over-IP peer devices...';
+  try {
+    const res = await fetch('/api/devices/scan-ip', { method: 'POST' });
+    const data = await res.json();
+    if (statusEl) statusEl.textContent = `Pings complete. ${data.devices ? data.devices.length : 0} Over-IP peers processed.`;
+    loadDashboardStats();
+  } catch (err) {
+    console.error('Error pinging Over-IP hosts:', err);
+    if (statusEl) statusEl.textContent = 'Error pinging Over-IP devices.';
+  }
+}
+
+async function addOverIpDevice() {
+  const ipInput = document.getElementById('input-ip-addr');
+  const portInput = document.getElementById('input-ip-port');
+  const statusEl = document.getElementById('ip-add-status');
+
+  const ip = ipInput ? ipInput.value.trim() : '';
+  const port = portInput ? parseInt(portInput.value) || 5000 : 5000;
+
+  if (!ip) {
+    if (statusEl) statusEl.textContent = 'Please enter a valid IP address!';
+    return;
+  }
+
+  if (statusEl) statusEl.textContent = `Adding and pinging Over-IP peer ${ip}:${port}...`;
+
+  try {
+    const res = await fetch('/api/devices/add-ip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ip: ip, port: port })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      if (statusEl) statusEl.textContent = `Successfully added and probed ${ip}:${port}.`;
+      if (ipInput) ipInput.value = '';
+      loadDashboardStats();
+    } else {
+      if (statusEl) statusEl.textContent = `Error: ${data.error || 'Failed to add IP'}`;
+    }
+  } catch (err) {
+    console.error('Error adding Over-IP device:', err);
+    if (statusEl) statusEl.textContent = 'Error adding Over-IP peer host.';
+  }
+}
+
+// =============================================================================
+// PLAYER MODULE: Audio Engine, Bottom Bar, Queue Panel, Liked Songs & Player Tab
+// =============================================================================
+
+// --- BESPOKE AUDIO PLAYER ENGINE ---
+
+function formatDuration(sec) {
+  if (isNaN(sec) || !isFinite(sec) || sec < 0) return '0:00';
+  const minutes = Math.floor(sec / 60);
+  const seconds = Math.floor(sec % 60);
+  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
+}
+
+const SVG_VOL_HIGH = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>`;
+const SVG_VOL_MUTED = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>`;
+
+function initAudioPlayer() {
+  const player = document.getElementById('audio-player');
+  const scrubber = document.getElementById('player-scrubber');
+  const curTimeEl = document.getElementById('player-current-time');
+  const totalTimeEl = document.getElementById('player-total-time');
+  const volSlider = document.getElementById('player-volume');
+  if (!player) return;
+
+  // Restore saved volume
+  const savedVol = localStorage.getItem('antigravity_player_volume');
+  if (savedVol !== null) {
+    const v = parseFloat(savedVol);
+    player.volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
+    if (volSlider) volSlider.value = player.volume;
+  }
+  updatePlayerVolumeIcon();
+
+  player.onplay = () => setPlayerPlayState(true);
+  player.onpause = () => setPlayerPlayState(false);
+  player.onended = () => handleTrackEnded();
+
+  player.ontimeupdate = () => {
+    if (!isScrubbing && scrubber && player.duration) {
+      scrubber.value = player.currentTime;
+      if (curTimeEl) curTimeEl.textContent = formatDuration(player.currentTime);
+      updateScrubberProgress(player.currentTime, player.duration);
+    }
+  };
+
+  player.onloadedmetadata = () => {
+    if (scrubber) {
+      scrubber.min = 0;
+      scrubber.max = player.duration || 100;
+      scrubber.value = player.currentTime || 0;
+    }
+    if (totalTimeEl) {
+      totalTimeEl.textContent = formatDuration(player.duration);
+    }
+    updateScrubberProgress(player.currentTime || 0, player.duration || 100);
+  };
+
+  player.onvolumechange = () => {
+    if (volSlider) volSlider.value = player.muted ? 0 : player.volume;
+    updatePlayerVolumeIcon();
+  };
+
+  setupPlayerKeyboardHotkeys();
+}
+
+function updateScrubberProgress(current, total) {
+  const scrubber = document.getElementById('player-scrubber');
+  if (!scrubber || !total) return;
+  const pct = Math.min(100, Math.max(0, (current / total) * 100));
+  scrubber.style.background = `linear-gradient(to right, var(--accent-yellow) ${pct}%, #262626 ${pct}%)`;
+}
+
+function onScrubberInput(val) {
+  isScrubbing = true;
+  const player = document.getElementById('audio-player');
+  const curTimeEl = document.getElementById('player-current-time');
+  const v = parseFloat(val);
+  if (curTimeEl) curTimeEl.textContent = formatDuration(v);
+  if (player && player.duration) {
+    updateScrubberProgress(v, player.duration);
+  }
+}
+
+function onScrubberChange(val) {
+  const player = document.getElementById('audio-player');
+  if (player) {
+    player.currentTime = parseFloat(val);
+  }
+  isScrubbing = false;
+}
+
+function onVolumeInput(val) {
+  const player = document.getElementById('audio-player');
+  if (!player) return;
+  const v = parseFloat(val);
+  player.volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
+  player.muted = false;
+  localStorage.setItem('antigravity_player_volume', player.volume);
+  updatePlayerVolumeIcon();
+}
+
+function togglePlayerMute() {
+  const player = document.getElementById('audio-player');
+  const volSlider = document.getElementById('player-volume');
+  if (!player) return;
+  player.muted = !player.muted;
+  if (volSlider) {
+    volSlider.value = player.muted ? 0 : player.volume;
+  }
+  updatePlayerVolumeIcon();
+}
+
+function updatePlayerVolumeIcon() {
+  const player = document.getElementById('audio-player');
+  const icon = document.getElementById('player-vol-icon');
+  if (!player || !icon) return;
+  const isMuted = player.muted || player.volume === 0;
+  icon.innerHTML = isMuted ? SVG_VOL_MUTED : SVG_VOL_HIGH;
+}
+
+function togglePlayerLoop() {
+  isPlayerLooping = !isPlayerLooping;
+  const player = document.getElementById('audio-player');
+  if (player) player.loop = isPlayerLooping;
+  const loopBtn = document.getElementById('btn-player-loop');
+  if (loopBtn) {
+    if (isPlayerLooping) {
+      loopBtn.style.color = 'var(--accent-yellow)';
+      loopBtn.title = 'Repeat Mode: Active (Loop)';
+    } else {
+      loopBtn.style.color = '';
+      loopBtn.title = 'Toggle Repeat Mode';
+    }
+  }
+}
+
+function toggleShuffle() {
+  const shuffleBtn = document.getElementById('btn-player-shuffle');
+  if (isShuffled) {
+    // Restore original order and find current track's new position
+    const currentPath = currentTrackPath;
+    activeQueue = [...originalQueue];
+    queueIndex = activeQueue.findIndex(t => t.filepath === currentPath);
+    if (queueIndex < 0) queueIndex = 0;
+    isShuffled = false;
+    if (shuffleBtn) shuffleBtn.classList.remove('shuffle-on');
+    if (shuffleBtn) shuffleBtn.title = 'Shuffle Off';
+  } else {
+    // Save original and shuffle
+    originalQueue = [...activeQueue];
+    const currentTrack = activeQueue[queueIndex];
+    const rest = activeQueue.filter((_, i) => i !== queueIndex);
+    for (let i = rest.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [rest[i], rest[j]] = [rest[j], rest[i]];
+    }
+    activeQueue = [currentTrack, ...rest];
+    queueIndex = 0;
+    isShuffled = true;
+    if (shuffleBtn) shuffleBtn.classList.add('shuffle-on');
+    if (shuffleBtn) shuffleBtn.title = 'Shuffle On — click to disable';
+  }
+  renderQueuePanel();
+}
+
+function seekRelative(sec) {
+  const player = document.getElementById('audio-player');
+  if (!player || !player.duration) return;
+  player.currentTime = Math.max(0, Math.min(player.duration, player.currentTime + sec));
+}
+
+function playPreviousTrack() {
+  const player = document.getElementById('audio-player');
+  if (player && player.currentTime > 3) {
+    player.currentTime = 0;
+    return;
+  }
+  if (activeQueue && activeQueue.length > 0) {
+    if (queueIndex > 0) {
+      queueIndex--;
+      const prevTrack = activeQueue[queueIndex];
+      playAudio(prevTrack.filepath, prevTrack.title, prevTrack.artist, activeQueue, queueIndex, prevTrack.bitrate_kbps, prevTrack.device_id);
+    } else if (isPlayerLooping) {
+      queueIndex = activeQueue.length - 1;
+      const lastTrack = activeQueue[queueIndex];
+      playAudio(lastTrack.filepath, lastTrack.title, lastTrack.artist, activeQueue, queueIndex, lastTrack.bitrate_kbps, lastTrack.device_id);
+    } else if (player) {
+      player.currentTime = 0;
+    }
+  }
+}
+
+function playNextTrack() {
+  if (activeQueue && activeQueue.length > 0) {
+    if (queueIndex + 1 < activeQueue.length) {
+      queueIndex++;
+      const nextTrack = activeQueue[queueIndex];
+      playAudio(nextTrack.filepath, nextTrack.title, nextTrack.artist, activeQueue, queueIndex, nextTrack.bitrate_kbps, nextTrack.device_id);
+    } else if (isPlayerLooping) {
+      queueIndex = 0;
+      const firstTrack = activeQueue[0];
+      playAudio(firstTrack.filepath, firstTrack.title, firstTrack.artist, activeQueue, 0, firstTrack.bitrate_kbps, firstTrack.device_id);
+    } else {
+      setPlayerPlayState(false);
+    }
+  } else {
+    setPlayerPlayState(false);
+  }
+}
+
+function closeAudioPlayer() {
+  const player = document.getElementById('audio-player');
+  const playerBar = document.getElementById('audio-player-bar');
+  if (player) {
+    player.pause();
+    player.src = '';
+  }
+  if (playerBar) {
+    playerBar.style.display = 'none';
+  }
+  currentTrackPath = null;
+  setPlayerPlayState(false);
+}
+
+function setupPlayerKeyboardHotkeys() {
+  document.addEventListener('keydown', (e) => {
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable)) {
+      if (e.key === 'Escape') {
+        active.blur();
+      }
+      return;
+    }
+
+    if (e.key === ' ' || e.code === 'Space') {
+      e.preventDefault();
+      togglePlayPause();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      seekRelative(-5);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      seekRelative(5);
+    } else if (e.key === 'j' || e.key === 'J') {
+      e.preventDefault();
+      playPreviousTrack();
+    } else if (e.key === 'k' || e.key === 'K') {
+      e.preventDefault();
+      playNextTrack();
+    } else if (e.key === 'm' || e.key === 'M') {
+      e.preventDefault();
+      togglePlayerMute();
+    } else if (e.key === 'l' || e.key === 'L') {
+      e.preventDefault();
+      toggleCurrentTrackLike();
+    } else if (e.key === 'Escape') {
+      closeConfirmModal(false);
+      hideAddToPlaylistModal();
+      hideCreatePlaylistModal();
+      hideBatchDeleteDuplicatesModal();
+      hideDeviceUploadModal();
+      hideTranscodeModal();
+      hideSyncSongModal();
+      closeAudioPlayer();
+    } else if (e.key === '/') {
+      const searchInput = document.getElementById('lib-search');
+      if (searchInput) {
+        e.preventDefault();
+        searchInput.focus();
+        searchInput.select();
+      }
+    }
+  });
+}
+
+function setPlayerPlayState(playing) {
+  isPlaying = playing;
+  const playPauseBtn = document.getElementById('btn-player-playpause');
+  if (playPauseBtn) {
+    playPauseBtn.innerHTML = isPlaying ? SVG_PAUSE : SVG_PLAY;
+    playPauseBtn.title = isPlaying ? 'Pause (Space)' : 'Play (Space)';
+  }
+  renderLibraryPage();
+  if (selectedPlaylist) {
+    renderPlaylistTracks();
+  }
+}
+
+function togglePlayPause() {
+  const player = document.getElementById('audio-player');
+  if (!player || !player.src) return;
+
+  if (player.paused) {
+    player.play().catch(err => console.warn('Play error:', err));
+  } else {
+    player.pause();
+  }
+}
+
+function playOrToggleAudio(filepath, title, artist, index = -1, bitrate = '', deviceId = null) {
+  const targetDev = deviceId || currentDeviceId || 'local';
+  const player = document.getElementById('audio-player');
+  if (currentTrackPath === filepath && player && player.src) {
+    togglePlayPause();
+  } else {
+    let queue = null;
+    let qIdx = 0;
+    if (index >= 0 && filteredSongs && filteredSongs.length > 0) {
+      queue = filteredSongs.map(s => ({ ...s, device_id: s.device_id || targetDev }));
+      qIdx = index;
+    }
+    playAudio(filepath, title, artist, queue, qIdx, bitrate, targetDev);
+  }
+}
+
+function playAudio(filepath, title, artist, queue = null, index = 0, bitrate = null, deviceId = null) {
+  const player = document.getElementById('audio-player');
+  const playerBar = document.getElementById('audio-player-bar');
+  const titleEl = document.getElementById('player-title');
+  const artistEl = document.getElementById('player-artist');
+  const badgeEl = document.getElementById('player-quality-badge');
+
+  if (player && playerBar) {
+    const trackDeviceId = deviceId || (queue && queue[index] && queue[index].device_id) || currentDeviceId || 'local';
+    currentTrackPath = filepath;
+    if (queue && queue.length > 0) {
+      activeQueue = queue.map(item => ({ ...item, device_id: item.device_id || trackDeviceId }));
+      queueIndex = index;
+    } else {
+      activeQueue = [{ filepath, title, artist, bitrate_kbps: bitrate, device_id: trackDeviceId }];
+      queueIndex = 0;
+    }
+
+    const streamUrl = `/api/song/stream?filepath=${encodeURIComponent(filepath)}` +
+      (trackDeviceId && trackDeviceId !== 'local' ? `&device_id=${encodeURIComponent(trackDeviceId)}` : '');
+    player.src = streamUrl;
+    if (titleEl) titleEl.textContent = title || 'Unknown Title';
+    if (artistEl) {
+      artistEl.textContent = (trackDeviceId && trackDeviceId !== 'local')
+        ? `${artist || 'Unknown Artist'} • (${currentDeviceName || trackDeviceId})`
+        : (artist || 'Unknown Artist');
+    }
+
+    const bVal = bitrate || (activeQueue[queueIndex] && activeQueue[queueIndex].bitrate_kbps);
+    if (badgeEl) {
+      if (bVal && bVal !== 'Unknown') {
+        badgeEl.textContent = bVal;
+        badgeEl.style.display = 'inline-block';
+      } else {
+        badgeEl.style.display = 'none';
+      }
+    }
+
+    playerBar.style.display = 'flex';
+    player.play().catch(err => console.warn('Playback error:', err));
+
+    // Update queue panel and player-tab song row highlights
+    renderQueuePanel();
+    updatePlayerTabRowHighlight();
+    updateAllLikeButtonsUI();
+  }
+}
+
+function handleTrackEnded() {
+  if (activeQueue && queueIndex + 1 < activeQueue.length) {
+    playNextTrack();
+  } else if (isPlayerLooping && activeQueue && activeQueue.length > 0) {
+    playNextTrack();
+  } else {
+    setPlayerPlayState(false);
+  }
+}
+
+// --- LIKED MUSIC SYSTEM JS LOGIC ---
+
+async function loadLikedMusicSet() {
+  try {
+    const res = await fetch('/api/playlists');
+    if (!res.ok) return;
+    const playlists = await res.json() || [];
+    let likedPl = playlists.find(p => p.name === 'Liked Music');
+    if (likedPl) {
+      likedPlaylistId = likedPl.id;
+      const trRes = await fetch(`/api/playlists/${likedPl.id}/tracks`);
+      if (trRes.ok) {
+        const tracks = await trRes.json() || [];
+        likedSongPaths = new Set(tracks.map(t => t.filepath));
+        updateAllLikeButtonsUI();
+      }
+    }
+  } catch (e) {
+    console.warn('Failed to load liked music set:', e);
+  }
+}
+
+async function toggleLikeTrack(filepath, title, artist) {
+  if (!filepath) return;
+  try {
+    if (!likedPlaylistId) {
+      const plRes = await fetch('/api/playlists');
+      const playlists = await plRes.json() || [];
+      let likedPl = playlists.find(p => p.name === 'Liked Music');
+      if (!likedPl) {
+        const createRes = await fetch('/api/playlists/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: 'Liked Music' })
+        });
+        const created = await createRes.json();
+        likedPl = created.playlist;
+      }
+      if (likedPl) likedPlaylistId = likedPl.id;
+    }
+
+    const isLiked = likedSongPaths.has(filepath);
+    if (isLiked) {
+      await fetch(`/api/playlists/${likedPlaylistId}/remove-track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filepath })
+      });
+      likedSongPaths.delete(filepath);
+      showToast(`Removed "${title || 'Track'}" from Liked Music`, 'info', 2000);
+    } else {
+      await fetch(`/api/playlists/${likedPlaylistId}/add-track`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filepath })
+      });
+      likedSongPaths.add(filepath);
+      showToast(`Added "${title || 'Track'}" to Liked Music ❤️`, 'success', 2000);
+    }
+
+    updateAllLikeButtonsUI();
+
+    if (selectedPlaylist && selectedPlaylist.id === likedPlaylistId) {
+      selectPlaylist(likedPlaylistId, 'Liked Music');
+    }
+    if (currentFormatFilter === 'liked') {
+      applyLibraryFilterAndSort();
+    }
+    loadPlaylists();
+  } catch (err) {
+    console.error('Error toggling like:', err);
+    showToast('Failed to update liked state: ' + err.message, 'error', 3000);
+  }
+}
+
+function toggleCurrentTrackLike() {
+  if (!currentTrackPath) {
+    showToast('No track is currently playing', 'info', 2000);
+    return;
+  }
+  const curTrack = activeQueue && activeQueue[queueIndex] ? activeQueue[queueIndex] : null;
+  const title = curTrack ? curTrack.title : '';
+  const artist = curTrack ? curTrack.artist : '';
+  toggleLikeTrack(currentTrackPath, title, artist);
+}
+
+function updateAllLikeButtonsUI() {
+  // Update player bar like button
+  const playerLikeBtn = document.getElementById('btn-player-like');
+  const playerLikeIcon = document.getElementById('player-like-icon');
+  if (playerLikeBtn) {
+    const isLiked = Boolean(currentTrackPath && likedSongPaths.has(currentTrackPath));
+    playerLikeBtn.classList.toggle('liked', isLiked);
+    if (playerLikeIcon) {
+      playerLikeIcon.innerHTML = isLiked
+        ? '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#ff0055" stroke="#ff0055"/>'
+        : '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>';
+    }
+  }
+
+  // Update library table rows & player rows
+  document.querySelectorAll('.btn-song-like').forEach(btn => {
+    const fp = btn.dataset.filepath;
+    if (fp) {
+      const isLiked = likedSongPaths.has(fp);
+      btn.classList.toggle('btn-liked', isLiked);
+      btn.innerHTML = isLiked ? SVG_HEART_FILLED : SVG_HEART;
+      btn.title = isLiked ? 'Unlike' : 'Like';
+    }
+  });
+}
+
+
+// MUSIC PLAYER TAB — Library Picker, Song List, Queue Panel, Shuffle
+// =============================================================================
+
+// Player-tab internal state
+var _playerLibRefreshTimer = null;
+
+/**
+ * Called once on DOMContentLoaded. Populates the library dropdown and
+ * loads the initial player library songs.
+ */
+async function initPlayerTab() {
+  await refreshPlayerLibraryList(false);
+  const sel = document.getElementById('player-library-select');
+  const devId = sel ? sel.value : 'local';
+  if (!playerTabSongs || playerTabSongs.length === 0) {
+    loadPlayerLibrary(devId, false);
+  }
+}
+
+/**
+ * Fetch /api/devices and rebuild the library picker <select>.
+ * If reloadSongs is true or songs are not yet loaded, also loads the songs for the selected library.
+ */
+async function refreshPlayerLibraryList(reloadSongs = false) {
+  const sel = document.getElementById('player-library-select');
+  const status = document.getElementById('player-lib-status');
+  if (!sel) return;
+
+  try {
+    const res = await fetch('/api/devices');
+    if (!res.ok) throw new Error('Failed to fetch devices');
+    const devices = await res.json();
+
+    // Keep current selection
+    const prev = sel.value || playerTabDeviceId || 'local';
+
+    // Rebuild options
+    let html = '<option value="local">🏠 Local Storage</option>';
+    if (Array.isArray(devices)) {
+      devices.forEach(d => {
+        const val = d.device_id || d.serial || d.ip_port;
+        if (!val || val === 'local') return;
+        const icon = d.device_type === 'Over-IP' ? '🌐' : '📱';
+        const label = d.device_name || d.description || val;
+        const online = d.is_online !== false ? '' : ' (offline)';
+        html += `<option value="${escHtml(val)}">${icon} ${escHtml(label)}${online}</option>`;
+      });
+    }
+    sel.innerHTML = html;
+
+    // Restore previous selection if still available, else fallback to 'local'
+    const opts = Array.from(sel.options).map(o => o.value);
+    sel.value = opts.includes(prev) ? prev : 'local';
+
+    if (status) {
+      const cnt = sel.options.length - 1;
+      status.textContent = cnt > 0 ? `${cnt} device${cnt !== 1 ? 's' : ''} found` : 'No remote devices';
+    }
+
+    if (reloadSongs || !playerTabSongs || playerTabSongs.length === 0) {
+      await loadPlayerLibrary(sel.value, reloadSongs);
+    }
+  } catch (err) {
+    console.warn('[PlayerTab] Could not refresh device list:', err);
+    if (status) status.textContent = 'Could not load devices';
+  }
+}
+
+/**
+ * Load songs for the selected library into the player-tab song table.
+ */
+async function loadPlayerLibrary(deviceId, forceRefresh = false) {
+  if (!deviceId) deviceId = 'local';
+  playerTabDeviceId = deviceId;
+
+  const tbody = document.getElementById('player-songs-tbody');
+  const countEl = document.getElementById('player-song-count');
+  if (!tbody) return;
+
+  // Fast path: if device is 'local' and allSongs already loaded, reuse immediately without network wait
+  if (deviceId === 'local' && allSongs && allSongs.length > 0 && !forceRefresh) {
+    playerTabSongs = allSongs;
+    playerTabFiltered = [...allSongs];
+    renderPlayerSongTable(playerTabFiltered, deviceId);
+    if (countEl) countEl.textContent = `${allSongs.length.toLocaleString()} songs`;
+    return;
+  }
+
+  tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">⏳ Loading songs…</td></tr>';
+  if (countEl) countEl.textContent = '';
+
+  try {
+    const url = `/api/devices/${encodeURIComponent(deviceId)}/songs${forceRefresh ? '?refresh=true' : ''}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const songs = data.songs || [];
+
+    playerTabSongs = songs;
+    playerTabFiltered = [...songs];
+
+    // If local library is loaded and allSongs is empty, also share with allSongs
+    if (deviceId === 'local' && (!allSongs || allSongs.length === 0)) {
+      allSongs = songs;
+    }
+
+    if (songs.length === 0) {
+      if (deviceId === 'local') {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">No local songs indexed yet. Go to <strong>Music Library → Scan / Refresh</strong> to scan your library first.</td></tr>';
+      } else {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">No songs found on this device.</td></tr>';
+      }
+      if (countEl) countEl.textContent = '0 songs';
+      return;
+    }
+
+    renderPlayerSongTable(playerTabFiltered, deviceId);
+    if (countEl) countEl.textContent = `${songs.length.toLocaleString()} songs`;
+  } catch (err) {
+    console.error('[PlayerTab] Failed to load songs:', err);
+    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--status-offline);text-align:center;padding:2rem;">❌ Failed to load songs: ${escHtml(String(err))}</td></tr>`;
+  }
+}
+
+/**
+ * Render the player-tab song table from a song array.
+ */
+function renderPlayerSongTable(songs, deviceId) {
+  const tbody = document.getElementById('player-songs-tbody');
+  if (!tbody) return;
+
+  if (!songs || songs.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">No songs found.</td></tr>';
+    return;
+  }
+
+  const rows = songs.map((s, i) => {
+    const fp = s.filepath || s._data || '';
+    const title = escHtml(s.title || s.filename || fp.split('/').pop() || 'Unknown');
+    const artist = escHtml(s.artist || 'Unknown');
+    const album = escHtml(s.album || '—');
+    const bitrate = s.bitrate_kbps && s.bitrate_kbps !== 'Unknown' ? `<span class="badge badge-yellow" style="font-size:0.7rem;">${escHtml(String(s.bitrate_kbps))}</span>` : '—';
+    const isActive = fp && fp === currentTrackPath;
+    const rowClass = isActive ? ' class="player-row-active"' : '';
+    const btnClass = isActive ? ' playing' : '';
+    const btnIcon = isActive && isPlaying
+      ? '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
+      : '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
+
+    return `<tr data-filepath="${escHtml(fp)}"${rowClass}>
+      <td style="color:var(--text-muted);font-size:0.75rem;">${i + 1}</td>
+      <td title="${title}">${title}</td>
+      <td class="col-hide-sm" title="${artist}">${artist}</td>
+      <td class="col-hide-md" title="${album}">${album}</td>
+      <td class="col-right col-hide-sm">${bitrate}</td>
+      <td class="col-center" style="white-space:nowrap;">
+        <button class="btn btn-secondary btn-sm btn-song-like ${likedSongPaths.has(fp) ? 'btn-liked' : ''}" data-filepath="${escHtml(fp)}" onclick="toggleLikeTrack('${escapeJs(fp)}', '${escapeJs(s.title || s.filename || '')}', '${escapeJs(s.artist || '')}')" title="${likedSongPaths.has(fp) ? 'Unlike' : 'Like'}" style="padding:0.25rem 0.4rem;margin-right:0.35rem;border-radius:6px;">${likedSongPaths.has(fp) ? SVG_HEART_FILLED : SVG_HEART}</button>
+        <button class="player-row-play-btn${btnClass}" title="Play ${title}"
+          onclick="playerTabPlaySong('${escapeJs(fp)}', ${i}, '${escapeJs(deviceId)}')">${btnIcon}</button>
+      </td>
+    </tr>`;
+  });
+
+  tbody.innerHTML = rows.join('');
+}
+
+/**
+ * Play a song from the player tab, loading all filtered songs as the queue.
+ */
+function playerTabPlaySong(filepath, index, deviceId) {
+  if (!playerTabFiltered || playerTabFiltered.length === 0) return;
+
+  // Build queue with device_id on each entry
+  const queue = playerTabFiltered.map(s => ({ ...s, device_id: deviceId || 'local' }));
+  const track = queue[index] || queue[0];
+  if (!track) return;
+
+  // If shuffle was active, reset it since we're starting a new queue
+  if (isShuffled) {
+    isShuffled = false;
+    originalQueue = [];
+    const shuffleBtn = document.getElementById('btn-player-shuffle');
+    if (shuffleBtn) shuffleBtn.classList.remove('shuffle-on');
+  }
+
+  playAudio(
+    track.filepath || track._data,
+    track.title,
+    track.artist,
+    queue,
+    index,
+    track.bitrate_kbps,
+    deviceId
+  );
+}
+
+/**
+ * Play All — starts from the first song in the current filtered list.
+ */
+function playerPlayAll() {
+  if (!playerTabFiltered || playerTabFiltered.length === 0) return;
+  playerTabPlaySong(playerTabFiltered[0].filepath || playerTabFiltered[0]._data, 0, playerTabDeviceId);
+}
+
+/**
+ * Shuffle All — plays the library in shuffled order starting from a random song.
+ */
+function playerShuffleAll() {
+  if (!playerTabFiltered || playerTabFiltered.length === 0) return;
+  const idx = Math.floor(Math.random() * playerTabFiltered.length);
+  playerTabPlaySong(playerTabFiltered[idx].filepath || playerTabFiltered[idx]._data, idx, playerTabDeviceId);
+  // After loading queue, enable shuffle
+  if (!isShuffled) toggleShuffle();
+}
+
+/**
+ * Filter the player-tab song list by the search box.
+ */
+function filterPlayerSongs() {
+  const q = (document.getElementById('player-search')?.value || '').toLowerCase().trim();
+  if (!q) {
+    playerTabFiltered = [...playerTabSongs];
+  } else {
+    playerTabFiltered = playerTabSongs.filter(s =>
+      (s.title || '').toLowerCase().includes(q) ||
+      (s.artist || '').toLowerCase().includes(q) ||
+      (s.album || '').toLowerCase().includes(q) ||
+      (s.filename || '').toLowerCase().includes(q)
+    );
+  }
+  const countEl = document.getElementById('player-song-count');
+  if (countEl) {
+    countEl.textContent = q
+      ? `${playerTabFiltered.length} / ${playerTabSongs.length} songs`
+      : `${playerTabSongs.length.toLocaleString()} songs`;
+  }
+  renderPlayerSongTable(playerTabFiltered, playerTabDeviceId);
+}
+
+/**
+ * Update which row in the player-tab table is highlighted as "now playing".
+ */
+function updatePlayerTabRowHighlight() {
+  const tbody = document.getElementById('player-songs-tbody');
+  if (!tbody) return;
+  tbody.querySelectorAll('tr[data-filepath]').forEach(row => {
+    const fp = row.getAttribute('data-filepath');
+    if (fp === currentTrackPath) {
+      row.classList.add('player-row-active');
+    } else {
+      row.classList.remove('player-row-active');
+    }
+  });
+}
+
+/**
+ * Render the queue panel with current activeQueue.
+ */
+function renderQueuePanel() {
+  const list = document.getElementById('player-queue-list');
+  const countEl = document.getElementById('player-queue-count');
+  if (!list) return;
+
+  if (!activeQueue || activeQueue.length === 0) {
+    list.innerHTML = '<div class="text-muted" style="padding:1.5rem 1rem;text-align:center;font-size:0.85rem;">No tracks in queue yet.</div>';
+    if (countEl) countEl.textContent = '';
+    return;
+  }
+
+  if (countEl) countEl.textContent = `${activeQueue.length} tracks`;
+
+  list.innerHTML = activeQueue.map((t, i) => {
+    const isActive = i === queueIndex;
+    const title = escHtml(t.title || t.filename || (t.filepath || '').split('/').pop() || 'Unknown');
+    const artist = escHtml(t.artist || 'Unknown');
+    const cls = isActive ? ' queue-active' : '';
+    const prefix = isActive
+      ? '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" style="width:10px;height:10px;flex-shrink:0;"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
+      : '';
+    return `<div class="player-queue-item${cls}" onclick="playerQueueJumpTo(${i})" title="${title}">
+      <span class="q-num">${prefix || (i + 1)}</span>
+      <div class="q-info">
+        <div class="q-title">${title}</div>
+        <div class="q-artist">${artist}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Scroll active item into view
+  const activeEl = list.querySelector('.queue-active');
+  if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+/**
+ * Jump to a specific track in the active queue.
+ */
+function playerQueueJumpTo(index) {
+  if (!activeQueue || index < 0 || index >= activeQueue.length) return;
+  const t = activeQueue[index];
+  playAudio(
+    t.filepath || t._data,
+    t.title,
+    t.artist,
+    activeQueue,
+    index,
+    t.bitrate_kbps,
+    t.device_id
+  );
+}
+
+/**
+ * Clear the current play queue and stop playback.
+ */
+function clearPlayerQueue() {
+  activeQueue = [];
+  originalQueue = [];
+  queueIndex = 0;
+  isShuffled = false;
+  const shuffleBtn = document.getElementById('btn-player-shuffle');
+  if (shuffleBtn) shuffleBtn.classList.remove('shuffle-on');
+  renderQueuePanel();
+  closeAudioPlayer();
+}
+
+/** Simple HTML escaping helper (may already exist, this is safe to duplicate). */
+function escHtml(str) {
+  if (typeof str !== 'string') return String(str || '');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ==========================================
+// =============================================================================
+// LIBRARY MODULE: Music Library Browsing, Filter, Sort, Pagination, Upload, Transcode
+// =============================================================================
 
 function refreshCurrentDeviceLibrary() {
   streamDeviceSongs(currentDeviceId);
@@ -948,6 +1863,201 @@ function updateLibraryPaginationInfo(start, end, total, totalPages) {
   document.getElementById('lib-prev-btn').disabled = (libPage <= 1);
   document.getElementById('lib-next-btn').disabled = (libPage >= totalPages);
 }
+
+
+// --- DIRECT DEVICE UPLOAD MODAL LOGIC ---
+
+function openDeviceUploadModal() {
+  if (currentDeviceId === 'local') {
+    showToast('Select an Over-IP companion device or ADB device to upload files.', 'info');
+    return;
+  }
+  const modal = document.getElementById('modal-device-upload');
+  const badge = document.getElementById('upload-device-name-badge');
+  const input = document.getElementById('upload-device-files-input');
+  const summary = document.getElementById('upload-files-summary');
+  const progress = document.getElementById('upload-device-progress');
+  const bar = document.getElementById('upload-progress-bar');
+  const btn = document.getElementById('btn-submit-device-upload');
+
+  if (badge) badge.textContent = currentDeviceName || currentDeviceId;
+  if (input) input.value = '';
+  if (summary) summary.textContent = 'No files selected';
+  if (progress) progress.style.display = 'none';
+  if (bar) bar.style.width = '0%';
+  if (btn) btn.disabled = false;
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function hideDeviceUploadModal() {
+  const modal = document.getElementById('modal-device-upload');
+  if (modal) modal.style.display = 'none';
+}
+
+function onUploadDeviceFilesSelected(input) {
+  const summary = document.getElementById('upload-files-summary');
+  if (!summary) return;
+  if (input.files && input.files.length > 0) {
+    let totalBytes = 0;
+    for (let i = 0; i < input.files.length; i++) {
+      totalBytes += input.files[i].size;
+    }
+    summary.textContent = `${input.files.length} file(s) selected (${formatBytes(totalBytes)})`;
+  } else {
+    summary.textContent = 'No files selected';
+  }
+}
+
+function submitDeviceUpload() {
+  const input = document.getElementById('upload-device-files-input');
+  if (!input || !input.files || input.files.length === 0) {
+    showToast('Please select at least one audio file to upload.', 'warning');
+    return;
+  }
+
+  const qualitySelect = document.getElementById('upload-device-quality');
+  const qualityVal = qualitySelect ? qualitySelect.value : 'original';
+  const targetBitrate = qualityVal === 'original' ? '' : qualityVal;
+
+  const formData = new FormData();
+  for (let i = 0; i < input.files.length; i++) {
+    formData.append('files', input.files[i]);
+  }
+  if (targetBitrate) {
+    formData.append('target_bitrate', targetBitrate);
+  }
+
+  const progressWrap = document.getElementById('upload-device-progress');
+  const progressBar = document.getElementById('upload-progress-bar');
+  const progressStatus = document.getElementById('upload-progress-status');
+  const progressPercent = document.getElementById('upload-progress-percent');
+  const submitBtn = document.getElementById('btn-submit-device-upload');
+
+  if (progressWrap) progressWrap.style.display = 'block';
+  if (progressBar) progressBar.style.width = '0%';
+  if (progressPercent) progressPercent.textContent = '0%';
+  if (progressStatus) progressStatus.textContent = 'Starting upload...';
+  if (submitBtn) submitBtn.disabled = true;
+
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', `/api/devices/${encodeURIComponent(currentDeviceId)}/upload`);
+
+  xhr.upload.onprogress = (e) => {
+    if (e.lengthComputable) {
+      const pct = Math.round((e.loaded / e.total) * 100);
+      if (progressBar) progressBar.style.width = pct + '%';
+      if (progressPercent) progressPercent.textContent = pct + '%';
+      if (progressStatus) {
+        progressStatus.textContent = (pct < 100) ? `Uploading files... (${pct}%)` : 'Processing & Transcoding on server...';
+      }
+    }
+  };
+
+  xhr.onload = () => {
+    if (submitBtn) submitBtn.disabled = false;
+    try {
+      const res = JSON.parse(xhr.responseText);
+      if (xhr.status >= 200 && xhr.status < 300 && res.status === 'success') {
+        showToast(res.message || `Uploaded ${input.files.length} song(s) successfully!`, 'success', 5000);
+        hideDeviceUploadModal();
+        refreshCurrentDeviceLibrary();
+      } else {
+        showToast(res.error || res.message || 'Upload to device failed.', 'error', 6000);
+      }
+    } catch (e) {
+      showToast('Unexpected server response during upload.', 'error');
+    }
+  };
+
+  xhr.onerror = () => {
+    if (submitBtn) submitBtn.disabled = false;
+    showToast('Network error while uploading to device.', 'error');
+  };
+
+  xhr.send(formData);
+}
+
+
+// --- LOCAL DOWNCONVERT / TRANSCODE MODAL LOGIC ---
+
+let currentTranscodeTrack = null;
+
+function showTranscodeModal(filepath, title, bitrate) {
+  currentTranscodeTrack = { filepath, title, bitrate };
+  const modal = document.getElementById('modal-transcode-song');
+  const titleEl = document.getElementById('transcode-song-title');
+  const bitrateEl = document.getElementById('transcode-song-bitrate');
+  const btn = document.getElementById('btn-execute-transcode');
+
+  if (titleEl) titleEl.textContent = title || filepath;
+  if (bitrateEl) bitrateEl.textContent = `Current: ${bitrate ? bitrate + ' kbps' : 'Unknown'}`;
+  if (btn) {
+    btn.disabled = false;
+    btn.textContent = 'Downconvert';
+  }
+
+  if (modal) modal.style.display = 'flex';
+}
+
+function hideTranscodeModal() {
+  const modal = document.getElementById('modal-transcode-song');
+  if (modal) modal.style.display = 'none';
+  currentTranscodeTrack = null;
+}
+
+async function submitTranscode() {
+  if (!currentTranscodeTrack || !currentTranscodeTrack.filepath) return;
+  const targetSelect = document.getElementById('transcode-target-bitrate');
+  const replaceCb = document.getElementById('transcode-replace-original');
+  const btn = document.getElementById('btn-execute-transcode');
+
+  const targetBitrate = targetSelect ? parseInt(targetSelect.value, 10) : 192;
+  const replaceOriginal = replaceCb ? replaceCb.checked : false;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Downconverting...';
+  }
+
+  try {
+    const res = await fetch('/api/song/transcode', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filepath: currentTranscodeTrack.filepath,
+        target_bitrate: targetBitrate,
+        replace_original: replaceOriginal
+      })
+    });
+    const data = await res.json();
+    if (res.ok && data.status === 'success') {
+      showToast(data.message || 'Track successfully downconverted!', 'success', 4000);
+      hideTranscodeModal();
+      refreshCurrentDeviceLibrary();
+    } else {
+      showToast(data.error || 'Downconversion failed.', 'error', 5000);
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Downconvert';
+      }
+    }
+  } catch (err) {
+    console.error('Transcode request failed:', err);
+    showToast('Network error during downconversion.', 'error');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Downconvert';
+    }
+  }
+}
+
+
+
+// =============================================================================
+// =============================================================================
+// DUPLICATES MODULE: Tag & Audio Fingerprint Clusters, Deduplication Strategies
+// =============================================================================
 
 // --- DUPLICATES SEARCH, SELECTION & PAGINATION ---
 
@@ -1533,6 +2643,10 @@ async function executeBatchDeleteDuplicates() {
   }
 }
 
+// =============================================================================
+// SYNC MODULE: Folder Sync Planner, Device Diff Table, Push Engine & Track Modal
+// =============================================================================
+
 // --- MUSIC FOLDER SYNC (LOCAL -> ADB) JS LOGIC ---
 
 let syncPreviewData = null;
@@ -1845,122 +2959,261 @@ async function pushSelectedSyncFiles() {
   });
 }
 
-// --- FILE DELETION, HIDING & OTHER UTILITIES ---
 
-async function deleteSong(filepath, evt, deviceId, songId, filename) {
-  const targetDevice = deviceId || currentDeviceId || 'local';
-  let devLabel = 'Local Storage';
-  if (targetDevice.startsWith('adb')) {
-    const serial = targetDevice.replace('adb_', '').replace('adb:', '');
-    devLabel = `ADB Device [${serial}]`;
-  } else if (targetDevice.startsWith('ip')) {
-    const ip = targetDevice.replace('ip_', '').replace('ip:', '');
-    devLabel = `Over-IP Peer [${ip}]`;
-  }
+// --- SYNC TRACK TO DEVICE MODAL & EXISTENCE CHECKING ---
+let syncCurrentSong = null;
+let syncTargetDevicesList = [];
 
-  const songName = filename || filepath.split('/').pop() || 'this audio file';
+async function openSyncSongModal(filepath, title, artist, duration, size, bitrate, album) {
+  syncCurrentSong = { filepath, title, artist, duration, size, bitrate, album };
 
-  showConfirmModal({
-    title: 'Delete Audio File',
-    message: `Permanently delete '${songName}' from ${devLabel}?`,
-    details: filepath,
-    confirmText: 'Delete Song',
-    confirmClass: 'btn btn-danger',
-    onConfirm: async () => {
-      let targetEl = null;
-      if (evt && evt.target) {
-        targetEl = evt.target.closest('li, tr');
-        if (targetEl) {
-          targetEl.style.transition = 'all 0.3s ease';
-          targetEl.style.opacity = '0.2';
-          targetEl.style.filter = 'blur(4px)';
-        }
-      }
+  // Set local track summary UI
+  document.getElementById('sync-local-title').textContent = title || filepath.split('/').pop();
+  document.getElementById('sync-local-artist-album').textContent = `${artist || 'Unknown'} | ${album || 'Unknown'}`;
+  document.getElementById('sync-local-bitrate').textContent = bitrate ? (String(bitrate).includes('kbps') ? bitrate : `${bitrate} kbps`) : 'Bitrate Unknown';
+  document.getElementById('sync-local-duration').textContent = duration || '00:00';
+  document.getElementById('sync-local-size').textContent = size || '0 MB';
+  document.getElementById('sync-local-path').textContent = filepath;
 
-      try {
-        const res = await fetch('/api/song/delete', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            filepath: filepath,
-            device_id: targetDevice,
-            song_id: songId,
-            filename: filename
-          })
-        });
-        const data = await res.json();
-        if (data.status === 'success') {
-          if (targetEl) targetEl.remove();
+  const statusEl = document.getElementById('sync-action-status');
+  if (statusEl) statusEl.innerHTML = '';
 
-          if (allSongs && allSongs.length > 0) {
-            allSongs = allSongs.filter(s => s.filepath !== filepath);
-            filteredSongs = filteredSongs.filter(s => s.filepath !== filepath);
-            updateLibraryPaginationInfo(
-              1,
-              Math.min(libPageSize, filteredSongs.length),
-              filteredSongs.length,
-              Math.ceil(filteredSongs.length / libPageSize) || 1
-            );
-          }
+  const syncBtn = document.getElementById('btn-execute-sync-song');
+  if (syncBtn) syncBtn.disabled = false;
+  const syncBtnText = document.getElementById('btn-execute-sync-text');
+  if (syncBtnText) syncBtnText.textContent = 'Sync to Device';
 
-          if (targetDevice === 'local') {
-            loadDuplicates();
-            loadSongs();
-          } else {
-            loadDeviceSongs(targetDevice, true);
-          }
-          loadDashboardStats();
-          showToast(`Deleted '${songName}' successfully.`, 'success');
-        } else {
-          if (targetEl) {
-            targetEl.style.opacity = '1';
-            targetEl.style.filter = 'none';
-          }
-          showToast(`Error deleting file: ${data.error || data.message || 'Failed to delete file'}`, 'error');
-        }
-      } catch (err) {
-        console.error('Error deleting song:', err);
-        if (targetEl) {
-          targetEl.style.opacity = '1';
-          targetEl.style.filter = 'none';
-        }
-        showToast('Error connecting to server to delete file.', 'error');
-      }
-    }
-  });
+  const modal = document.getElementById('modal-sync-song');
+  if (modal) modal.style.display = 'flex';
+
+  const qualitySelect = document.getElementById('sync-quality-bitrate');
+  if (qualitySelect) qualitySelect.value = 'original';
+
+  // Load target devices
+  await populateSyncTargetDevices();
 }
 
-async function loadHiddenFiles() {
-  const tbody = document.getElementById('hidden-tbody');
-  if (!tbody) return;
+function hideSyncSongModal() {
+  const modal = document.getElementById('modal-sync-song');
+  if (modal) modal.style.display = 'none';
+  syncCurrentSong = null;
+}
+
+async function populateSyncTargetDevices() {
+  const selectEl = document.getElementById('sync-destination-device');
+  if (!selectEl) return;
+  selectEl.innerHTML = '<option value="">Loading available devices...</option>';
 
   try {
-    const res = await fetch('/api/hidden');
-    const records = await res.json();
+    const res = await fetch('/api/devices');
+    const devices = await res.json();
+    // Exclude 'local' storage as destination
+    syncTargetDevicesList = (devices || []).filter(d => d.id !== 'local');
 
-    if (!records || records.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="4" class="text-muted">No hidden files in SQLite database (database/db.db).</td></tr>';
+    if (syncTargetDevicesList.length === 0) {
+      selectEl.innerHTML = '<option value="">No connected ADB or Over-IP target devices found</option>';
+      const syncBtn = document.getElementById('btn-execute-sync-song');
+      if (syncBtn) syncBtn.disabled = true;
+      document.getElementById('sync-check-results').style.display = 'none';
+      document.getElementById('sync-check-loading').style.display = 'none';
       return;
     }
 
     let html = '';
-    records.forEach((r, idx) => {
-      html += `
-        <tr>
-          <td class="col-center text-tabular">${idx + 1}</td>
-          <td><strong style="color: var(--text-main);">${escapeHtml(r.filename)}</strong></td>
-          <td><small class="text-muted"><code style="word-break: break-all;">${escapeHtml(r.filepath)}</code></small></td>
-          <td class="col-right">
-            <button class="btn btn-secondary btn-sm" onclick="unhideSong('${escapeJs(r.filepath)}')">${SVG_UNHIDE} Unhide</button>
-          </td>
-        </tr>
-      `;
+    let defaultDevId = '';
+    syncTargetDevicesList.forEach((d, idx) => {
+      const isOnline = (d.status === 'online');
+      const label = `${d.name} (${d.type}) - ${isOnline ? 'ONLINE' : 'OFFLINE'}`;
+      html += `<option value="${escapeHtml(d.id)}">${escapeHtml(label)}</option>`;
+      if (!defaultDevId && isOnline) {
+        defaultDevId = d.id;
+      }
     });
-    tbody.innerHTML = html;
+
+    selectEl.innerHTML = html;
+    if (defaultDevId) {
+      selectEl.value = defaultDevId;
+    }
+
+    // Trigger check for selected device
+    await onSyncDestinationDeviceChange();
   } catch (err) {
-    console.error('Error loading hidden files:', err);
+    console.error('Error loading devices for sync modal:', err);
+    selectEl.innerHTML = '<option value="">Error loading devices</option>';
   }
 }
+
+async function onSyncDestinationDeviceChange() {
+  const selectEl = document.getElementById('sync-destination-device');
+  const resultsWrap = document.getElementById('sync-check-results');
+  const loadingWrap = document.getElementById('sync-check-loading');
+  const syncBtnText = document.getElementById('btn-execute-sync-text');
+  const bannerEl = document.getElementById('sync-status-banner');
+  const similarListEl = document.getElementById('sync-similar-list');
+  const similarCountEl = document.getElementById('sync-similar-count');
+
+  if (!selectEl || !selectEl.value || !syncCurrentSong) {
+    if (resultsWrap) resultsWrap.style.display = 'none';
+    return;
+  }
+
+  const deviceId = selectEl.value;
+  if (loadingWrap) loadingWrap.style.display = 'block';
+  if (resultsWrap) resultsWrap.style.display = 'none';
+
+  try {
+    const res = await fetch(`/api/sync/check-song?filepath=${encodeURIComponent(syncCurrentSong.filepath)}&device_id=${encodeURIComponent(deviceId)}`);
+    const data = await res.json();
+    if (loadingWrap) loadingWrap.style.display = 'none';
+    if (resultsWrap) resultsWrap.style.display = 'block';
+
+    if (data.status === 'error') {
+      if (bannerEl) {
+        bannerEl.className = '';
+        bannerEl.style.background = 'rgba(243, 139, 168, 0.15)';
+        bannerEl.style.border = '1px solid rgba(243, 139, 168, 0.4)';
+        bannerEl.style.color = '#f38ba8';
+        bannerEl.innerHTML = `<strong>Error checking device:</strong> ${escapeHtml(data.message || 'Device offline or unreachable')}`;
+      }
+      return;
+    }
+
+    // 1. Render Exact Match Banner
+    if (data.exact_match && data.exact_match.found) {
+      const em = data.exact_match.device_song || {};
+      if (bannerEl) {
+        bannerEl.style.background = 'rgba(249, 226, 175, 0.15)';
+        bannerEl.style.border = '1px solid rgba(249, 226, 175, 0.4)';
+        bannerEl.style.color = '#f9e2af';
+        bannerEl.innerHTML = `
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
+            ${SVG_ALERT}
+            <span>Song Already Exists on ${escapeHtml(data.device_name)}</span>
+          </div>
+          <div style="color: #f9e2af; font-size: 0.8rem;">${escapeHtml(data.exact_match.match_reason || 'Match found')}</div>
+          <div style="display: flex; gap: 0.6rem; margin-top: 0.4rem; font-size: 0.75rem; flex-wrap: wrap;">
+            <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.duration_formatted || '00:00')}</span>
+            <span class="badge badge-yellow">${escapeHtml(em.bitrate_kbps ? `${em.bitrate_kbps} kbps` : 'Bitrate Unknown')}</span>
+            <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.size_formatted || '')}</span>
+          </div>
+          <div style="font-family: monospace; font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem; word-break: break-all;">
+            Path: ${escapeHtml(em.filepath || em.filename || '')}
+          </div>
+        `;
+      }
+      if (syncBtnText) syncBtnText.textContent = 'Overwrite & Force Sync';
+    } else {
+      if (bannerEl) {
+        bannerEl.style.background = 'rgba(166, 227, 161, 0.15)';
+        bannerEl.style.border = '1px solid rgba(166, 227, 161, 0.4)';
+        bannerEl.style.color = '#a6e3a1';
+        bannerEl.innerHTML = `
+          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
+            ${SVG_CHECK}
+            <span>Not Present on Destination Device</span>
+          </div>
+          <div style="color: #a6e3a1; font-size: 0.8rem;">This track does not currently exist on ${escapeHtml(data.device_name)}. Ready to sync!</div>
+        `;
+      }
+      if (syncBtnText) syncBtnText.textContent = 'Sync to Device';
+    }
+
+    // 2. Render Similar Songs
+    const similar = data.similar_songs || [];
+    if (similarCountEl) similarCountEl.textContent = `${similar.length} found`;
+
+    if (similarListEl) {
+      if (similar.length === 0) {
+        similarListEl.innerHTML = '<p class="text-muted" style="font-size: 0.82rem; margin: 0.25rem 0;">No similar songs found on this device.</p>';
+      } else {
+        let simHtml = '';
+        similar.forEach(s => {
+          simHtml += `
+            <div style="background: var(--bg-mantle); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
+              <div style="min-width: 0; flex: 1;">
+                <div style="font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(s.title || 'Unknown')}</div>
+                <div class="text-muted" style="font-size: 0.75rem;">${escapeHtml(s.artist || 'Unknown')} &bull; ${escapeHtml(s.duration_formatted || '')} &bull; <span class="badge badge-yellow" style="font-size: 0.7rem;">${escapeHtml(s.bitrate_kbps ? `${s.bitrate_kbps} kbps` : '')}</span></div>
+                ${s.comparison_note ? `<div style="font-size: 0.72rem; color: var(--accent-orange); margin-top: 0.2rem;">${escapeHtml(s.comparison_note)}</div>` : ''}
+              </div>
+              <div style="text-align: right; flex-shrink: 0;">
+                <span class="badge badge-yellow" style="font-size: 0.75rem; font-weight: 700;">
+                  ${s.similarity_score}% Match
+                </span>
+              </div>
+            </div>
+          `;
+        });
+        similarListEl.innerHTML = simHtml;
+      }
+    }
+  } catch (err) {
+    console.error('Error during destination check:', err);
+    if (loadingWrap) loadingWrap.style.display = 'none';
+  }
+}
+
+async function submitSyncSongToDevice() {
+  const selectEl = document.getElementById('sync-destination-device');
+  const syncBtn = document.getElementById('btn-execute-sync-song');
+  const syncBtnText = document.getElementById('btn-execute-sync-text');
+  const statusEl = document.getElementById('sync-action-status');
+
+  if (!selectEl || !selectEl.value || !syncCurrentSong) {
+    showToast('Please select a valid destination device.', 'error');
+    return;
+  }
+
+  const deviceId = selectEl.value;
+  const qualityEl = document.getElementById('sync-quality-bitrate');
+  const qualityVal = qualityEl ? qualityEl.value : 'original';
+  const targetBitrate = (qualityVal === 'original') ? null : parseInt(qualityVal, 10);
+
+  syncBtn.disabled = true;
+  syncBtnText.textContent = 'Syncing...';
+  if (statusEl) statusEl.innerHTML = '<span class="text-muted">Uploading and indexing track on destination device...</span>';
+
+  try {
+    const res = await fetch('/api/sync/song', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        filepath: syncCurrentSong.filepath,
+        device_id: deviceId,
+        target_bitrate: targetBitrate,
+        force: true
+      })
+    });
+    const data = await res.json();
+
+    if (data.status === 'success') {
+      syncBtnText.innerHTML = `Synced ${SVG_CHECK}`;
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color: var(--status-online); font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem;">${SVG_CHECK} ${escapeHtml(data.message || 'Track synced successfully!')}</span>`;
+      }
+      loadDashboardStats();
+      setTimeout(() => {
+        hideSyncSongModal();
+      }, 1500);
+    } else {
+      syncBtn.disabled = false;
+      syncBtnText.textContent = 'Retry Sync';
+      if (statusEl) {
+        statusEl.innerHTML = `<span style="color: var(--status-offline); font-weight: 600;">Error: ${escapeHtml(data.error || data.message || 'Sync failed')}</span>`;
+      }
+    }
+  } catch (err) {
+    console.error('Error executing single song sync:', err);
+    syncBtn.disabled = false;
+    syncBtnText.textContent = 'Retry Sync';
+    if (statusEl) {
+      statusEl.innerHTML = '<span style="color: var(--status-offline); font-weight: 600;">Connection error while syncing song.</span>';
+    }
+  }
+}
+
+// =============================================================================
+// SYNCED HISTORY MODULE: Synced Tracks Table & Status Tracking
+// =============================================================================
 
 async function loadSyncedHistory() {
   const tbody = document.getElementById('synced-tbody');
@@ -1993,585 +3246,9 @@ async function loadSyncedHistory() {
   }
 }
 
-async function unhideSong(filepath) {
-  try {
-    const res = await fetch('/api/unhide', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filepath: filepath })
-    });
-    const data = await res.json();
-    if (data.status === 'success') {
-      loadHiddenFiles();
-      loadDashboardStats();
-      loadSongs();
-    }
-  } catch (err) {
-    console.error('Error unhiding song:', err);
-  }
-}
-
-async function hideSong(filepath) {
-  try {
-    const res = await fetch('/api/hide', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filepath: filepath })
-    });
-    const data = await res.json();
-    if (data.status === 'success') {
-      loadHiddenFiles();
-      loadDashboardStats();
-      loadSongs();
-    }
-  } catch (err) {
-    console.error('Error hiding song:', err);
-  }
-}
-
-async function scanAdbDevices() {
-  const statusEl = document.getElementById('ip-add-status');
-  if (statusEl) statusEl.textContent = 'Scanning connected ADB devices...';
-  try {
-    const res = await fetch('/api/devices/scan-adb', { method: 'POST' });
-    const data = await res.json();
-    if (statusEl) statusEl.textContent = `Scanned ${data.devices ? data.devices.length : 0} ADB devices.`;
-    loadDashboardStats();
-  } catch (err) {
-    console.error('Error scanning ADB devices:', err);
-    if (statusEl) statusEl.textContent = 'Error scanning ADB devices.';
-  }
-}
-
-async function scanIpHosts() {
-  const statusEl = document.getElementById('ip-add-status');
-  if (statusEl) statusEl.textContent = 'Pinging saved Over-IP peer devices...';
-  try {
-    const res = await fetch('/api/devices/scan-ip', { method: 'POST' });
-    const data = await res.json();
-    if (statusEl) statusEl.textContent = `Pings complete. ${data.devices ? data.devices.length : 0} Over-IP peers processed.`;
-    loadDashboardStats();
-  } catch (err) {
-    console.error('Error pinging Over-IP hosts:', err);
-    if (statusEl) statusEl.textContent = 'Error pinging Over-IP devices.';
-  }
-}
-
-async function addOverIpDevice() {
-  const ipInput = document.getElementById('input-ip-addr');
-  const portInput = document.getElementById('input-ip-port');
-  const statusEl = document.getElementById('ip-add-status');
-
-  const ip = ipInput ? ipInput.value.trim() : '';
-  const port = portInput ? parseInt(portInput.value) || 5000 : 5000;
-
-  if (!ip) {
-    if (statusEl) statusEl.textContent = 'Please enter a valid IP address!';
-    return;
-  }
-
-  if (statusEl) statusEl.textContent = `Adding and pinging Over-IP peer ${ip}:${port}...`;
-
-  try {
-    const res = await fetch('/api/devices/add-ip', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ip: ip, port: port })
-    });
-    const data = await res.json();
-    if (data.status === 'success') {
-      if (statusEl) statusEl.textContent = `Successfully added and probed ${ip}:${port}.`;
-      if (ipInput) ipInput.value = '';
-      loadDashboardStats();
-    } else {
-      if (statusEl) statusEl.textContent = `Error: ${data.error || 'Failed to add IP'}`;
-    }
-  } catch (err) {
-    console.error('Error adding Over-IP device:', err);
-    if (statusEl) statusEl.textContent = 'Error adding Over-IP peer host.';
-  }
-}
-
-// --- BESPOKE AUDIO PLAYER ENGINE ---
-
-function formatDuration(sec) {
-  if (isNaN(sec) || !isFinite(sec) || sec < 0) return '0:00';
-  const minutes = Math.floor(sec / 60);
-  const seconds = Math.floor(sec % 60);
-  return `${minutes}:${seconds < 10 ? '0' : ''}${seconds}`;
-}
-
-const SVG_VOL_HIGH = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>`;
-const SVG_VOL_MUTED = `<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/>`;
-
-function initAudioPlayer() {
-  const player = document.getElementById('audio-player');
-  const scrubber = document.getElementById('player-scrubber');
-  const curTimeEl = document.getElementById('player-current-time');
-  const totalTimeEl = document.getElementById('player-total-time');
-  const volSlider = document.getElementById('player-volume');
-  if (!player) return;
-
-  // Restore saved volume
-  const savedVol = localStorage.getItem('antigravity_player_volume');
-  if (savedVol !== null) {
-    const v = parseFloat(savedVol);
-    player.volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
-    if (volSlider) volSlider.value = player.volume;
-  }
-  updatePlayerVolumeIcon();
-
-  player.onplay = () => setPlayerPlayState(true);
-  player.onpause = () => setPlayerPlayState(false);
-  player.onended = () => handleTrackEnded();
-
-  player.ontimeupdate = () => {
-    if (!isScrubbing && scrubber && player.duration) {
-      scrubber.value = player.currentTime;
-      if (curTimeEl) curTimeEl.textContent = formatDuration(player.currentTime);
-      updateScrubberProgress(player.currentTime, player.duration);
-    }
-  };
-
-  player.onloadedmetadata = () => {
-    if (scrubber) {
-      scrubber.min = 0;
-      scrubber.max = player.duration || 100;
-      scrubber.value = player.currentTime || 0;
-    }
-    if (totalTimeEl) {
-      totalTimeEl.textContent = formatDuration(player.duration);
-    }
-    updateScrubberProgress(player.currentTime || 0, player.duration || 100);
-  };
-
-  player.onvolumechange = () => {
-    if (volSlider) volSlider.value = player.muted ? 0 : player.volume;
-    updatePlayerVolumeIcon();
-  };
-
-  setupPlayerKeyboardHotkeys();
-}
-
-function updateScrubberProgress(current, total) {
-  const scrubber = document.getElementById('player-scrubber');
-  if (!scrubber || !total) return;
-  const pct = Math.min(100, Math.max(0, (current / total) * 100));
-  scrubber.style.background = `linear-gradient(to right, var(--accent-yellow) ${pct}%, #262626 ${pct}%)`;
-}
-
-function onScrubberInput(val) {
-  isScrubbing = true;
-  const player = document.getElementById('audio-player');
-  const curTimeEl = document.getElementById('player-current-time');
-  const v = parseFloat(val);
-  if (curTimeEl) curTimeEl.textContent = formatDuration(v);
-  if (player && player.duration) {
-    updateScrubberProgress(v, player.duration);
-  }
-}
-
-function onScrubberChange(val) {
-  const player = document.getElementById('audio-player');
-  if (player) {
-    player.currentTime = parseFloat(val);
-  }
-  isScrubbing = false;
-}
-
-function onVolumeInput(val) {
-  const player = document.getElementById('audio-player');
-  if (!player) return;
-  const v = parseFloat(val);
-  player.volume = isNaN(v) ? 1 : Math.max(0, Math.min(1, v));
-  player.muted = false;
-  localStorage.setItem('antigravity_player_volume', player.volume);
-  updatePlayerVolumeIcon();
-}
-
-function togglePlayerMute() {
-  const player = document.getElementById('audio-player');
-  const volSlider = document.getElementById('player-volume');
-  if (!player) return;
-  player.muted = !player.muted;
-  if (volSlider) {
-    volSlider.value = player.muted ? 0 : player.volume;
-  }
-  updatePlayerVolumeIcon();
-}
-
-function updatePlayerVolumeIcon() {
-  const player = document.getElementById('audio-player');
-  const icon = document.getElementById('player-vol-icon');
-  if (!player || !icon) return;
-  const isMuted = player.muted || player.volume === 0;
-  icon.innerHTML = isMuted ? SVG_VOL_MUTED : SVG_VOL_HIGH;
-}
-
-function togglePlayerLoop() {
-  isPlayerLooping = !isPlayerLooping;
-  const player = document.getElementById('audio-player');
-  if (player) player.loop = isPlayerLooping;
-  const loopBtn = document.getElementById('btn-player-loop');
-  if (loopBtn) {
-    if (isPlayerLooping) {
-      loopBtn.style.color = 'var(--accent-yellow)';
-      loopBtn.title = 'Repeat Mode: Active (Loop)';
-    } else {
-      loopBtn.style.color = '';
-      loopBtn.title = 'Toggle Repeat Mode';
-    }
-  }
-}
-
-function toggleShuffle() {
-  const shuffleBtn = document.getElementById('btn-player-shuffle');
-  if (isShuffled) {
-    // Restore original order and find current track's new position
-    const currentPath = currentTrackPath;
-    activeQueue = [...originalQueue];
-    queueIndex = activeQueue.findIndex(t => t.filepath === currentPath);
-    if (queueIndex < 0) queueIndex = 0;
-    isShuffled = false;
-    if (shuffleBtn) shuffleBtn.classList.remove('shuffle-on');
-    if (shuffleBtn) shuffleBtn.title = 'Shuffle Off';
-  } else {
-    // Save original and shuffle
-    originalQueue = [...activeQueue];
-    const currentTrack = activeQueue[queueIndex];
-    const rest = activeQueue.filter((_, i) => i !== queueIndex);
-    for (let i = rest.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [rest[i], rest[j]] = [rest[j], rest[i]];
-    }
-    activeQueue = [currentTrack, ...rest];
-    queueIndex = 0;
-    isShuffled = true;
-    if (shuffleBtn) shuffleBtn.classList.add('shuffle-on');
-    if (shuffleBtn) shuffleBtn.title = 'Shuffle On — click to disable';
-  }
-  renderQueuePanel();
-}
-
-function seekRelative(sec) {
-  const player = document.getElementById('audio-player');
-  if (!player || !player.duration) return;
-  player.currentTime = Math.max(0, Math.min(player.duration, player.currentTime + sec));
-}
-
-function playPreviousTrack() {
-  const player = document.getElementById('audio-player');
-  if (player && player.currentTime > 3) {
-    player.currentTime = 0;
-    return;
-  }
-  if (activeQueue && activeQueue.length > 0) {
-    if (queueIndex > 0) {
-      queueIndex--;
-      const prevTrack = activeQueue[queueIndex];
-      playAudio(prevTrack.filepath, prevTrack.title, prevTrack.artist, activeQueue, queueIndex, prevTrack.bitrate_kbps, prevTrack.device_id);
-    } else if (isPlayerLooping) {
-      queueIndex = activeQueue.length - 1;
-      const lastTrack = activeQueue[queueIndex];
-      playAudio(lastTrack.filepath, lastTrack.title, lastTrack.artist, activeQueue, queueIndex, lastTrack.bitrate_kbps, lastTrack.device_id);
-    } else if (player) {
-      player.currentTime = 0;
-    }
-  }
-}
-
-function playNextTrack() {
-  if (activeQueue && activeQueue.length > 0) {
-    if (queueIndex + 1 < activeQueue.length) {
-      queueIndex++;
-      const nextTrack = activeQueue[queueIndex];
-      playAudio(nextTrack.filepath, nextTrack.title, nextTrack.artist, activeQueue, queueIndex, nextTrack.bitrate_kbps, nextTrack.device_id);
-    } else if (isPlayerLooping) {
-      queueIndex = 0;
-      const firstTrack = activeQueue[0];
-      playAudio(firstTrack.filepath, firstTrack.title, firstTrack.artist, activeQueue, 0, firstTrack.bitrate_kbps, firstTrack.device_id);
-    } else {
-      setPlayerPlayState(false);
-    }
-  } else {
-    setPlayerPlayState(false);
-  }
-}
-
-function closeAudioPlayer() {
-  const player = document.getElementById('audio-player');
-  const playerBar = document.getElementById('audio-player-bar');
-  if (player) {
-    player.pause();
-    player.src = '';
-  }
-  if (playerBar) {
-    playerBar.style.display = 'none';
-  }
-  currentTrackPath = null;
-  setPlayerPlayState(false);
-}
-
-function setupPlayerKeyboardHotkeys() {
-  document.addEventListener('keydown', (e) => {
-    const active = document.activeElement;
-    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA' || active.tagName === 'SELECT' || active.isContentEditable)) {
-      if (e.key === 'Escape') {
-        active.blur();
-      }
-      return;
-    }
-
-    if (e.key === ' ' || e.code === 'Space') {
-      e.preventDefault();
-      togglePlayPause();
-    } else if (e.key === 'ArrowLeft') {
-      e.preventDefault();
-      seekRelative(-5);
-    } else if (e.key === 'ArrowRight') {
-      e.preventDefault();
-      seekRelative(5);
-    } else if (e.key === 'j' || e.key === 'J') {
-      e.preventDefault();
-      playPreviousTrack();
-    } else if (e.key === 'k' || e.key === 'K') {
-      e.preventDefault();
-      playNextTrack();
-    } else if (e.key === 'm' || e.key === 'M') {
-      e.preventDefault();
-      togglePlayerMute();
-    } else if (e.key === 'l' || e.key === 'L') {
-      e.preventDefault();
-      toggleCurrentTrackLike();
-    } else if (e.key === 'Escape') {
-      closeConfirmModal(false);
-      hideAddToPlaylistModal();
-      hideCreatePlaylistModal();
-      hideBatchDeleteDuplicatesModal();
-      hideDeviceUploadModal();
-      hideTranscodeModal();
-      hideSyncSongModal();
-      closeAudioPlayer();
-    } else if (e.key === '/') {
-      const searchInput = document.getElementById('lib-search');
-      if (searchInput) {
-        e.preventDefault();
-        searchInput.focus();
-        searchInput.select();
-      }
-    }
-  });
-}
-
-function setPlayerPlayState(playing) {
-  isPlaying = playing;
-  const playPauseBtn = document.getElementById('btn-player-playpause');
-  if (playPauseBtn) {
-    playPauseBtn.innerHTML = isPlaying ? SVG_PAUSE : SVG_PLAY;
-    playPauseBtn.title = isPlaying ? 'Pause (Space)' : 'Play (Space)';
-  }
-  renderLibraryPage();
-  if (selectedPlaylist) {
-    renderPlaylistTracks();
-  }
-}
-
-function togglePlayPause() {
-  const player = document.getElementById('audio-player');
-  if (!player || !player.src) return;
-
-  if (player.paused) {
-    player.play().catch(err => console.warn('Play error:', err));
-  } else {
-    player.pause();
-  }
-}
-
-function playOrToggleAudio(filepath, title, artist, index = -1, bitrate = '', deviceId = null) {
-  const targetDev = deviceId || currentDeviceId || 'local';
-  const player = document.getElementById('audio-player');
-  if (currentTrackPath === filepath && player && player.src) {
-    togglePlayPause();
-  } else {
-    let queue = null;
-    let qIdx = 0;
-    if (index >= 0 && filteredSongs && filteredSongs.length > 0) {
-      queue = filteredSongs.map(s => ({ ...s, device_id: s.device_id || targetDev }));
-      qIdx = index;
-    }
-    playAudio(filepath, title, artist, queue, qIdx, bitrate, targetDev);
-  }
-}
-
-function playAudio(filepath, title, artist, queue = null, index = 0, bitrate = null, deviceId = null) {
-  const player = document.getElementById('audio-player');
-  const playerBar = document.getElementById('audio-player-bar');
-  const titleEl = document.getElementById('player-title');
-  const artistEl = document.getElementById('player-artist');
-  const badgeEl = document.getElementById('player-quality-badge');
-
-  if (player && playerBar) {
-    const trackDeviceId = deviceId || (queue && queue[index] && queue[index].device_id) || currentDeviceId || 'local';
-    currentTrackPath = filepath;
-    if (queue && queue.length > 0) {
-      activeQueue = queue.map(item => ({ ...item, device_id: item.device_id || trackDeviceId }));
-      queueIndex = index;
-    } else {
-      activeQueue = [{ filepath, title, artist, bitrate_kbps: bitrate, device_id: trackDeviceId }];
-      queueIndex = 0;
-    }
-
-    const streamUrl = `/api/song/stream?filepath=${encodeURIComponent(filepath)}` +
-      (trackDeviceId && trackDeviceId !== 'local' ? `&device_id=${encodeURIComponent(trackDeviceId)}` : '');
-    player.src = streamUrl;
-    if (titleEl) titleEl.textContent = title || 'Unknown Title';
-    if (artistEl) {
-      artistEl.textContent = (trackDeviceId && trackDeviceId !== 'local')
-        ? `${artist || 'Unknown Artist'} • (${currentDeviceName || trackDeviceId})`
-        : (artist || 'Unknown Artist');
-    }
-
-    const bVal = bitrate || (activeQueue[queueIndex] && activeQueue[queueIndex].bitrate_kbps);
-    if (badgeEl) {
-      if (bVal && bVal !== 'Unknown') {
-        badgeEl.textContent = bVal;
-        badgeEl.style.display = 'inline-block';
-      } else {
-        badgeEl.style.display = 'none';
-      }
-    }
-
-    playerBar.style.display = 'flex';
-    player.play().catch(err => console.warn('Playback error:', err));
-
-    // Update queue panel and player-tab song row highlights
-    renderQueuePanel();
-    updatePlayerTabRowHighlight();
-    updateAllLikeButtonsUI();
-  }
-}
-
-function handleTrackEnded() {
-  if (activeQueue && queueIndex + 1 < activeQueue.length) {
-    playNextTrack();
-  } else if (isPlayerLooping && activeQueue && activeQueue.length > 0) {
-    playNextTrack();
-  } else {
-    setPlayerPlayState(false);
-  }
-}
-
-// --- LIKED MUSIC SYSTEM JS LOGIC ---
-
-async function loadLikedMusicSet() {
-  try {
-    const res = await fetch('/api/playlists');
-    if (!res.ok) return;
-    const playlists = await res.json() || [];
-    let likedPl = playlists.find(p => p.name === 'Liked Music');
-    if (likedPl) {
-      likedPlaylistId = likedPl.id;
-      const trRes = await fetch(`/api/playlists/${likedPl.id}/tracks`);
-      if (trRes.ok) {
-        const tracks = await trRes.json() || [];
-        likedSongPaths = new Set(tracks.map(t => t.filepath));
-        updateAllLikeButtonsUI();
-      }
-    }
-  } catch (e) {
-    console.warn('Failed to load liked music set:', e);
-  }
-}
-
-async function toggleLikeTrack(filepath, title, artist) {
-  if (!filepath) return;
-  try {
-    if (!likedPlaylistId) {
-      const plRes = await fetch('/api/playlists');
-      const playlists = await plRes.json() || [];
-      let likedPl = playlists.find(p => p.name === 'Liked Music');
-      if (!likedPl) {
-        const createRes = await fetch('/api/playlists/create', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name: 'Liked Music' })
-        });
-        const created = await createRes.json();
-        likedPl = created.playlist;
-      }
-      if (likedPl) likedPlaylistId = likedPl.id;
-    }
-
-    const isLiked = likedSongPaths.has(filepath);
-    if (isLiked) {
-      await fetch(`/api/playlists/${likedPlaylistId}/remove-track`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filepath })
-      });
-      likedSongPaths.delete(filepath);
-      showToast(`Removed "${title || 'Track'}" from Liked Music`, 'info', 2000);
-    } else {
-      await fetch(`/api/playlists/${likedPlaylistId}/add-track`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ filepath })
-      });
-      likedSongPaths.add(filepath);
-      showToast(`Added "${title || 'Track'}" to Liked Music ❤️`, 'success', 2000);
-    }
-
-    updateAllLikeButtonsUI();
-
-    if (selectedPlaylist && selectedPlaylist.id === likedPlaylistId) {
-      selectPlaylist(likedPlaylistId, 'Liked Music');
-    }
-    if (currentFormatFilter === 'liked') {
-      applyLibraryFilterAndSort();
-    }
-    loadPlaylists();
-  } catch (err) {
-    console.error('Error toggling like:', err);
-    showToast('Failed to update liked state: ' + err.message, 'error', 3000);
-  }
-}
-
-function toggleCurrentTrackLike() {
-  if (!currentTrackPath) {
-    showToast('No track is currently playing', 'info', 2000);
-    return;
-  }
-  const curTrack = activeQueue && activeQueue[queueIndex] ? activeQueue[queueIndex] : null;
-  const title = curTrack ? curTrack.title : '';
-  const artist = curTrack ? curTrack.artist : '';
-  toggleLikeTrack(currentTrackPath, title, artist);
-}
-
-function updateAllLikeButtonsUI() {
-  // Update player bar like button
-  const playerLikeBtn = document.getElementById('btn-player-like');
-  const playerLikeIcon = document.getElementById('player-like-icon');
-  if (playerLikeBtn) {
-    const isLiked = Boolean(currentTrackPath && likedSongPaths.has(currentTrackPath));
-    playerLikeBtn.classList.toggle('liked', isLiked);
-    if (playerLikeIcon) {
-      playerLikeIcon.innerHTML = isLiked
-        ? '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" fill="#ff0055" stroke="#ff0055"/>'
-        : '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>';
-    }
-  }
-
-  // Update library table rows & player rows
-  document.querySelectorAll('.btn-song-like').forEach(btn => {
-    const fp = btn.dataset.filepath;
-    if (fp) {
-      const isLiked = likedSongPaths.has(fp);
-      btn.classList.toggle('btn-liked', isLiked);
-      btn.innerHTML = isLiked ? SVG_HEART_FILLED : SVG_HEART;
-      btn.title = isLiked ? 'Unlike' : 'Like';
-    }
-  });
-}
+// =============================================================================
+// PLAYLISTS MODULE: Playlist CRUD, Tracks Management & Absent Song Resolution
+// =============================================================================
 
 // --- PLAYLIST MANAGEMENT JS LOGIC ---
 
@@ -3191,6 +3868,165 @@ function playPlaylistFromTrack(index) {
   playAudio(startTrack.filepath, startTrack.title, startTrack.artist, queue, index);
 }
 
+// =============================================================================
+// TRASH & HIDDEN MODULE: Deleted Songs Log, File Restore & SQLite Hide List
+// =============================================================================
+
+// --- FILE DELETION, HIDING & OTHER UTILITIES ---
+
+async function deleteSong(filepath, evt, deviceId, songId, filename) {
+  const targetDevice = deviceId || currentDeviceId || 'local';
+  let devLabel = 'Local Storage';
+  if (targetDevice.startsWith('adb')) {
+    const serial = targetDevice.replace('adb_', '').replace('adb:', '');
+    devLabel = `ADB Device [${serial}]`;
+  } else if (targetDevice.startsWith('ip')) {
+    const ip = targetDevice.replace('ip_', '').replace('ip:', '');
+    devLabel = `Over-IP Peer [${ip}]`;
+  }
+
+  const songName = filename || filepath.split('/').pop() || 'this audio file';
+
+  showConfirmModal({
+    title: 'Delete Audio File',
+    message: `Permanently delete '${songName}' from ${devLabel}?`,
+    details: filepath,
+    confirmText: 'Delete Song',
+    confirmClass: 'btn btn-danger',
+    onConfirm: async () => {
+      let targetEl = null;
+      if (evt && evt.target) {
+        targetEl = evt.target.closest('li, tr');
+        if (targetEl) {
+          targetEl.style.transition = 'all 0.3s ease';
+          targetEl.style.opacity = '0.2';
+          targetEl.style.filter = 'blur(4px)';
+        }
+      }
+
+      try {
+        const res = await fetch('/api/song/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            filepath: filepath,
+            device_id: targetDevice,
+            song_id: songId,
+            filename: filename
+          })
+        });
+        const data = await res.json();
+        if (data.status === 'success') {
+          if (targetEl) targetEl.remove();
+
+          if (allSongs && allSongs.length > 0) {
+            allSongs = allSongs.filter(s => s.filepath !== filepath);
+            filteredSongs = filteredSongs.filter(s => s.filepath !== filepath);
+            updateLibraryPaginationInfo(
+              1,
+              Math.min(libPageSize, filteredSongs.length),
+              filteredSongs.length,
+              Math.ceil(filteredSongs.length / libPageSize) || 1
+            );
+          }
+
+          if (targetDevice === 'local') {
+            loadDuplicates();
+            loadSongs();
+          } else {
+            loadDeviceSongs(targetDevice, true);
+          }
+          loadDashboardStats();
+          showToast(`Deleted '${songName}' successfully.`, 'success');
+        } else {
+          if (targetEl) {
+            targetEl.style.opacity = '1';
+            targetEl.style.filter = 'none';
+          }
+          showToast(`Error deleting file: ${data.error || data.message || 'Failed to delete file'}`, 'error');
+        }
+      } catch (err) {
+        console.error('Error deleting song:', err);
+        if (targetEl) {
+          targetEl.style.opacity = '1';
+          targetEl.style.filter = 'none';
+        }
+        showToast('Error connecting to server to delete file.', 'error');
+      }
+    }
+  });
+}
+
+async function loadHiddenFiles() {
+  const tbody = document.getElementById('hidden-tbody');
+  if (!tbody) return;
+
+  try {
+    const res = await fetch('/api/hidden');
+    const records = await res.json();
+
+    if (!records || records.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4" class="text-muted">No hidden files in SQLite database (database/db.db).</td></tr>';
+      return;
+    }
+
+    let html = '';
+    records.forEach((r, idx) => {
+      html += `
+        <tr>
+          <td class="col-center text-tabular">${idx + 1}</td>
+          <td><strong style="color: var(--text-main);">${escapeHtml(r.filename)}</strong></td>
+          <td><small class="text-muted"><code style="word-break: break-all;">${escapeHtml(r.filepath)}</code></small></td>
+          <td class="col-right">
+            <button class="btn btn-secondary btn-sm" onclick="unhideSong('${escapeJs(r.filepath)}')">${SVG_UNHIDE} Unhide</button>
+          </td>
+        </tr>
+      `;
+    });
+    tbody.innerHTML = html;
+  } catch (err) {
+    console.error('Error loading hidden files:', err);
+  }
+}
+
+
+async function unhideSong(filepath) {
+  try {
+    const res = await fetch('/api/unhide', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath: filepath })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      loadHiddenFiles();
+      loadDashboardStats();
+      loadSongs();
+    }
+  } catch (err) {
+    console.error('Error unhiding song:', err);
+  }
+}
+
+async function hideSong(filepath) {
+  try {
+    const res = await fetch('/api/hide', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filepath: filepath })
+    });
+    const data = await res.json();
+    if (data.status === 'success') {
+      loadHiddenFiles();
+      loadDashboardStats();
+      loadSongs();
+    }
+  } catch (err) {
+    console.error('Error hiding song:', err);
+  }
+}
+
+
 // --- DELETED SONGS (TRASH) JS LOGIC ---
 
 async function loadDeletedSongs() {
@@ -3307,752 +4143,10 @@ async function clearDeletedHistory() {
   });
 }
 
-// --- SYNC TRACK TO DEVICE MODAL & EXISTENCE CHECKING ---
-let syncCurrentSong = null;
-let syncTargetDevicesList = [];
-
-async function openSyncSongModal(filepath, title, artist, duration, size, bitrate, album) {
-  syncCurrentSong = { filepath, title, artist, duration, size, bitrate, album };
-
-  // Set local track summary UI
-  document.getElementById('sync-local-title').textContent = title || filepath.split('/').pop();
-  document.getElementById('sync-local-artist-album').textContent = `${artist || 'Unknown'} | ${album || 'Unknown'}`;
-  document.getElementById('sync-local-bitrate').textContent = bitrate ? (String(bitrate).includes('kbps') ? bitrate : `${bitrate} kbps`) : 'Bitrate Unknown';
-  document.getElementById('sync-local-duration').textContent = duration || '00:00';
-  document.getElementById('sync-local-size').textContent = size || '0 MB';
-  document.getElementById('sync-local-path').textContent = filepath;
-
-  const statusEl = document.getElementById('sync-action-status');
-  if (statusEl) statusEl.innerHTML = '';
-
-  const syncBtn = document.getElementById('btn-execute-sync-song');
-  if (syncBtn) syncBtn.disabled = false;
-  const syncBtnText = document.getElementById('btn-execute-sync-text');
-  if (syncBtnText) syncBtnText.textContent = 'Sync to Device';
-
-  const modal = document.getElementById('modal-sync-song');
-  if (modal) modal.style.display = 'flex';
-
-  const qualitySelect = document.getElementById('sync-quality-bitrate');
-  if (qualitySelect) qualitySelect.value = 'original';
-
-  // Load target devices
-  await populateSyncTargetDevices();
-}
-
-function hideSyncSongModal() {
-  const modal = document.getElementById('modal-sync-song');
-  if (modal) modal.style.display = 'none';
-  syncCurrentSong = null;
-}
-
-async function populateSyncTargetDevices() {
-  const selectEl = document.getElementById('sync-destination-device');
-  if (!selectEl) return;
-  selectEl.innerHTML = '<option value="">Loading available devices...</option>';
-
-  try {
-    const res = await fetch('/api/devices');
-    const devices = await res.json();
-    // Exclude 'local' storage as destination
-    syncTargetDevicesList = (devices || []).filter(d => d.id !== 'local');
-
-    if (syncTargetDevicesList.length === 0) {
-      selectEl.innerHTML = '<option value="">No connected ADB or Over-IP target devices found</option>';
-      const syncBtn = document.getElementById('btn-execute-sync-song');
-      if (syncBtn) syncBtn.disabled = true;
-      document.getElementById('sync-check-results').style.display = 'none';
-      document.getElementById('sync-check-loading').style.display = 'none';
-      return;
-    }
-
-    let html = '';
-    let defaultDevId = '';
-    syncTargetDevicesList.forEach((d, idx) => {
-      const isOnline = (d.status === 'online');
-      const label = `${d.name} (${d.type}) - ${isOnline ? 'ONLINE' : 'OFFLINE'}`;
-      html += `<option value="${escapeHtml(d.id)}">${escapeHtml(label)}</option>`;
-      if (!defaultDevId && isOnline) {
-        defaultDevId = d.id;
-      }
-    });
-
-    selectEl.innerHTML = html;
-    if (defaultDevId) {
-      selectEl.value = defaultDevId;
-    }
-
-    // Trigger check for selected device
-    await onSyncDestinationDeviceChange();
-  } catch (err) {
-    console.error('Error loading devices for sync modal:', err);
-    selectEl.innerHTML = '<option value="">Error loading devices</option>';
-  }
-}
-
-async function onSyncDestinationDeviceChange() {
-  const selectEl = document.getElementById('sync-destination-device');
-  const resultsWrap = document.getElementById('sync-check-results');
-  const loadingWrap = document.getElementById('sync-check-loading');
-  const syncBtnText = document.getElementById('btn-execute-sync-text');
-  const bannerEl = document.getElementById('sync-status-banner');
-  const similarListEl = document.getElementById('sync-similar-list');
-  const similarCountEl = document.getElementById('sync-similar-count');
-
-  if (!selectEl || !selectEl.value || !syncCurrentSong) {
-    if (resultsWrap) resultsWrap.style.display = 'none';
-    return;
-  }
-
-  const deviceId = selectEl.value;
-  if (loadingWrap) loadingWrap.style.display = 'block';
-  if (resultsWrap) resultsWrap.style.display = 'none';
-
-  try {
-    const res = await fetch(`/api/sync/check-song?filepath=${encodeURIComponent(syncCurrentSong.filepath)}&device_id=${encodeURIComponent(deviceId)}`);
-    const data = await res.json();
-    if (loadingWrap) loadingWrap.style.display = 'none';
-    if (resultsWrap) resultsWrap.style.display = 'block';
-
-    if (data.status === 'error') {
-      if (bannerEl) {
-        bannerEl.className = '';
-        bannerEl.style.background = 'rgba(243, 139, 168, 0.15)';
-        bannerEl.style.border = '1px solid rgba(243, 139, 168, 0.4)';
-        bannerEl.style.color = '#f38ba8';
-        bannerEl.innerHTML = `<strong>Error checking device:</strong> ${escapeHtml(data.message || 'Device offline or unreachable')}`;
-      }
-      return;
-    }
-
-    // 1. Render Exact Match Banner
-    if (data.exact_match && data.exact_match.found) {
-      const em = data.exact_match.device_song || {};
-      if (bannerEl) {
-        bannerEl.style.background = 'rgba(249, 226, 175, 0.15)';
-        bannerEl.style.border = '1px solid rgba(249, 226, 175, 0.4)';
-        bannerEl.style.color = '#f9e2af';
-        bannerEl.innerHTML = `
-          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
-            ${SVG_ALERT}
-            <span>Song Already Exists on ${escapeHtml(data.device_name)}</span>
-          </div>
-          <div style="color: #f9e2af; font-size: 0.8rem;">${escapeHtml(data.exact_match.match_reason || 'Match found')}</div>
-          <div style="display: flex; gap: 0.6rem; margin-top: 0.4rem; font-size: 0.75rem; flex-wrap: wrap;">
-            <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.duration_formatted || '00:00')}</span>
-            <span class="badge badge-yellow">${escapeHtml(em.bitrate_kbps ? `${em.bitrate_kbps} kbps` : 'Bitrate Unknown')}</span>
-            <span class="badge" style="background: rgba(255,255,255,0.08);">${escapeHtml(em.size_formatted || '')}</span>
-          </div>
-          <div style="font-family: monospace; font-size: 0.72rem; color: var(--text-muted); margin-top: 0.35rem; word-break: break-all;">
-            Path: ${escapeHtml(em.filepath || em.filename || '')}
-          </div>
-        `;
-      }
-      if (syncBtnText) syncBtnText.textContent = 'Overwrite & Force Sync';
-    } else {
-      if (bannerEl) {
-        bannerEl.style.background = 'rgba(166, 227, 161, 0.15)';
-        bannerEl.style.border = '1px solid rgba(166, 227, 161, 0.4)';
-        bannerEl.style.color = '#a6e3a1';
-        bannerEl.innerHTML = `
-          <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem;">
-            ${SVG_CHECK}
-            <span>Not Present on Destination Device</span>
-          </div>
-          <div style="color: #a6e3a1; font-size: 0.8rem;">This track does not currently exist on ${escapeHtml(data.device_name)}. Ready to sync!</div>
-        `;
-      }
-      if (syncBtnText) syncBtnText.textContent = 'Sync to Device';
-    }
-
-    // 2. Render Similar Songs
-    const similar = data.similar_songs || [];
-    if (similarCountEl) similarCountEl.textContent = `${similar.length} found`;
-
-    if (similarListEl) {
-      if (similar.length === 0) {
-        similarListEl.innerHTML = '<p class="text-muted" style="font-size: 0.82rem; margin: 0.25rem 0;">No similar songs found on this device.</p>';
-      } else {
-        let simHtml = '';
-        similar.forEach(s => {
-          simHtml += `
-            <div style="background: var(--bg-mantle); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.6rem 0.85rem; display: flex; justify-content: space-between; align-items: center; gap: 0.75rem;">
-              <div style="min-width: 0; flex: 1;">
-                <div style="font-weight: 600; font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(s.title || 'Unknown')}</div>
-                <div class="text-muted" style="font-size: 0.75rem;">${escapeHtml(s.artist || 'Unknown')} &bull; ${escapeHtml(s.duration_formatted || '')} &bull; <span class="badge badge-yellow" style="font-size: 0.7rem;">${escapeHtml(s.bitrate_kbps ? `${s.bitrate_kbps} kbps` : '')}</span></div>
-                ${s.comparison_note ? `<div style="font-size: 0.72rem; color: var(--accent-orange); margin-top: 0.2rem;">${escapeHtml(s.comparison_note)}</div>` : ''}
-              </div>
-              <div style="text-align: right; flex-shrink: 0;">
-                <span class="badge badge-yellow" style="font-size: 0.75rem; font-weight: 700;">
-                  ${s.similarity_score}% Match
-                </span>
-              </div>
-            </div>
-          `;
-        });
-        similarListEl.innerHTML = simHtml;
-      }
-    }
-  } catch (err) {
-    console.error('Error during destination check:', err);
-    if (loadingWrap) loadingWrap.style.display = 'none';
-  }
-}
-
-async function submitSyncSongToDevice() {
-  const selectEl = document.getElementById('sync-destination-device');
-  const syncBtn = document.getElementById('btn-execute-sync-song');
-  const syncBtnText = document.getElementById('btn-execute-sync-text');
-  const statusEl = document.getElementById('sync-action-status');
-
-  if (!selectEl || !selectEl.value || !syncCurrentSong) {
-    showToast('Please select a valid destination device.', 'error');
-    return;
-  }
-
-  const deviceId = selectEl.value;
-  const qualityEl = document.getElementById('sync-quality-bitrate');
-  const qualityVal = qualityEl ? qualityEl.value : 'original';
-  const targetBitrate = (qualityVal === 'original') ? null : parseInt(qualityVal, 10);
-
-  syncBtn.disabled = true;
-  syncBtnText.textContent = 'Syncing...';
-  if (statusEl) statusEl.innerHTML = '<span class="text-muted">Uploading and indexing track on destination device...</span>';
-
-  try {
-    const res = await fetch('/api/sync/song', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filepath: syncCurrentSong.filepath,
-        device_id: deviceId,
-        target_bitrate: targetBitrate,
-        force: true
-      })
-    });
-    const data = await res.json();
-
-    if (data.status === 'success') {
-      syncBtnText.innerHTML = `Synced ${SVG_CHECK}`;
-      if (statusEl) {
-        statusEl.innerHTML = `<span style="color: var(--status-online); font-weight: 600; display: inline-flex; align-items: center; gap: 0.35rem;">${SVG_CHECK} ${escapeHtml(data.message || 'Track synced successfully!')}</span>`;
-      }
-      loadDashboardStats();
-      setTimeout(() => {
-        hideSyncSongModal();
-      }, 1500);
-    } else {
-      syncBtn.disabled = false;
-      syncBtnText.textContent = 'Retry Sync';
-      if (statusEl) {
-        statusEl.innerHTML = `<span style="color: var(--status-offline); font-weight: 600;">Error: ${escapeHtml(data.error || data.message || 'Sync failed')}</span>`;
-      }
-    }
-  } catch (err) {
-    console.error('Error executing single song sync:', err);
-    syncBtn.disabled = false;
-    syncBtnText.textContent = 'Retry Sync';
-    if (statusEl) {
-      statusEl.innerHTML = '<span style="color: var(--status-offline); font-weight: 600;">Connection error while syncing song.</span>';
-    }
-  }
-}
-
-// --- DIRECT DEVICE UPLOAD MODAL LOGIC ---
-
-function openDeviceUploadModal() {
-  if (currentDeviceId === 'local') {
-    showToast('Select an Over-IP companion device or ADB device to upload files.', 'info');
-    return;
-  }
-  const modal = document.getElementById('modal-device-upload');
-  const badge = document.getElementById('upload-device-name-badge');
-  const input = document.getElementById('upload-device-files-input');
-  const summary = document.getElementById('upload-files-summary');
-  const progress = document.getElementById('upload-device-progress');
-  const bar = document.getElementById('upload-progress-bar');
-  const btn = document.getElementById('btn-submit-device-upload');
-
-  if (badge) badge.textContent = currentDeviceName || currentDeviceId;
-  if (input) input.value = '';
-  if (summary) summary.textContent = 'No files selected';
-  if (progress) progress.style.display = 'none';
-  if (bar) bar.style.width = '0%';
-  if (btn) btn.disabled = false;
-
-  if (modal) modal.style.display = 'flex';
-}
-
-function hideDeviceUploadModal() {
-  const modal = document.getElementById('modal-device-upload');
-  if (modal) modal.style.display = 'none';
-}
-
-function onUploadDeviceFilesSelected(input) {
-  const summary = document.getElementById('upload-files-summary');
-  if (!summary) return;
-  if (input.files && input.files.length > 0) {
-    let totalBytes = 0;
-    for (let i = 0; i < input.files.length; i++) {
-      totalBytes += input.files[i].size;
-    }
-    summary.textContent = `${input.files.length} file(s) selected (${formatBytes(totalBytes)})`;
-  } else {
-    summary.textContent = 'No files selected';
-  }
-}
-
-function submitDeviceUpload() {
-  const input = document.getElementById('upload-device-files-input');
-  if (!input || !input.files || input.files.length === 0) {
-    showToast('Please select at least one audio file to upload.', 'warning');
-    return;
-  }
-
-  const qualitySelect = document.getElementById('upload-device-quality');
-  const qualityVal = qualitySelect ? qualitySelect.value : 'original';
-  const targetBitrate = qualityVal === 'original' ? '' : qualityVal;
-
-  const formData = new FormData();
-  for (let i = 0; i < input.files.length; i++) {
-    formData.append('files', input.files[i]);
-  }
-  if (targetBitrate) {
-    formData.append('target_bitrate', targetBitrate);
-  }
-
-  const progressWrap = document.getElementById('upload-device-progress');
-  const progressBar = document.getElementById('upload-progress-bar');
-  const progressStatus = document.getElementById('upload-progress-status');
-  const progressPercent = document.getElementById('upload-progress-percent');
-  const submitBtn = document.getElementById('btn-submit-device-upload');
-
-  if (progressWrap) progressWrap.style.display = 'block';
-  if (progressBar) progressBar.style.width = '0%';
-  if (progressPercent) progressPercent.textContent = '0%';
-  if (progressStatus) progressStatus.textContent = 'Starting upload...';
-  if (submitBtn) submitBtn.disabled = true;
-
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', `/api/devices/${encodeURIComponent(currentDeviceId)}/upload`);
-
-  xhr.upload.onprogress = (e) => {
-    if (e.lengthComputable) {
-      const pct = Math.round((e.loaded / e.total) * 100);
-      if (progressBar) progressBar.style.width = pct + '%';
-      if (progressPercent) progressPercent.textContent = pct + '%';
-      if (progressStatus) {
-        progressStatus.textContent = (pct < 100) ? `Uploading files... (${pct}%)` : 'Processing & Transcoding on server...';
-      }
-    }
-  };
-
-  xhr.onload = () => {
-    if (submitBtn) submitBtn.disabled = false;
-    try {
-      const res = JSON.parse(xhr.responseText);
-      if (xhr.status >= 200 && xhr.status < 300 && res.status === 'success') {
-        showToast(res.message || `Uploaded ${input.files.length} song(s) successfully!`, 'success', 5000);
-        hideDeviceUploadModal();
-        refreshCurrentDeviceLibrary();
-      } else {
-        showToast(res.error || res.message || 'Upload to device failed.', 'error', 6000);
-      }
-    } catch (e) {
-      showToast('Unexpected server response during upload.', 'error');
-    }
-  };
-
-  xhr.onerror = () => {
-    if (submitBtn) submitBtn.disabled = false;
-    showToast('Network error while uploading to device.', 'error');
-  };
-
-  xhr.send(formData);
-}
-
-// --- LOCAL DOWNCONVERT / TRANSCODE MODAL LOGIC ---
-
-let currentTranscodeTrack = null;
-
-function showTranscodeModal(filepath, title, bitrate) {
-  currentTranscodeTrack = { filepath, title, bitrate };
-  const modal = document.getElementById('modal-transcode-song');
-  const titleEl = document.getElementById('transcode-song-title');
-  const bitrateEl = document.getElementById('transcode-song-bitrate');
-  const btn = document.getElementById('btn-execute-transcode');
-
-  if (titleEl) titleEl.textContent = title || filepath;
-  if (bitrateEl) bitrateEl.textContent = `Current: ${bitrate ? bitrate + ' kbps' : 'Unknown'}`;
-  if (btn) {
-    btn.disabled = false;
-    btn.textContent = 'Downconvert';
-  }
-
-  if (modal) modal.style.display = 'flex';
-}
-
-function hideTranscodeModal() {
-  const modal = document.getElementById('modal-transcode-song');
-  if (modal) modal.style.display = 'none';
-  currentTranscodeTrack = null;
-}
-
-async function submitTranscode() {
-  if (!currentTranscodeTrack || !currentTranscodeTrack.filepath) return;
-  const targetSelect = document.getElementById('transcode-target-bitrate');
-  const replaceCb = document.getElementById('transcode-replace-original');
-  const btn = document.getElementById('btn-execute-transcode');
-
-  const targetBitrate = targetSelect ? parseInt(targetSelect.value, 10) : 192;
-  const replaceOriginal = replaceCb ? replaceCb.checked : false;
-
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Downconverting...';
-  }
-
-  try {
-    const res = await fetch('/api/song/transcode', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        filepath: currentTranscodeTrack.filepath,
-        target_bitrate: targetBitrate,
-        replace_original: replaceOriginal
-      })
-    });
-    const data = await res.json();
-    if (res.ok && data.status === 'success') {
-      showToast(data.message || 'Track successfully downconverted!', 'success', 4000);
-      hideTranscodeModal();
-      refreshCurrentDeviceLibrary();
-    } else {
-      showToast(data.error || 'Downconversion failed.', 'error', 5000);
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Downconvert';
-      }
-    }
-  } catch (err) {
-    console.error('Transcode request failed:', err);
-    showToast('Network error during downconversion.', 'error');
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Downconvert';
-    }
-  }
-}
-
-
-
 // =============================================================================
-// MUSIC PLAYER TAB — Library Picker, Song List, Queue Panel, Shuffle
+// POWERAMP MODULE: Poweramp Backup Importer, Report Modal & Candidate Resolver
 // =============================================================================
 
-// Player-tab internal state
-let playerTabSongs = [];       // all songs for selected library
-let playerTabFiltered = [];    // after search filter
-let playerTabDeviceId = 'local';
-let _playerLibRefreshTimer = null;
-
-/**
- * Called once on DOMContentLoaded. Populates the library dropdown and
- * sets up a periodic refresh of connected devices.
- */
-function initPlayerTab() {
-  refreshPlayerLibraryList();
-}
-
-/**
- * Fetch /api/devices and rebuild the library picker <select>.
- */
-async function refreshPlayerLibraryList() {
-  const sel = document.getElementById('player-library-select');
-  const status = document.getElementById('player-lib-status');
-  if (!sel) return;
-
-  try {
-    const res = await fetch('/api/devices');
-    if (!res.ok) throw new Error('Failed to fetch devices');
-    const devices = await res.json();
-
-    // Keep current selection
-    const prev = sel.value || 'local';
-
-    // Rebuild options
-    let html = '<option value="local">🏠 Local Storage</option>';
-    if (Array.isArray(devices)) {
-      devices.forEach(d => {
-        const val = d.device_id || d.serial || d.ip_port;
-        if (!val || val === 'local') return;
-        const icon = d.device_type === 'Over-IP' ? '🌐' : '📱';
-        const label = d.device_name || d.description || val;
-        const online = d.is_online !== false ? '' : ' (offline)';
-        html += `<option value="${escHtml(val)}">${icon} ${escHtml(label)}${online}</option>`;
-      });
-    }
-    sel.innerHTML = html;
-
-    // Restore previous selection if still available, else fallback to 'local'
-    const opts = Array.from(sel.options).map(o => o.value);
-    sel.value = opts.includes(prev) ? prev : 'local';
-
-    if (status) {
-      const cnt = sel.options.length - 1;
-      status.textContent = cnt > 0 ? `${cnt} device${cnt !== 1 ? 's' : ''} found` : 'No remote devices';
-    }
-  } catch (err) {
-    console.warn('[PlayerTab] Could not refresh device list:', err);
-    if (status) status.textContent = 'Could not load devices';
-  }
-}
-
-/**
- * Load songs for the selected library into the player-tab song table.
- */
-async function loadPlayerLibrary(deviceId) {
-  if (!deviceId) deviceId = 'local';
-  playerTabDeviceId = deviceId;
-
-  const tbody = document.getElementById('player-songs-tbody');
-  const countEl = document.getElementById('player-song-count');
-  if (!tbody) return;
-
-  tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">⏳ Loading songs…</td></tr>';
-  if (countEl) countEl.textContent = '';
-
-  try {
-    const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}/songs`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const songs = data.songs || [];
-
-    playerTabSongs = songs;
-    playerTabFiltered = [...songs];
-
-    // If DB is empty for local, trigger initial background scan notification
-    if (deviceId === 'local' && songs.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">No local songs indexed yet. Go to <strong>Music Library → Scan / Refresh</strong> to scan your library first.</td></tr>';
-      if (countEl) countEl.textContent = '0 songs';
-      return;
-    }
-
-    renderPlayerSongTable(playerTabFiltered, deviceId);
-    if (countEl) countEl.textContent = `${songs.length.toLocaleString()} songs`;
-  } catch (err) {
-    console.error('[PlayerTab] Failed to load songs:', err);
-    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--status-offline);text-align:center;padding:2rem;">❌ Failed to load songs: ${escHtml(String(err))}</td></tr>`;
-  }
-}
-
-/**
- * Render the player-tab song table from a song array.
- */
-function renderPlayerSongTable(songs, deviceId) {
-  const tbody = document.getElementById('player-songs-tbody');
-  if (!tbody) return;
-
-  if (!songs || songs.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="6" class="text-muted" style="text-align:center;padding:2rem;">No songs found.</td></tr>';
-    return;
-  }
-
-  const rows = songs.map((s, i) => {
-    const fp = s.filepath || s._data || '';
-    const title = escHtml(s.title || s.filename || fp.split('/').pop() || 'Unknown');
-    const artist = escHtml(s.artist || 'Unknown');
-    const album = escHtml(s.album || '—');
-    const bitrate = s.bitrate_kbps && s.bitrate_kbps !== 'Unknown' ? `<span class="badge badge-yellow" style="font-size:0.7rem;">${escHtml(String(s.bitrate_kbps))}</span>` : '—';
-    const isActive = fp && fp === currentTrackPath;
-    const rowClass = isActive ? ' class="player-row-active"' : '';
-    const btnClass = isActive ? ' playing' : '';
-    const btnIcon = isActive && isPlaying
-      ? '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>'
-      : '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" style="width:14px;height:14px;"><polygon points="5 3 19 12 5 21 5 3"/></svg>';
-
-    return `<tr data-filepath="${escHtml(fp)}"${rowClass}>
-      <td style="color:var(--text-muted);font-size:0.75rem;">${i + 1}</td>
-      <td title="${title}">${title}</td>
-      <td class="col-hide-sm" title="${artist}">${artist}</td>
-      <td class="col-hide-md" title="${album}">${album}</td>
-      <td class="col-right col-hide-sm">${bitrate}</td>
-      <td class="col-center" style="white-space:nowrap;">
-        <button class="btn btn-secondary btn-sm btn-song-like ${likedSongPaths.has(fp) ? 'btn-liked' : ''}" data-filepath="${escHtml(fp)}" onclick="toggleLikeTrack(${JSON.stringify(fp)}, ${JSON.stringify(s.title || s.filename || '')}, ${JSON.stringify(s.artist || '')})" title="${likedSongPaths.has(fp) ? 'Unlike' : 'Like'}" style="padding:0.25rem 0.4rem;margin-right:0.35rem;border-radius:6px;">${likedSongPaths.has(fp) ? SVG_HEART_FILLED : SVG_HEART}</button>
-        <button class="player-row-play-btn${btnClass}" title="Play ${title}"
-          onclick="playerTabPlaySong(${JSON.stringify(fp)}, ${i}, ${JSON.stringify(deviceId)})">${btnIcon}</button>
-      </td>
-    </tr>`;
-  });
-
-  tbody.innerHTML = rows.join('');
-}
-
-/**
- * Play a song from the player tab, loading all filtered songs as the queue.
- */
-function playerTabPlaySong(filepath, index, deviceId) {
-  if (!playerTabFiltered || playerTabFiltered.length === 0) return;
-
-  // Build queue with device_id on each entry
-  const queue = playerTabFiltered.map(s => ({ ...s, device_id: deviceId || 'local' }));
-  const track = queue[index] || queue[0];
-  if (!track) return;
-
-  // If shuffle was active, reset it since we're starting a new queue
-  if (isShuffled) {
-    isShuffled = false;
-    originalQueue = [];
-    const shuffleBtn = document.getElementById('btn-player-shuffle');
-    if (shuffleBtn) shuffleBtn.classList.remove('shuffle-on');
-  }
-
-  playAudio(
-    track.filepath || track._data,
-    track.title,
-    track.artist,
-    queue,
-    index,
-    track.bitrate_kbps,
-    deviceId
-  );
-}
-
-/**
- * Play All — starts from the first song in the current filtered list.
- */
-function playerPlayAll() {
-  if (!playerTabFiltered || playerTabFiltered.length === 0) return;
-  playerTabPlaySong(playerTabFiltered[0].filepath || playerTabFiltered[0]._data, 0, playerTabDeviceId);
-}
-
-/**
- * Shuffle All — plays the library in shuffled order starting from a random song.
- */
-function playerShuffleAll() {
-  if (!playerTabFiltered || playerTabFiltered.length === 0) return;
-  const idx = Math.floor(Math.random() * playerTabFiltered.length);
-  playerTabPlaySong(playerTabFiltered[idx].filepath || playerTabFiltered[idx]._data, idx, playerTabDeviceId);
-  // After loading queue, enable shuffle
-  if (!isShuffled) toggleShuffle();
-}
-
-/**
- * Filter the player-tab song list by the search box.
- */
-function filterPlayerSongs() {
-  const q = (document.getElementById('player-search')?.value || '').toLowerCase().trim();
-  if (!q) {
-    playerTabFiltered = [...playerTabSongs];
-  } else {
-    playerTabFiltered = playerTabSongs.filter(s =>
-      (s.title || '').toLowerCase().includes(q) ||
-      (s.artist || '').toLowerCase().includes(q) ||
-      (s.album || '').toLowerCase().includes(q) ||
-      (s.filename || '').toLowerCase().includes(q)
-    );
-  }
-  const countEl = document.getElementById('player-song-count');
-  if (countEl) {
-    countEl.textContent = q
-      ? `${playerTabFiltered.length} / ${playerTabSongs.length} songs`
-      : `${playerTabSongs.length.toLocaleString()} songs`;
-  }
-  renderPlayerSongTable(playerTabFiltered, playerTabDeviceId);
-}
-
-/**
- * Update which row in the player-tab table is highlighted as "now playing".
- */
-function updatePlayerTabRowHighlight() {
-  const tbody = document.getElementById('player-songs-tbody');
-  if (!tbody) return;
-  tbody.querySelectorAll('tr[data-filepath]').forEach(row => {
-    const fp = row.getAttribute('data-filepath');
-    if (fp === currentTrackPath) {
-      row.classList.add('player-row-active');
-    } else {
-      row.classList.remove('player-row-active');
-    }
-  });
-}
-
-/**
- * Render the queue panel with current activeQueue.
- */
-function renderQueuePanel() {
-  const list = document.getElementById('player-queue-list');
-  const countEl = document.getElementById('player-queue-count');
-  if (!list) return;
-
-  if (!activeQueue || activeQueue.length === 0) {
-    list.innerHTML = '<div class="text-muted" style="padding:1.5rem 1rem;text-align:center;font-size:0.85rem;">No tracks in queue yet.</div>';
-    if (countEl) countEl.textContent = '';
-    return;
-  }
-
-  if (countEl) countEl.textContent = `${activeQueue.length} tracks`;
-
-  list.innerHTML = activeQueue.map((t, i) => {
-    const isActive = i === queueIndex;
-    const title = escHtml(t.title || t.filename || (t.filepath || '').split('/').pop() || 'Unknown');
-    const artist = escHtml(t.artist || 'Unknown');
-    const cls = isActive ? ' queue-active' : '';
-    const prefix = isActive
-      ? '<svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor" style="width:10px;height:10px;flex-shrink:0;"><polygon points="5 3 19 12 5 21 5 3"/></svg>'
-      : '';
-    return `<div class="player-queue-item${cls}" onclick="playerQueueJumpTo(${i})" title="${title}">
-      <span class="q-num">${prefix || (i + 1)}</span>
-      <div class="q-info">
-        <div class="q-title">${title}</div>
-        <div class="q-artist">${artist}</div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // Scroll active item into view
-  const activeEl = list.querySelector('.queue-active');
-  if (activeEl) activeEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-}
-
-/**
- * Jump to a specific track in the active queue.
- */
-function playerQueueJumpTo(index) {
-  if (!activeQueue || index < 0 || index >= activeQueue.length) return;
-  const t = activeQueue[index];
-  playAudio(
-    t.filepath || t._data,
-    t.title,
-    t.artist,
-    activeQueue,
-    index,
-    t.bitrate_kbps,
-    t.device_id
-  );
-}
-
-/**
- * Clear the current play queue and stop playback.
- */
-function clearPlayerQueue() {
-  activeQueue = [];
-  originalQueue = [];
-  queueIndex = 0;
-  isShuffled = false;
-  const shuffleBtn = document.getElementById('btn-player-shuffle');
-  if (shuffleBtn) shuffleBtn.classList.remove('shuffle-on');
-  renderQueuePanel();
-  closeAudioPlayer();
-}
-
-/** Simple HTML escaping helper (may already exist, this is safe to duplicate). */
-function escHtml(str) {
-  if (typeof str !== 'string') return String(str || '');
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
-
-// ==========================================
 // POWERAMP PLAYLIST IMPORT & REPORT SYSTEM
 // ==========================================
 
@@ -4607,3 +4701,28 @@ function downloadAbsentSongsReport() {
       showToast('Error downloading report.', 'error');
     });
 }
+// =============================================================================
+// APP BOOTSTRAP: DOMContentLoaded Initialization & Feature Coordination
+// =============================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (typeof initTheme === 'function') initTheme();
+  
+  const fpToggle = document.getElementById('toggle-use-fingerprints');
+  if (fpToggle) {
+    fpToggle.checked = useAudioFingerprinting;
+  }
+  
+  if (typeof initTabs === 'function') initTabs();
+  if (typeof initAudioPlayer === 'function') initAudioPlayer();
+  if (typeof initPlayerTab === 'function') initPlayerTab();
+  if (typeof loadDashboardStats === 'function') loadDashboardStats();
+  if (typeof loadSongs === 'function') loadSongs();
+  if (typeof loadDuplicates === 'function') loadDuplicates();
+  if (typeof loadHiddenFiles === 'function') loadHiddenFiles();
+  if (typeof loadSyncedHistory === 'function') loadSyncedHistory();
+  if (typeof loadPlaylists === 'function') loadPlaylists();
+  if (typeof loadLikedMusicSet === 'function') loadLikedMusicSet();
+  if (typeof loadSyncDevices === 'function') loadSyncDevices();
+  if (typeof loadDeletedSongs === 'function') loadDeletedSongs();
+});

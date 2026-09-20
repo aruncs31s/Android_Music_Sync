@@ -19,15 +19,26 @@ import config_manager
 import over_ip.song_scanner as song_scanner
 import ui.db_manager as ui_db
 import ui.stats_manager as ui_stats
-import hide_list_db
 import utils.syncer as syncer
 import utils.android.adb.adb_pusher as adb_pusher
 import sync_checker
-from repositories import song_repo, playlist_repo, hide_repo, device_repo, deleted_repo
+from repositories import (
+    song_repo,
+    playlist_repo,
+    hide_repo,
+    device_repo,
+    deleted_repo,
+    MusicSyncError,
+    ResourceNotFoundError,
+    ValidationError,
+    DatabaseOperationError,
+)
 from services.stream_service import StreamService
 from services.audio_transcoder import AudioTranscoder
 import utils.android.poweramp.poweramp_importer as poweramp_importer
 from utils import get_logger
+from utils.string import clean_string_for_matching
+from utils.time import format_ts, format_duration, format_size
 
 logger = get_logger()
 # Create Flask app with template and static folders configured inside ui/
@@ -37,6 +48,34 @@ app = Flask(
     template_folder=os.path.join(ui_dir, "templates"),
     static_folder=os.path.join(ui_dir, "static")
 )
+
+
+@app.errorhandler(MusicSyncError)
+def handle_domain_error(err: MusicSyncError):
+    logger.warning(f"[API Domain Error] {err.message} (code: {err.code})")
+    return jsonify(err.to_dict()), err.code
+
+
+@app.errorhandler(400)
+def handle_bad_request(err):
+    msg = getattr(err, "description", None) or "Bad Request"
+    return jsonify({"error": str(msg), "code": 400}), 400
+
+
+@app.errorhandler(404)
+def handle_not_found(err):
+    if request.path.startswith("/api/"):
+        msg = getattr(err, "description", None) or "Endpoint or resource not found"
+        return jsonify({"error": str(msg), "code": 404}), 404
+    return err
+
+
+@app.errorhandler(500)
+def handle_internal_error(err):
+    logger.error(f"[API Internal Error] {err}", exc_info=True)
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Internal server error", "code": 500}), 500
+    return err
 
 
 @app.route("/", methods=["GET"])
@@ -1144,7 +1183,7 @@ def poweramp_search_library():
     if not q:
         return jsonify([])
 
-    clean_q = poweramp_importer.clean_string_for_matching(q)
+    clean_q = clean_string_for_matching(q)
     q_lower = q.lower()
 
     songs = song_repo.get_all_songs()
@@ -1170,8 +1209,8 @@ def poweramp_search_library():
             score += 40
 
         # Clean-string matching
-        clean_title = poweramp_importer.clean_string_for_matching(title)
-        clean_fn = poweramp_importer.clean_string_for_matching(filename)
+        clean_title = clean_string_for_matching(title)
+        clean_fn = clean_string_for_matching(filename)
 
         if clean_title == clean_q:
             score += 60

@@ -13,9 +13,8 @@ from repositories.exceptions import TrashFileMissingError, FileMoveError
 import audio_metadata
 import ui.db_manager as ui_db
 from model.song import RestoredSongRecord, SongRecord
-from over_ip.song_scanner import format_mtime
 from repositories.base_repository import BaseRepository
-from utils import get_logger
+from utils import get_logger, format_ts
 
 logger = get_logger()
 
@@ -144,8 +143,8 @@ class DeletedSongRepository(BaseRepository):
                 artist=artist,
                 album=album,
                 size_bytes=st.st_size,
-                file_created_at=format_mtime(getattr(st, "st_birthtime", st.st_ctime)),
-                file_modified_at=format_mtime(st.st_mtime),
+                file_created_at=format_ts(getattr(st, "st_birthtime", st.st_ctime)),
+                file_modified_at=format_ts(st.st_mtime),
                 duration_sec=meta.get("duration_sec", 0.0),
                 duration_formatted=meta.get("duration", "00:00"),
                 bitrate_kbps=bitrate_str,

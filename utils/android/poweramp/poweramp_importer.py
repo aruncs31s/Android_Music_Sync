@@ -22,24 +22,13 @@ import ui.db_manager as ui_db
 from repositories.playlist_repository import PlaylistRepository
 from utils import get_logger
 
+from utils.string import clean_string_for_matching
+from model import TrackStatus
+
 logger = get_logger()
 
 ZIP_MAGIC = b"PK\x03\x04"
 SQLITE_MAGIC = b"SQLite format 3\x00"
-
-
-def clean_string_for_matching(text: Optional[str]) -> str:
-    """Normalize song title or filename for fuzzy-resilient matching."""
-    if not text:
-        return ""
-    s = text.lower()
-    # Remove common audio tags in parentheses or brackets e.g. (128), (320), (Official Video), [FLAC]
-    s = re.sub(r"\s*[\(\[][^\)\]]*(?:128|192|256|320|flac|kbps|audio|video|lyrics|official|remaster|hd|hq)[^\)\]]*[\)\]]", "", s, flags=re.IGNORECASE)
-    # Strip extension if present
-    s = re.sub(r"\.(?:mp3|flac|m4a|wav|ogg|opus|aac)$", "", s, flags=re.IGNORECASE)
-    # Normalize punctuation and separators to single spaces
-    s = re.sub(r"[\-_\.\(\)\[\]\'\"~]+", " ", s)
-    return " ".join(s.split()).strip()
 
 
 def extract_database_from_source(source: Any) -> Tuple[str, Optional[str]]:
@@ -381,7 +370,7 @@ def import_poweramp_backup(
                         playlist_repo.add_track_to_playlist(
                             playlist_id=synced_playlist_id,
                             filepath=m["matched_filepath"],
-                            status="present",
+                            status=TrackStatus.PRESENT.value,
                             original_path=m.get("poweramp_path"),
                             readable_name=m.get("readable_name"),
                             title=m.get("title"),
@@ -391,7 +380,7 @@ def import_poweramp_backup(
                         playlist_repo.add_track_to_playlist(
                             playlist_id=synced_playlist_id,
                             filepath=a["original_path"],
-                            status="absent",
+                            status=TrackStatus.ABSENT.value,
                             original_path=a["original_path"],
                             readable_name=a.get("readable_name"),
                             title=a.get("readable_name") or a.get("filename")
