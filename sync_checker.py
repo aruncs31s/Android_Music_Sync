@@ -3,28 +3,22 @@ Sync Checker Module.
 Checks if a specific local song exists on a destination device (ADB or Over-IP peer),
 and identifies similar songs using fuzzy matching and audio metadata comparison.
 """
+
 import os
 import re
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-import config_manager
+import audio_metadata
 import fuzzy_matcher
 import hide_list_db
-import audio_metadata
 from repositories import device_repo, song_repo
 from utils import get_logger
+from utils import normalize_string as normalize_str
 
 logger = get_logger()
 
 
-def normalize_str(s: str) -> str:
-    """Normalize string for robust comparison (alphanumeric only, lowercase)."""
-    if not s:
-        return ""
-    return re.sub(r"[^a-zA-Z0-9]", "", s.lower())
-
-
-def get_local_song_details(filepath: str) -> Dict[str, Any]:
+def get_local_song_details(filepath: str) -> dict[str, Any]:
     """Retrieve or extract metadata for a local song file."""
     abs_path = os.path.abspath(filepath)
     filename = os.path.basename(abs_path)
@@ -44,10 +38,10 @@ def get_local_song_details(filepath: str) -> Dict[str, Any]:
                     "duration_formatted": s.get("duration_formatted") or "00:00",
                     "size_formatted": s.get("size_formatted") or "0 B",
                     "bitrate_kbps": s.get("bitrate_kbps") or "Unknown",
-                    "mtime_str": s.get("mtime_str") or "Unknown"
+                    "mtime_str": s.get("mtime_str") or "Unknown",
                 }
-    except Exception:
-        pass
+    except Exception as e:
+        logger.info(f"err {e}")
 
     # Fallback to direct extraction
     meta = audio_metadata.extract_audio_metadata(abs_path)
@@ -60,11 +54,13 @@ def get_local_song_details(filepath: str) -> Dict[str, Any]:
         "duration_formatted": meta.get("duration", "00:00"),
         "size_formatted": meta.get("size", "0 B"),
         "bitrate_kbps": meta.get("bitrate", "Unknown"),
-        "mtime_str": "Unknown"
+        "mtime_str": "Unknown",
     }
 
 
-def calculate_similarity_score(local_song: Dict[str, Any], dev_song: Dict[str, Any]) -> int:
+def calculate_similarity_score(
+    local_song: dict[str, Any], dev_song: dict[str, Any]
+) -> int:
     """
     Calculate an intuitive 0-100% similarity score between a local song and a device song
     based on title, artist, and filename.
@@ -72,7 +68,11 @@ def calculate_similarity_score(local_song: Dict[str, Any], dev_song: Dict[str, A
     l_title = normalize_str(local_song.get("title", ""))
     d_title = normalize_str(dev_song.get("title", ""))
     l_file = normalize_str(local_song.get("filename", ""))
-    d_file = normalize_str(dev_song.get("_display_name") or dev_song.get("filename") or os.path.basename(dev_song.get("_data", "")))
+    d_file = normalize_str(
+        dev_song.get("_display_name")
+        or dev_song.get("filename")
+        or os.path.basename(dev_song.get("_data", ""))
+    )
 
     if l_title and l_title == d_title:
         return 100
@@ -86,7 +86,9 @@ def calculate_similarity_score(local_song: Dict[str, Any], dev_song: Dict[str, A
             ratio = min(len(l_title), len(d_title)) / max(len(l_title), len(d_title))
             score = max(score, int(70 + (ratio * 25)))
         else:
-            matched, raw_score, _ = fuzzy_matcher.fuzzy_subsequence_match(l_title[:15], d_title)
+            matched, raw_score, _ = fuzzy_matcher.fuzzy_subsequence_match(
+                l_title[:15], d_title
+            )
             if matched:
                 score = max(score, min(85, 50 + int(raw_score / 3)))
 
@@ -102,9 +104,13 @@ def calculate_similarity_score(local_song: Dict[str, Any], dev_song: Dict[str, A
     return max(10, min(99, score))
 
 
-def format_device_song(dev_song: Dict[str, Any]) -> Dict[str, Any]:
+def format_device_song(dev_song: dict[str, Any]) -> dict[str, Any]:
     """Format a device song dictionary into a clean client-facing structure."""
-    display_name = dev_song.get("_display_name") or dev_song.get("filename") or os.path.basename(dev_song.get("_data", ""))
+    display_name = (
+        dev_song.get("_display_name")
+        or dev_song.get("filename")
+        or os.path.basename(dev_song.get("_data", ""))
+    )
     return {
         "id": dev_song.get("_id") or dev_song.get("id"),
         "title": dev_song.get("title") or display_name,
@@ -114,7 +120,7 @@ def format_device_song(dev_song: Dict[str, Any]) -> Dict[str, Any]:
         "filepath": dev_song.get("_data") or dev_song.get("filepath") or "",
         "duration_formatted": dev_song.get("duration_formatted") or "00:00",
         "size_formatted": dev_song.get("size_formatted") or "0 B",
-        "bitrate_kbps": dev_song.get("bitrate_kbps") or "Unknown"
+        "bitrate_kbps": dev_song.get("bitrate_kbps") or "Unknown",
     }
 
 
@@ -127,7 +133,7 @@ def check_song_on_device(filepath: str, device_id: str) -> Dict[str, Any]:
         return {
             "status": "error",
             "message": f"Local file not found: {filepath}",
-            "code": 404
+            "code": 404,
         }
 
     local_song = get_local_song_details(filepath)
@@ -147,30 +153,40 @@ def check_song_on_device(filepath: str, device_id: str) -> Dict[str, Any]:
         return {
             "status": "error",
             "message": f"Failed to query destination device: {e}",
-            "code": 500
+            "code": 500,
         }
 
     device_name = device_data.get("device_name") or device_id
     device_type = device_data.get("device_type") or "Connected Device"
-    device_songs: List[Dict[str, Any]] = device_data.get("songs") or []
+    device_songs: list[dict[str, Any]] = device_data.get("songs") or []
 
     # Check SQLite synced history if ADB serial
     is_in_synced_history = False
     synced_match_reason = ""
     if device_id.startswith("adb_") or device_id.startswith("adb:"):
-        serial = device_id.split("_", 1)[-1] if "_" in device_id else device_id.split(":", 1)[-1]
+        serial = (
+            device_id.split("_", 1)[-1]
+            if "_" in device_id
+            else device_id.split(":", 1)[-1]
+        )
         synced_set = hide_list_db.get_synced_paths_set(serial)
         if os.path.abspath(filepath) in synced_set:
             is_in_synced_history = True
-            synced_match_reason = f"Recorded in SQLite synced history for device [{serial}]"
+            synced_match_reason = (
+                f"Recorded in SQLite synced history for device [{serial}]"
+            )
 
-    exact_match: Optional[Dict[str, Any]] = None
+    exact_match: dict[str, Any] | None = None
     exact_match_reason = ""
     exact_match_id = None
 
     # 2. Check for Exact Match
     for song in device_songs:
-        dev_file = song.get("_display_name") or song.get("filename") or os.path.basename(song.get("_data", ""))
+        dev_file = (
+            song.get("_display_name")
+            or song.get("filename")
+            or os.path.basename(song.get("_data", ""))
+        )
         dev_title = song.get("title") or ""
         dev_artist = song.get("artist") or ""
 
@@ -187,7 +203,11 @@ def check_song_on_device(filepath: str, device_id: str) -> Dict[str, Any]:
 
         # Match 2: Matching title + artist
         if norm_local_title and norm_dev_title and norm_local_title == norm_dev_title:
-            if not norm_local_artist or norm_local_artist == "unknown" or norm_local_artist == norm_dev_artist:
+            if (
+                not norm_local_artist
+                or norm_local_artist == "unknown"
+                or norm_local_artist == norm_dev_artist
+            ):
                 exact_match = format_device_song(song)
                 exact_match_reason = f"Identical Title & Artist on destination"
                 exact_match_id = song.get("_id") or song.get("id")
@@ -203,12 +223,12 @@ def check_song_on_device(filepath: str, device_id: str) -> Dict[str, Any]:
             "filepath": "Recorded in synced history",
             "duration_formatted": local_song.get("duration_formatted", ""),
             "size_formatted": local_song.get("size_formatted", ""),
-            "bitrate_kbps": local_song.get("bitrate_kbps", "")
+            "bitrate_kbps": local_song.get("bitrate_kbps", ""),
         }
         exact_match_reason = synced_match_reason
 
     # 3. Find Similar Songs on Destination Device
-    similar_songs: List[Dict[str, Any]] = []
+    similar_songs: list[dict[str, Any]] = []
     seen_similar_ids = set()
 
     # Exclude the exact match if found
@@ -220,7 +240,12 @@ def check_song_on_device(filepath: str, device_id: str) -> Dict[str, Any]:
     ranked_candidates = fuzzy_matcher.filter_and_rank_songs(clean_query, device_songs)
 
     for cand in ranked_candidates:
-        cand_id = str(cand.get("_id") or cand.get("id") or cand.get("_data") or cand.get("filepath"))
+        cand_id = str(
+            cand.get("_id")
+            or cand.get("id")
+            or cand.get("_data")
+            or cand.get("filepath")
+        )
         if cand_id in seen_similar_ids:
             continue
 
@@ -243,9 +268,16 @@ def check_song_on_device(filepath: str, device_id: str) -> Dict[str, Any]:
         notes = []
         l_bitrate = local_song.get("bitrate_kbps")
         d_bitrate = fmt.get("bitrate_kbps")
-        if l_bitrate and d_bitrate and str(l_bitrate) != "Unknown" and str(d_bitrate) != "Unknown":
+        if (
+            l_bitrate
+            and d_bitrate
+            and str(l_bitrate) != "Unknown"
+            and str(d_bitrate) != "Unknown"
+        ):
             if str(l_bitrate) != str(d_bitrate):
-                notes.append(f"Bitrate: Local {l_bitrate} kbps vs Device {d_bitrate} kbps")
+                notes.append(
+                    f"Bitrate: Local {l_bitrate} kbps vs Device {d_bitrate} kbps"
+                )
             else:
                 notes.append(f"Same bitrate ({l_bitrate} kbps)")
 
@@ -255,7 +287,9 @@ def check_song_on_device(filepath: str, device_id: str) -> Dict[str, Any]:
             if l_dur != d_dur:
                 notes.append(f"Duration: Local {l_dur} vs Device {d_dur}")
 
-        fmt["comparison_note"] = " | ".join(notes) if notes else "Similar title or artist"
+        fmt["comparison_note"] = (
+            " | ".join(notes) if notes else "Similar title or artist"
+        )
         similar_songs.append(fmt)
 
         if len(similar_songs) >= 5:
@@ -273,7 +307,7 @@ def check_song_on_device(filepath: str, device_id: str) -> Dict[str, Any]:
         "exact_match": {
             "found": exact_match is not None,
             "match_reason": exact_match_reason,
-            "device_song": exact_match
+            "device_song": exact_match,
         },
-        "similar_songs": similar_songs
+        "similar_songs": similar_songs,
     }

@@ -1,0 +1,28 @@
+<!-- Available Devices Tab -->
+<div id="tab-devices" class="tab-content" style="display: none;">
+  <div class="panel">
+    <div class="panel-title">
+      <span>Available Devices & Device Scanners</span>
+      <div class="panel-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button class="btn" onclick="scanAdbDevices()">Scan ADB Devices</button>
+        <button class="btn btn-secondary" onclick="scanIpHosts()">Ping Over-IP Devices</button>
+      </div>
+    </div>
+
+    <!-- Add Over-IP Device Form -->
+    <div style="background: var(--bg-card); padding: 1.25rem; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+      <h4 style="margin-bottom: 0.75rem;">Add & Ping New Over-IP Peer Device</h4>
+      <div class="form-inline-row" style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="input-ip-addr" class="search-bar" placeholder="IP Address (e.g. 192.168.1.50)" style="max-width: 250px;">
+        <input type="number" id="input-ip-port" class="search-bar" value="5000" style="max-width: 100px;">
+        <button class="btn" onclick="addOverIpDevice()">+ Add & Ping Device</button>
+      </div>
+      <small id="ip-add-status" class="text-muted" style="margin-top: 0.5rem; display: block;"></small>
+    </div>
+
+    <!-- Unified Devices Table -->
+    <div id="devices-full-list">
+      <p class="text-muted">Loading available devices...</p>
+    </div>
+  </div>
+</div>

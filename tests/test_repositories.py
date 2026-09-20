@@ -3,6 +3,9 @@ import sys
 import shutil
 import unittest
 import tempfile
+import time
+import threading
+from unittest.mock import patch
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
@@ -44,7 +47,8 @@ class TestRepositories(unittest.TestCase):
         if os.path.exists(self.tmp_db_path):
             os.remove(self.tmp_db_path)
 
-    def test_playlist_repository_crud_and_invalidation(self):
+    @patch("over_ip.song_scanner.scan_songs_from_paths", return_value=[])
+    def test_playlist_repository_crud_and_invalidation(self, _mock_scan):
         # 1. Initially empty
         pls = playlist_repo.get_playlists()
         self.assertEqual(len(pls), 0)
@@ -98,7 +102,8 @@ class TestRepositories(unittest.TestCase):
         hosts = device_repo.get_stored_ip_hosts()
         self.assertTrue(any(h["ip_address"] == ip for h in hosts))
 
-    def test_device_songs_and_parser(self):
+    @patch("repositories.song_repo.get_all_songs", return_value=[])
+    def test_device_songs_and_parser(self, _mock_songs):
         # 1. Test local device songs
         local_data = device_repo.get_device_songs("local")
         self.assertEqual(local_data["device_id"], "local")
@@ -232,6 +237,100 @@ class TestRepositories(unittest.TestCase):
         self.assertEqual(res.get("deleted_count"), 2)
         self.assertFalse(os.path.exists(p1))
         self.assertFalse(os.path.exists(p2))
+
+    def test_concurrent_get_all_songs_does_not_return_empty(self):
+        """
+        Verify that concurrent calls to get_all_songs serialize on _scan_lock,
+        broadcast progress to all active listeners, and never return an empty list
+        when a scan is actively running.
+        """
+        song_repo.invalidate_all_song_caches()
+        mock_songs = [
+            {"_id": 1, "title": "Song A", "artist": "Artist A", "filepath": "/fake/a.mp3"},
+            {"_id": 2, "title": "Song B", "artist": "Artist B", "filepath": "/fake/b.mp3"},
+        ]
+        scan_call_count = 0
+        scan_lock = threading.Lock()
+
+        def slow_scan(folders, audio_exts, progress_cb=None):
+            nonlocal scan_call_count
+            with scan_lock:
+                scan_call_count += 1
+            if progress_cb:
+                progress_cb("[SCAN] file 1")
+                time.sleep(0.05)
+                progress_cb("[SCAN] file 2")
+                time.sleep(0.05)
+            return list(mock_songs)
+
+        results = {}
+        progress_logs = {"thread1": [], "thread2": [], "thread3": []}
+
+        def worker(thread_id, force_refresh, delay=0.0):
+            if delay:
+                time.sleep(delay)
+            cb = lambda msg: progress_logs[thread_id].append(msg)
+            res = song_repo.get_all_songs(force_refresh=force_refresh, progress_cb=cb)
+            results[thread_id] = res
+
+        with patch("over_ip.song_scanner.scan_songs_from_paths", side_effect=slow_scan):
+            t1 = threading.Thread(target=worker, args=("thread1", False, 0.0))
+            t2 = threading.Thread(target=worker, args=("thread2", False, 0.02))
+            t3 = threading.Thread(target=worker, args=("thread3", True, 0.04))
+
+            t1.start()
+            t2.start()
+            t3.start()
+
+            t1.join()
+            t2.join()
+            t3.join()
+
+        # All threads must receive the songs — NONE should receive []
+        self.assertEqual(len(results["thread1"]), 2)
+        self.assertEqual(len(results["thread2"]), 2)
+        self.assertEqual(len(results["thread3"]), 2)
+
+        # scan_songs_from_paths should have run only once
+        self.assertEqual(scan_call_count, 1)
+
+        # Listeners registered while scan was active should receive progress messages
+        self.assertTrue(len(progress_logs["thread1"]) > 0)
+        self.assertTrue(len(progress_logs["thread2"]) > 0)
+
+    def test_cache_reuse_within_grace_period(self):
+        """
+        Verify that a force_refresh=True call immediately following a scan
+        reuses the newly scanned data without triggering a second disk scan.
+        """
+        song_repo.invalidate_all_song_caches()
+        mock_songs = [{"_id": 1, "title": "Song 1", "filepath": "/fake/1.mp3"}]
+        scan_call_count = 0
+
+        def quick_scan(folders, audio_exts, progress_cb=None):
+            nonlocal scan_call_count
+            scan_call_count += 1
+            return list(mock_songs)
+
+        with patch("over_ip.song_scanner.scan_songs_from_paths", side_effect=quick_scan):
+            # First scan
+            res1 = song_repo.get_all_songs(force_refresh=True)
+            self.assertEqual(len(res1), 1)
+            self.assertEqual(scan_call_count, 1)
+
+            # Immediate second call with force_refresh within 5 seconds
+            res2 = song_repo.get_all_songs(force_refresh=True)
+            self.assertEqual(len(res2), 1)
+            # Should NOT have invoked quick_scan again
+            self.assertEqual(scan_call_count, 1)
+
+            # Invalidate cache
+            song_repo.invalidate_all_song_caches()
+
+            # Now force_refresh must trigger a fresh scan
+            res3 = song_repo.get_all_songs(force_refresh=True)
+            self.assertEqual(len(res3), 1)
+            self.assertEqual(scan_call_count, 2)
 
 
 if __name__ == "__main__":

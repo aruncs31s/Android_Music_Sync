@@ -1,0 +1,50 @@
+/* ==========================================================================
+   Playlists Page CSS
+   Playlist cards, active states, and 3-column dedicated page layout
+   ========================================================================== */
+
+/* Playlist Cards */
+.playlist-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.playlist-card:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--accent-yellow);
+  transform: translateY(-2px);
+  box-shadow: none;
+}
+
+.playlist-card.active {
+  border-color: var(--accent-yellow);
+  background: var(--accent-yellow-alpha);
+  box-shadow: none;
+}
+
+/* 3-Column Playlist Dedicated Page Layout & Responsiveness */
+.playlist-page-grid {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr) 320px;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .playlist-page-grid {
+    grid-template-columns: 200px minmax(0, 1fr) 280px;
+  }
+}
+
+@media (max-width: 860px) {
+  .playlist-page-grid {
+    grid-template-columns: 1fr;
+  }
+}

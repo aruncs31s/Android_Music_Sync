@@ -19,10 +19,10 @@ from typing import List, Dict, Any
 
 import song_parser
 import fuzzy_matcher
-import adb_manager
+import utils.android.adb.adb_manager as adb_manager
 import fzf_tui
 import config_manager
-import syncer
+import utils.syncer as syncer
 import reverse_syncer
 import redis_cache
 import hide_list_db
@@ -46,12 +46,12 @@ def output_songs(songs: List[Dict[str, Any]], fmt: str):
             s_copy = dict(s)
             s_copy.pop("searchable_text", None)
             clean_songs.append(s_copy)
-        print(json.dumps(clean_songs, indent=2))
+        logger.info(json.dumps(clean_songs, indent=2))
     elif fmt == "path":
         for s in songs:
             path = s.get("_data")
             if path:
-                print(path)
+                logger.info(path)
     elif fmt == "csv":
         import csv
         writer = csv.writer(sys.stdout)
@@ -73,9 +73,9 @@ def output_songs(songs: List[Dict[str, Any]], fmt: str):
             album = s.get("album") or "Unknown"
             dur = s.get("duration_formatted") or "00:00"
             path = s.get("_data") or ""
-            print(f"{idx:4d}. {title} - {artist} [{album}] ({dur})")
+            logger.info(f"{idx:4d}. {title} - {artist} [{album}] ({dur})")
             if path:
-                print(f"      Path: {path}")
+                logger.info(f"      Path: {path}")
 
 
 def main():

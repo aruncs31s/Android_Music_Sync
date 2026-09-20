@@ -13,6 +13,8 @@ import os
 import sys
 import sqlite3
 from typing import List, Dict, Any, Optional, Set
+from device_providers import SongDeletable
+from model import RestoredSongRecord, SongRecord, PlaylistRecord, PlaylistTrackRecord, TrackStatus
 from utils import get_logger
 
 logger = get_logger()
@@ -95,7 +97,7 @@ def _migrate_legacy_data(conn: sqlite3.Connection):
 
             old_conn.close()
         except Exception as e:
-            print(f"[Central DB] Migration note from {legacy}: {e}", file=sys.stderr)
+            logger.info(f"[Central DB] Migration note from {legacy}: {e}")
 
     try:
         conn.execute(
@@ -192,6 +194,23 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
                 UNIQUE(playlist_id, filepath)
             );
         """)
+        # Ensure playlist_tracks has status and metadata columns for absent track support
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA table_info(playlist_tracks)")
+        existing_cols = {row[1] for row in cursor.fetchall()}
+        if "status" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN status TEXT DEFAULT 'present'")
+        if "original_path" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN original_path TEXT")
+        if "readable_name" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN readable_name TEXT")
+        if "title" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN title TEXT")
+        if "artist" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN artist TEXT")
+        if "album" not in existing_cols:
+            conn.execute("ALTER TABLE playlist_tracks ADD COLUMN album TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_playlist_tracks_status ON playlist_tracks(playlist_id, status);")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audio_fingerprints (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,6 +224,36 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
         """)
         conn.execute("""
             CREATE INDEX IF NOT EXISTS idx_fp_hash ON audio_fingerprints(fingerprint);
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS local_songs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                filepath TEXT UNIQUE NOT NULL,
+                filename TEXT NOT NULL,
+                title TEXT,
+                artist TEXT,
+                album TEXT,
+                size INTEGER DEFAULT 0,
+                size_formatted TEXT,
+                mtime REAL DEFAULT 0,
+                mtime_str TEXT,
+                ctime REAL DEFAULT 0,
+                ctime_str TEXT,
+                duration_sec REAL DEFAULT 0,
+                duration_formatted TEXT,
+                bitrate_kbps TEXT,
+                bitrate_val INTEGER DEFAULT 0,
+                sample_rate_hz TEXT,
+                channels TEXT,
+                codec TEXT,
+                searchable_text TEXT
+            );
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_local_songs_mtime ON local_songs(mtime DESC);
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS idx_local_songs_filepath ON local_songs(filepath);
         """)
         _migrate_legacy_data(conn)
     return conn
@@ -277,7 +326,7 @@ def get_hidden_paths_set(db_path: Optional[str] = None) -> Set[str]:
         cursor.execute("SELECT filepath FROM hidden_files")
         return set(row["filepath"] for row in cursor.fetchall())
     except Exception as e:
-        print(f"[Central DB] Error fetching hidden set: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching hidden set: {e}")
         return set()
     finally:
         if conn:
@@ -293,7 +342,7 @@ def get_all_hidden_records(db_path: Optional[str] = None) -> List[Dict[str, Any]
         cursor.execute("SELECT id, filepath, filename, hidden_at FROM hidden_files ORDER BY id DESC")
         return [dict(r) for r in cursor.fetchall()]
     except Exception as e:
-        print(f"[Central DB] Error fetching hidden records: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching hidden records: {e}")
         return []
     finally:
         if conn:
@@ -323,10 +372,10 @@ def add_synced_file(
                 """,
                 (filepath, filename, device_serial, remote_dir)
             )
-        print(f"[Central DB] Recorded synced track for [{device_serial}]: {filename}", file=sys.stderr)
+        logger.info(f"[Central DB] Recorded synced track for [{device_serial}]: {filename}")
         return True
     except Exception as e:
-        print(f"[Central DB] Error recording synced file: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error recording synced file: {e}")
         return False
     finally:
         if conn:
@@ -342,7 +391,7 @@ def get_synced_paths_set(device_serial: str, db_path: Optional[str] = None) -> S
         cursor.execute("SELECT filepath FROM synced_files WHERE device_serial = ?", (device_serial,))
         return set(row["filepath"] for row in cursor.fetchall())
     except Exception as e:
-        print(f"[Central DB] Error fetching synced set: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching synced set: {e}")
         return set()
     finally:
         if conn:
@@ -366,7 +415,7 @@ def get_all_synced_records(device_serial: Optional[str] = None, db_path: Optiona
             )
         return [dict(r) for r in cursor.fetchall()]
     except Exception as e:
-        print(f"[Central DB] Error fetching synced records: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching synced records: {e}")
         return []
     finally:
         if conn:
@@ -385,7 +434,7 @@ def remove_synced_file(device_serial: str, filename: str, db_path: Optional[str]
             )
             return cursor.rowcount > 0
     except Exception as e:
-        print(f"[Central DB] Error removing synced record: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error removing synced record: {e}")
         return False
     finally:
         if conn:
@@ -415,14 +464,17 @@ def add_ip_host(ip_address: str, port: int = 5000, alias: str = "", db_path: Opt
                 """,
                 (ip_address, port, alias)
             )
-        print(f"[Central DB] Saved IP host: {ip_address}:{port}", file=sys.stderr)
+        logger.info(f"[Central DB] Saved IP host: {ip_address}:{port}")
         return True
     except Exception as e:
-        print(f"[Central DB] Error adding IP host {ip_address}: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error adding IP host {ip_address}: {e}")
         return False
     finally:
         if conn:
             conn.close()
+
+
+save_ip_host = add_ip_host
 
 
 def remove_ip_host(ip_address: str, db_path: Optional[str] = None) -> bool:
@@ -432,10 +484,10 @@ def remove_ip_host(ip_address: str, db_path: Optional[str] = None) -> bool:
         conn = get_connection(db_path)
         with conn:
             conn.execute("DELETE FROM ip_hosts WHERE ip_address = ?", (ip_address.strip(),))
-        print(f"[Central DB] Removed IP host: {ip_address}", file=sys.stderr)
+        logger.info(f"[Central DB] Removed IP host: {ip_address}")
         return True
     except Exception as e:
-        print(f"[Central DB] Error removing IP host: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error removing IP host: {e}")
         return False
     finally:
         if conn:
@@ -451,7 +503,7 @@ def get_stored_ip_hosts(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
         cursor.execute("SELECT id, ip_address, port, alias, last_seen, is_online FROM ip_hosts ORDER BY last_seen DESC")
         return [dict(r) for r in cursor.fetchall()]
     except Exception as e:
-        print(f"[Central DB] Error fetching stored IP hosts: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error fetching stored IP hosts: {e}")
         return []
     finally:
         if conn:
@@ -470,7 +522,7 @@ def update_ip_status(ip_address: str, is_online: bool, db_path: Optional[str] = 
             )
         return True
     except Exception as e:
-        print(f"[Central DB] Error updating IP status: {e}", file=sys.stderr)
+        logger.error(f"[Central DB] Error updating IP status: {e}")
         return False
     finally:
         if conn:
@@ -522,13 +574,16 @@ def delete_playlist(playlist_id: int, db_path: Optional[str] = None) -> bool:
 
 
 def get_playlists(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Get all playlists with track counts."""
+    """Get all playlists with track counts, present counts, and absent counts."""
     conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
         cursor.execute("""
-            SELECT p.id, p.name, p.created_at, COUNT(pt.id) AS track_count
+            SELECT p.id, p.name, p.created_at,
+                   COUNT(pt.id) AS track_count,
+                   COUNT(CASE WHEN pt.status = 'absent' THEN 1 END) AS absent_count,
+                   COUNT(CASE WHEN pt.status != 'absent' OR pt.status IS NULL THEN pt.id END) AS present_count
             FROM playlists p
             LEFT JOIN playlist_tracks pt ON p.id = pt.playlist_id
             GROUP BY p.id, p.name, p.created_at
@@ -543,8 +598,18 @@ def get_playlists(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
             conn.close()
 
 
-def add_track_to_playlist(playlist_id: int, filepath: str, db_path: Optional[str] = None) -> bool:
-    """Add a track filepath to a playlist."""
+def add_track_to_playlist(
+    playlist_id: int,
+    filepath: str,
+    status: str = TrackStatus.PRESENT.value,
+    original_path: Optional[str] = None,
+    readable_name: Optional[str] = None,
+    title: Optional[str] = None,
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    db_path: Optional[str] = None
+) -> bool:
+    """Add a track to a playlist with status and metadata support."""
     conn = None
     try:
         conn = get_connection(db_path)
@@ -554,14 +619,27 @@ def add_track_to_playlist(playlist_id: int, filepath: str, db_path: Optional[str
             max_row = cursor.fetchone()
             next_order = (max_row[0] + 1) if (max_row and max_row[0] is not None) else 1
 
+            orig = original_path or filepath
+            t_name = title or readable_name or os.path.basename(filepath)
+
             conn.execute(
                 """
-                INSERT OR IGNORE INTO playlist_tracks (playlist_id, filepath, track_order)
-                VALUES (?, ?, ?)
+                INSERT INTO playlist_tracks (
+                    playlist_id, filepath, original_path, readable_name,
+                    title, artist, album, status, track_order
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(playlist_id, filepath) DO UPDATE SET
+                    original_path = COALESCE(excluded.original_path, playlist_tracks.original_path),
+                    readable_name = COALESCE(excluded.readable_name, playlist_tracks.readable_name),
+                    title = COALESCE(excluded.title, playlist_tracks.title),
+                    artist = COALESCE(excluded.artist, playlist_tracks.artist),
+                    album = COALESCE(excluded.album, playlist_tracks.album),
+                    status = excluded.status
                 """,
-                (playlist_id, filepath, next_order)
+                (playlist_id, filepath, orig, readable_name, t_name, artist, album, status, next_order)
             )
-        logger.info(f"[Central DB] Added track '{filepath}' to playlist ID {playlist_id}")
+        logger.info(f"[Central DB] Added track '{filepath}' (status: {status}) to playlist ID {playlist_id}")
         return True
     except Exception as e:
         logger.error(f"[Central DB] Error adding track to playlist: {e}")
@@ -591,22 +669,126 @@ def remove_track_from_playlist(playlist_id: int, filepath: str, db_path: Optiona
             conn.close()
 
 
+def resolve_playlist_track(
+    playlist_id: int,
+    original_path: str,
+    resolved_filepath: str,
+    title: Optional[str] = None,
+    artist: Optional[str] = None,
+    album: Optional[str] = None,
+    track_id: Optional[int] = None,
+    db_path: Optional[str] = None
+) -> bool:
+    """Permanently marks an absent playlist track as present and updates its local filepath."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            if track_id is not None and track_id > 0:
+                conn.execute(
+                    """
+                    UPDATE playlist_tracks
+                    SET filepath = ?, status = 'present',
+                        title = COALESCE(?, title),
+                        artist = COALESCE(?, artist),
+                        album = COALESCE(?, album)
+                    WHERE id = ? AND playlist_id = ?
+                    """,
+                    (resolved_filepath, title, artist, album, track_id, playlist_id)
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE playlist_tracks
+                    SET filepath = ?, status = 'present',
+                        title = COALESCE(?, title),
+                        artist = COALESCE(?, artist),
+                        album = COALESCE(?, album)
+                    WHERE playlist_id = ? AND (original_path = ? OR filepath = ?)
+                    """,
+                    (resolved_filepath, title, artist, album, playlist_id, original_path, original_path)
+                )
+        logger.info(f"[Central DB] Resolved absent track in playlist {playlist_id} -> '{resolved_filepath}'")
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error resolving absent track: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_playlist_absent_tracks(playlist_id: Optional[int] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Retrieve absent tracks for a specific playlist, or all playlists if playlist_id is None."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cursor = conn.cursor()
+        if playlist_id is not None:
+            cursor.execute(
+                """
+                SELECT pt.id, pt.playlist_id, p.name as playlist_name,
+                       pt.filepath, pt.original_path, pt.readable_name,
+                       pt.title, pt.artist, pt.album, pt.status, pt.track_order, pt.added_at
+                FROM playlist_tracks pt
+                JOIN playlists p ON pt.playlist_id = p.id
+                WHERE pt.playlist_id = ? AND pt.status = 'absent'
+                ORDER BY pt.track_order ASC, pt.id ASC
+                """,
+                (playlist_id,)
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT pt.id, pt.playlist_id, p.name as playlist_name,
+                       pt.filepath, pt.original_path, pt.readable_name,
+                       pt.title, pt.artist, pt.album, pt.status, pt.track_order, pt.added_at
+                FROM playlist_tracks pt
+                JOIN playlists p ON pt.playlist_id = p.id
+                WHERE pt.status = 'absent'
+                ORDER BY p.name ASC, pt.track_order ASC, pt.id ASC
+                """
+            )
+        rows = [dict(row) for row in cursor.fetchall()]
+        for r in rows:
+            orig = r.get("original_path") or r.get("filepath") or ""
+            r["filename"] = os.path.basename(orig)
+            if not r.get("readable_name"):
+                r["readable_name"] = r.get("title") or r["filename"]
+            if not r.get("original_path"):
+                r["original_path"] = orig
+        return rows
+    except Exception as e:
+        logger.error(f"[Central DB] Error fetching absent tracks: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
 def get_playlist_tracks(playlist_id: int, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Retrieve all track filepaths in order for a playlist."""
+    """Retrieve all track filepaths and metadata in order for a playlist."""
     conn = None
     try:
         conn = get_connection(db_path)
         cursor = conn.cursor()
         cursor.execute(
             """
-            SELECT id, playlist_id, filepath, track_order, added_at
+            SELECT id, playlist_id, filepath, original_path, readable_name,
+                   title, artist, album, status, track_order, added_at
             FROM playlist_tracks
             WHERE playlist_id = ?
             ORDER BY track_order ASC, id ASC
             """,
             (playlist_id,)
         )
-        return [dict(row) for row in cursor.fetchall()]
+        tracks = []
+        for row in cursor.fetchall():
+            d = dict(row)
+            if not d.get("status"):
+                d["status"] = "present"
+            tracks.append(d)
+        return tracks
     except Exception as e:
         logger.error(f"[Central DB] Error fetching tracks for playlist ID {playlist_id}: {e}")
         return []
@@ -617,7 +799,7 @@ def get_playlist_tracks(playlist_id: int, db_path: Optional[str] = None) -> List
 
 # --- DELETED SONGS METHODS ---
 
-def add_deleted_song(record: Dict[str, Any], db_path: Optional[str] = None) -> bool:
+def add_deleted_song(record: SongRecord, db_path: Optional[str] = None) -> bool:
     """Insert a deleted song record into the centralized database."""
     conn = None
     try:
@@ -709,7 +891,7 @@ def clear_deleted_songs(db_path: Optional[str] = None) -> bool:
             conn.close()
 
 
-# --- AUDIO FINGERPRINT METHODS ---
+# --- AUDIO FINGERlogger.info METHODS ---
 
 def get_cached_fingerprint(
     filepath: str, file_size: int, file_mtime: float, db_path: Optional[str] = None
@@ -757,7 +939,7 @@ def save_cached_fingerprint(
         with conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO audio_fingerprints 
+                INSERT OR REPLACE INTO audio_fingerprints
                 (filepath, file_size, file_mtime, duration, fingerprint, created_at)
                 VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
@@ -800,3 +982,196 @@ def get_all_cached_fingerprints_map(
     return fp_map
 
 
+# --- LOCAL SONGS STORAGE & FAST QUERY METHODS ---
+
+def save_local_songs(songs: list[RestoredSongRecord], purge_missing: bool = True, db_path: Optional[str] = None) -> int:
+    """
+    Save or update scanned local music library songs in database/db.db.
+    Performs bulk upsert within an atomic transaction.
+    If purge_missing is True, deletes database entries whose files no longer exist on disk.
+    """
+    if not songs and not purge_missing:
+        return 0
+
+    sanitized = []
+    for s in (songs or []):
+        fp = s.get("filepath") or s.get("_data") or ""
+        if not fp:
+            continue
+        fn = s.get("filename") or os.path.basename(fp)
+        sanitized.append({
+            "filepath": fp,
+            "filename": fn,
+            "title": s.get("title") or os.path.splitext(fn)[0] or "Unknown",
+            "artist": s.get("artist") or "Unknown",
+            "album": s.get("album") or "Unknown",
+            "size": s.get("size") or 0,
+            "size_formatted": s.get("size_formatted") or "",
+            "mtime": float(s.get("mtime") or 0.0),
+            "mtime_str": str(s.get("mtime_str") or ""),
+            "ctime": float(s.get("ctime") or 0.0),
+            "ctime_str": str(s.get("ctime_str") or ""),
+            "duration_sec": float(s.get("duration_sec") or 0.0),
+            "duration_formatted": str(s.get("duration_formatted") or "00:00"),
+            "bitrate_kbps": str(s.get("bitrate_kbps") or "Unknown"),
+            "bitrate_val": int(s.get("bitrate_val") or 0),
+            "sample_rate_hz": str(s.get("sample_rate_hz") or "Unknown"),
+            "channels": str(s.get("channels") or "Stereo"),
+            "codec": str(s.get("codec") or ""),
+            "searchable_text": str(s.get("searchable_text") or f"{s.get('title','')} {s.get('artist','')} {s.get('album','')} {fn}".lower()),
+        })
+
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            if sanitized:
+                # Batch upsert songs
+                conn.executemany(
+                    """
+                    INSERT INTO local_songs (
+                        filepath, filename, title, artist, album, size, size_formatted,
+                        mtime, mtime_str, ctime, ctime_str, duration_sec, duration_formatted,
+                        bitrate_kbps, bitrate_val, sample_rate_hz, channels, codec, searchable_text
+                    ) VALUES (
+                        :filepath, :filename, :title, :artist, :album, :size, :size_formatted,
+                        :mtime, :mtime_str, :ctime, :ctime_str, :duration_sec, :duration_formatted,
+                        :bitrate_kbps, :bitrate_val, :sample_rate_hz, :channels, :codec, :searchable_text
+                    )
+                    ON CONFLICT(filepath) DO UPDATE SET
+                        filename = excluded.filename,
+                        title = excluded.title,
+                        artist = excluded.artist,
+                        album = excluded.album,
+                        size = excluded.size,
+                        size_formatted = excluded.size_formatted,
+                        mtime = excluded.mtime,
+                        mtime_str = excluded.mtime_str,
+                        ctime = excluded.ctime,
+                        ctime_str = excluded.ctime_str,
+                        duration_sec = excluded.duration_sec,
+                        duration_formatted = excluded.duration_formatted,
+                        bitrate_kbps = excluded.bitrate_kbps,
+                        bitrate_val = excluded.bitrate_val,
+                        sample_rate_hz = excluded.sample_rate_hz,
+                        channels = excluded.channels,
+                        codec = excluded.codec,
+                        searchable_text = excluded.searchable_text;
+                    """,
+                    sanitized
+                )
+
+            # Purge entries that were deleted on disk if requested
+            if purge_missing and sanitized:
+                valid_paths = set(s["filepath"] for s in sanitized)
+                cur = conn.execute("SELECT filepath FROM local_songs")
+                db_paths = [r[0] for r in cur.fetchall()]
+                missing = [p for p in db_paths if p not in valid_paths]
+                if missing:
+                    conn.executemany("DELETE FROM local_songs WHERE filepath = ?", [(p,) for p in missing])
+                    logger.info(f"[Central DB] Purged {len(missing)} missing audio files from local_songs.")
+
+        logger.info(f"[Central DB] Successfully saved/updated {len(sanitized)} songs in local_songs table.")
+        return len(sanitized)
+    except Exception as e:
+        logger.error(f"[Central DB] Error saving local songs: {e}")
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_stored_local_songs(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """
+    Retrieve all stored local songs from database/db.db sorted by mtime descending.
+    Returns fully formatted song dictionaries compatible with the frontend and scanner.
+    """
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cur = conn.execute("SELECT * FROM local_songs ORDER BY mtime DESC")
+        rows = cur.fetchall()
+        songs = []
+        for idx, r in enumerate(rows, 1):
+            s = {
+                "_id": idx,
+                "id": r["id"],
+                "filepath": r["filepath"],
+                "_data": r["filepath"],
+                "filename": r["filename"] or os.path.basename(r["filepath"]),
+                "title": r["title"] or "Unknown",
+                "artist": r["artist"] or "Unknown",
+                "album": r["album"] or "Unknown",
+                "size": r["size"] or 0,
+                "size_formatted": r["size_formatted"] or "",
+                "mtime": r["mtime"] or 0.0,
+                "mtime_str": r["mtime_str"] or "",
+                "ctime": r["ctime"] or 0.0,
+                "ctime_str": r["ctime_str"] or "",
+                "duration_sec": r["duration_sec"] or 0.0,
+                "duration_formatted": r["duration_formatted"] or "00:00",
+                "bitrate_kbps": r["bitrate_kbps"] or "Unknown",
+                "bitrate_val": r["bitrate_val"] or 0,
+                "sample_rate_hz": r["sample_rate_hz"] or "Unknown",
+                "channels": r["channels"] or "Stereo",
+                "codec": r["codec"] or "",
+                "searchable_text": r["searchable_text"] or f"{r['title']} {r['artist']} {r['album']} {r['filename']}".lower()
+            }
+            songs.append(s)
+        return songs
+    except Exception as e:
+        logger.error(f"[Central DB] Error retrieving stored local songs: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+
+def get_local_songs_count(db_path: Optional[str] = None) -> int:
+    """Return count of stored songs in database/db.db local_songs table."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        cur = conn.execute("SELECT COUNT(*) FROM local_songs")
+        row = cur.fetchone()
+        return row[0] if row else 0
+    except Exception as e:
+        logger.error(f"[Central DB] Error counting local songs: {e}")
+        return 0
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_stored_local_song(filepath: str, db_path: Optional[str] = None) -> bool:
+    """Delete a single song from local_songs table by filepath."""
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            conn.execute("DELETE FROM local_songs WHERE filepath = ?", (filepath,))
+        return True
+    except Exception as e:
+        logger.error(f"[Central DB] Error deleting local song '{filepath}': {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+def delete_stored_local_songs_batch(filepaths: List[str], db_path: Optional[str] = None) -> int:
+    """Delete multiple songs from local_songs table by filepaths."""
+    if not filepaths:
+        return 0
+    conn = None
+    try:
+        conn = get_connection(db_path)
+        with conn:
+            conn.executemany("DELETE FROM local_songs WHERE filepath = ?", [(p,) for p in filepaths])
+        return len(filepaths)
+    except Exception as e:
+        logger.error(f"[Central DB] Error batch deleting local songs: {e}")
+        return 0
+    finally:
+        if conn:
+            conn.close()

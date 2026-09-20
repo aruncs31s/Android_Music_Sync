@@ -30,52 +30,23 @@ FIELD_SPLIT_PATTERN = re.compile(
     r", (?=(?:" + "|".join(re.escape(k) for k in PROJECTION_KEYS) + r")=)"
 )
 
+from utils.time import format_ts as _format_ts, format_duration as _format_duration, format_size as _format_size
+
+
 def format_timestamp(ts_val: Any) -> str:
     """Format Unix timestamp in seconds to YYYY-MM-DD HH:MM:SS format."""
-    if not ts_val or str(ts_val).strip() in ("NULL", "None", ""):
-        return "Unknown"
-    try:
-        ts = int(float(ts_val))
-        if ts <= 0:
-            return "Unknown"
-        dt = datetime.datetime.fromtimestamp(ts)
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return "Unknown"
+    return _format_ts(ts_val, default="Unknown")
+
 
 def format_duration(ms_str: Optional[str]) -> str:
     """Format duration in milliseconds to MM:SS or HH:MM:SS format."""
-    if not ms_str or ms_str == "NULL":
-        return "00:00"
-    try:
-        ms = int(ms_str)
-        seconds = ms // 1000
-        minutes = seconds // 60
-        secs = seconds % 60
-        hours = minutes // 60
-        mins = minutes % 60
-        if hours > 0:
-            return f"{hours:02d}:{mins:02d}:{secs:02d}"
-        return f"{mins:02d}:{secs:02d}"
-    except (ValueError, TypeError):
-        return "00:00"
+    return _format_duration(ms_str, is_ms=True)
+
 
 def format_size(bytes_str: Optional[str]) -> str:
     """Format size in bytes to human readable string (KB, MB, GB)."""
-    if not bytes_str or bytes_str == "NULL":
-        return "0 B"
-    try:
-        b = int(bytes_str)
-        if b < 1024:
-            return f"{b} B"
-        elif b < 1024 * 1024:
-            return f"{b / 1024:.1f} KB"
-        elif b < 1024 * 1024 * 1024:
-            return f"{b / (1024 * 1024):.1f} MB"
-        else:
-            return f"{b / (1024 * 1024 * 1024):.2f} GB"
-    except (ValueError, TypeError):
-        return "0 B"
+    return _format_size(bytes_str)
+
 
 def parse_song_line(line: str) -> Optional[Dict[str, Any]]:
     """

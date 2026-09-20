@@ -1,5 +1,5 @@
 """
-Audio Fingerprinting Module for Antigravity Music Manager.
+Audio Fingerlogger.infoing Module for Antigravity Music Manager.
 Uses the Chromaprint 'fpcalc' CLI utility to generate acoustic fingerprints
 from audio waveforms, enabling accurate duplicate detection regardless of
 file format, bitrates, filenames, or tag metadata.

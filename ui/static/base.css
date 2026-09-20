@@ -446,6 +446,20 @@ tr:hover {
   border-radius: 8px;
 }
 
+/* Global Responsive Column Helpers */
+@media (max-width: 1024px) {
+  .col-hide-lg { display: none !important; }
+}
+@media (max-width: 860px) {
+  .col-hide-md { display: none !important; }
+}
+@media (max-width: 768px) {
+  .col-hide-sm { display: none !important; }
+}
+@media (max-width: 540px) {
+  .col-hide-xs { display: none !important; }
+}
+
 /* Modals - Clean Flat Backdrop and Card */
 .modal-backdrop {
   position: fixed;

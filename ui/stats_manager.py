@@ -16,7 +16,7 @@ import config_manager
 import audio_metadata
 import over_ip.song_scanner as song_scanner
 import over_ip.client as ip_client
-import adb_manager
+import utils.android.adb.adb_manager as adb_manager
 import ui.db_manager as ui_db
 import database.db_manager as central_db
 import audio_fingerprint
@@ -205,10 +205,9 @@ def detect_duplicate_songs(
         title = (s.get("title") or "").strip().lower()
         artist = (s.get("artist") or "").strip().lower()
         filename = (s.get("filename") or os.path.basename(s.get("filepath", ""))).strip().lower()
-        display_name = s.get("filename") or os.path.basename(filepath or "track")
 
-        if not use_fingerprint:
-            _emit(f"[TAG]   ({idx}/{total_songs}) {display_name}")
+        if not use_fingerprint and (idx == 1 or idx % 25 == 0):
+            _emit(f"[TAG]   ({idx}/{total_songs}) processing tag & filename matching...")
 
         if title and title != "unknown":
             key = f"{artist} - {title}" if artist and artist != "unknown" else title
