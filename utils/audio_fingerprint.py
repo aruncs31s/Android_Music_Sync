@@ -9,7 +9,7 @@ import json
 import os
 import shutil
 import subprocess
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 from utils import get_logger
 
@@ -25,7 +25,7 @@ def is_fpcalc_available() -> bool:
 
 def generate_audio_fingerprint(
     filepath: str, length: int = 120, timeout: int = 20
-) -> Optional[Dict[str, Any]]:
+) -> dict[str, Any] | None:
     """
     Generate an acoustic fingerprint for an audio file using fpcalc.
 
@@ -38,7 +38,9 @@ def generate_audio_fingerprint(
         Dict with 'duration' (float) and 'fingerprint' (str), or None on failure.
     """
     if not is_fpcalc_available():
-        logger.warning("[AudioFingerprint] 'fpcalc' executable not found on system PATH.")
+        logger.warning(
+            "[AudioFingerprint] 'fpcalc' executable not found on system PATH."
+        )
         return None
 
     if not os.path.isfile(filepath):
@@ -46,7 +48,9 @@ def generate_audio_fingerprint(
         return None
 
     try:
-        logger.debug(f"[AudioFingerprint] Generating fingerprint for {filepath} with length={length}s and timeout={timeout}s")
+        logger.debug(
+            f"[AudioFingerprint] Generating fingerprint for {filepath} with length={length}s and timeout={timeout}s"
+        )
         cmd = ["fpcalc", "-json", "-length", str(length), filepath]
         res = subprocess.run(
             cmd,
@@ -67,26 +71,33 @@ def generate_audio_fingerprint(
                     "fingerprint": str(fingerprint).strip(),
                 }
             else:
-                logger.debug(f"[AudioFingerprint] Incomplete output from fpcalc for {filepath}")
+                logger.debug(
+                    f"[AudioFingerprint] Incomplete output from fpcalc for {filepath}"
+                )
         else:
             logger.debug(
                 f"[AudioFingerprint] fpcalc returned non-zero code {res.returncode} for {filepath}: {res.stderr.strip()}"
             )
     except subprocess.TimeoutExpired:
-        logger.warning(f"[AudioFingerprint] fpcalc timed out after {timeout}s for {filepath}")
+        logger.warning(
+            f"[AudioFingerprint] fpcalc timed out after {timeout}s for {filepath}"
+        )
     except Exception as err:
-        logger.error(f"[AudioFingerprint] Error generating fingerprint for {filepath}: {err}")
+        logger.error(
+            f"[AudioFingerprint] Error generating fingerprint for {filepath}: {err}"
+        )
 
     return None
 
 
-def are_fingerprints_equal(fp1: Optional[str], fp2: Optional[str]) -> bool:
+def are_fingerprints_equal(fp1: str| None, fp2: str | None) -> bool:
     """
     Check if two Chromaprint fingerprints are identical.
     """
     if not fp1 or not fp2:
         return False
     return fp1.strip() == fp2.strip()
+
 
 if __name__ == "__main__":
     logger.info(f"fpcalc available: {is_fpcalc_available()}")

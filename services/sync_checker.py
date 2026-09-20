@@ -8,9 +8,8 @@ import os
 import re
 from typing import Any
 
-import audio_metadata
-import fuzzy_matcher
-import hide_list_db
+from utils import audio_metadata, fuzzy_matcher
+import database.hide_list_db as hide_list_db
 from repositories import device_repo, song_repo
 from utils import get_logger
 from utils import normalize_string as normalize_str
