@@ -3,6 +3,17 @@ import argparse
 
 
 def parse_args():
+    argv = sys.argv[1:]
+    return _parse(list(argv))
+
+
+def _parse(argv):
+    # Context-scoped '-d': inside --dupes mode, '-d' means "immediate delete",
+    # NOT device (--device) selection. The real option is --dupes-delete; the
+    # shim rewrites '-d' so the existing --device flag keeps its '-d' alias.
+    if "--dupes" in argv:
+        argv = ["--dupes-delete" if a == "-d" else a for a in argv]
+
     parser = argparse.ArgumentParser(
         description="Query, fuzzy search, download, sync, reverse-sync, Over-IP sync, and Web Dashboard.",
         formatter_class=argparse.RawTextHelpFormatter,
@@ -28,10 +39,28 @@ def parse_args():
   7. Unhide a file (or 'all') from SQLite database:
      python app.py --unhide all
 
-  8. Include hidden files during sync:
+8. Include hidden files during sync:
      python app.py --sync --show-hidden
 
-  6. Launch Interactive Main Menu:
+   9. Detect and report duplicate songs:
+     python app.py --dupes
+
+  10. Interactive duplicate cleanup (choose which copies to keep/delete):
+     python app.py --dupes -i
+
+  11. Auto-delete all but one copy per duplicate cluster:
+     python app.py --dupes -d
+
+  12. Duplicate detection using acoustic audio fingerprinting:
+     python app.py --dupes -af
+
+  13. Interactive fingerprinted duplicate cleanup:
+     python app.py --dupes -i -af
+
+  14. Auto-delete with fingerprinting and auto-confirm:
+     python app.py --dupes -d -af -y
+
+   6. Launch Interactive Main Menu:
      python app.py
 """
     )
@@ -176,7 +205,31 @@ def parse_args():
         default=None,
         help="Limit number of search results printed in non-interactive mode."
     )
+    parser.add_argument(
+        "--dupes",
+        action="store_true",
+        help="Detect duplicate songs across the local music library and print a report."
+    )
+    parser.add_argument(
+        "--dupes-delete",
+        action="store_true",
+        help="With --dupes: immediately delete all but one copy per duplicate cluster (short form: -d)."
+    )
+    parser.add_argument(
+        "-af", "--dupes-fingerprint",
+        action="store_true",
+        dest="dupes_fingerprint",
+        help="With --dupes: use acoustic audio fingerprinting for duplicate detection."
+    )
 
-    return parser.parse_args()
+    args = parser.parse_args(argv)
+
+    if args.dupes and args.dupes_delete and args.interactive:
+        parser.error(
+            "--dupes -d (immediate delete) and -i/--interactive cannot be used together. "
+            "Pick one mode."
+        )
+
+    return args
 
 
