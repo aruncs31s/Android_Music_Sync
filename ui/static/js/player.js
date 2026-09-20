@@ -935,6 +935,11 @@ function handleSessionCommand(payload) {
       break;
     case 'transfer':
       // Play a specific song (streamed from remote peer or from local path)
+      window._currentTrack = {
+        title: payload.title || '',
+        artist: payload.artist || '',
+        filepath: payload.filepath || ''
+      };
       if (payload.stream_url) {
         player.src = payload.stream_url;
         player.load();

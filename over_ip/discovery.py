@@ -126,8 +126,28 @@ class PeerDiscoveryService:
                 if not self._stop_event.is_set():
                     logger.debug(f"[Discovery] Listener error: {e}")
 
+    def _get_broadcast_destinations(self) -> List[str]:
+        dests = ["255.255.255.255"]
+        try:
+            import subprocess, re
+            output = subprocess.check_output(["ifconfig"], text=True)
+            for b in re.findall(r"broadcast\s+(\d+\.\d+\.\d+\.\d+)", output):
+                if b not in dests:
+                    dests.append(b)
+        except Exception:
+            pass
+        try:
+            hosts = ui_db.get_stored_ip_hosts()
+            for h in hosts:
+                ip = h.get("ip_address")
+                if ip and ip not in dests:
+                    dests.append(ip)
+        except Exception:
+            pass
+        return dests
+
     def broadcast_announce(self):
-        """Send a single announcement broadcast to 255.255.255.255."""
+        """Send an announcement broadcast to subnet broadcasts and known peers."""
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -139,7 +159,11 @@ class PeerDiscoveryService:
                 "hostname": socket.gethostname(),
                 "port": self.server_port
             }).encode("utf-8")
-            sock.sendto(payload, ("255.255.255.255", DISCOVERY_PORT))
+            for dest in self._get_broadcast_destinations():
+                try:
+                    sock.sendto(payload, (dest, DISCOVERY_PORT))
+                except Exception:
+                    pass
             sock.close()
             logger.info(f"[Discovery] Broadcasted desktop announcement on UDP :{DISCOVERY_PORT}")
         except Exception as e:
@@ -164,7 +188,11 @@ class PeerDiscoveryService:
                 "port": self.server_port
             }).encode("utf-8")
 
-            sock.sendto(probe, ("255.255.255.255", DISCOVERY_PORT))
+            for dest in self._get_broadcast_destinations():
+                try:
+                    sock.sendto(probe, (dest, DISCOVERY_PORT))
+                except Exception:
+                    pass
             start_time = time.time()
 
             while time.time() - start_time < timeout:
