@@ -3,48 +3,59 @@ Multi-Folder Song Scanner for Over-IP HTTP Synchronization.
 Scans multiple configured folder paths recursively, extracts audio metadata,
 and sorts results by file modification timestamp (mtime descending / newest first).
 """
-import os
-import time
+
 import datetime
-from typing import List, Dict, Any
+import os
+from typing import Any
 
 import audio_metadata
 from utils import get_logger
 
 logger = get_logger()
 
-# Emit at most one progress line per this many files to avoid flooding the
-# SSE client with per-file events (which froze the browser during large scans).
+from utils.time import format_ts as _format_ts
+
 PROGRESS_EVERY = 25
 
 
 def format_mtime(ts: float) -> str:
     """Format Unix timestamp as ISO-like date string."""
-    try:
-        dt = datetime.datetime.fromtimestamp(ts)
-        return dt.strftime("%Y-%m-%d %H:%M:%S")
-    except Exception:
-        return ""
+    return _format_ts(ts, default="")
 
 
 def scan_songs_from_paths(
-    folder_paths: List[str],
-    audio_extensions: List[str] = None,
+    folder_paths: list[str],
+    audio_extensions: list[str] = None,
     progress_cb=None,
-) -> List[Dict[str, Any]]:
+    existing_metadata_map: dict[str, dict[str, Any]] |None = None,
+) -> list[dict[str, Any]]:
     """
     Recursively scan a list of local folder paths for audio files.
     Returns list of song dictionaries sorted by modification time (mtime descending).
     Optional progress_cb(msg: str) reports files as they are discovered.
+    If existing_metadata_map is provided (or loaded from SQLite), unchanged files
+    (matching mtime & size) reuse cached metadata without slow mutagen disk parsing.
     """
     if audio_extensions is None:
         audio_extensions = [".mp3", ".m4a", ".flac", ".wav", ".ogg", ".opus", ".aac"]
 
+    if existing_metadata_map is None:
+        try:
+            import database.db_manager as central_db
+
+            stored = central_db.get_stored_local_songs()
+            if stored:
+                existing_metadata_map = {s["filepath"]: s for s in stored}
+        except Exception:
+            existing_metadata_map = None
+
     valid_extensions = set(ext.lower() for ext in audio_extensions)
-    songs: List[Dict[str, Any]] = []
+    songs: list[dict[str, Any]] = []
 
     seen_paths = set()
-    logger.info(f"Starting song library scan across {len(folder_paths)} configured paths...")
+    logger.info(
+        f"Starting song library scan across {len(folder_paths)} configured paths..."
+    )
 
     for folder in folder_paths:
         if not folder or not os.path.exists(folder):
@@ -94,6 +105,25 @@ def scan_songs_from_paths(
                         ctime = 0.0
                         size = 0
 
+                    # Fast path: if file mtime and size are unchanged in SQLite, reuse metadata
+                    if existing_metadata_map and full_path in existing_metadata_map:
+                        existing = existing_metadata_map[full_path]
+                        if (
+                            abs(existing.get("mtime", 0.0) - mtime) < 0.01
+                            and existing.get("size") == size
+                        ):
+                            song = dict(existing)
+                            song["_id"] = len(songs) + 1
+                            songs.append(song)
+                            if progress_cb and len(songs) % PROGRESS_EVERY == 0:
+                                try:
+                                    progress_cb(
+                                        f"[SCAN] Indexed {len(songs)} audio files (verified: {file})..."
+                                    )
+                                except Exception as e:
+                                    logger.warn(f"Error occurred while updating progress: {e}")
+                            continue
+
                     meta = audio_metadata.extract_audio_metadata(full_path)
 
                     filename = os.path.basename(full_path)
@@ -105,10 +135,14 @@ def scan_songs_from_paths(
                     bitrate_val = 0
                     try:
                         if "kbps" in str(bitrate_str):
-                            bitrate_val = int(str(bitrate_str).replace("kbps", "").strip())
+                            bitrate_val = int(
+                                str(bitrate_str).replace("kbps", "").strip()
+                            )
                     except Exception:
                         bitrate_val = 0
-                    logger.debug(f"Scanned file: {full_path} | Title: {title} | Artist: {artist} | Album: {album} | Size: {size} bytes | MTime: {mtime} | CTime: {ctime}")
+                    logger.debug(
+                        f"Scanned file: {full_path} | Title: {title} | Artist: {artist} | Album: {album} | Size: {size} bytes | MTime: {mtime} | CTime: {ctime}"
+                    )
                     song = {
                         "_id": len(songs) + 1,
                         "title": title,
@@ -118,7 +152,9 @@ def scan_songs_from_paths(
                         "filepath": full_path,
                         "filename": filename,
                         "size": size,
-                        "size_formatted": meta.get("size", f"{size / (1024*1024):.1f} MB"),
+                        "size_formatted": meta.get(
+                            "size", f"{size / (1024 * 1024):.1f} MB"
+                        ),
                         "mtime": mtime,
                         "mtime_str": format_mtime(mtime),
                         "ctime": ctime,
@@ -130,20 +166,26 @@ def scan_songs_from_paths(
                         "sample_rate_hz": meta.get("sample_rate", "Unknown"),
                         "channels": meta.get("channels", "Stereo"),
                         "codec": meta.get("codec", ext.lstrip(".")),
-                        "searchable_text": f"{title} {artist} {album} {filename}".lower()
+                        "searchable_text": f"{title} {artist} {album} {filename}".lower(),
                     }
                     songs.append(song)
 
-                    if progress_cb and scanned_in_folder % PROGRESS_EVERY == 0:
+                    if progress_cb and len(songs) % PROGRESS_EVERY == 0:
                         try:
-                            progress_cb(f"[SCAN]  Scanned {scanned_in_folder} audio files in {folder_abs}...")
+                            progress_cb(
+                                f"[SCAN] Scanned {len(songs)} audio files (current: {filename})..."
+                            )
                         except Exception:
                             pass
 
-        logger.info(f"Finished scanning '{folder_abs}': Found {scanned_in_folder} audio files.")
+        logger.info(
+            f"Finished scanning '{folder_abs}': Found {scanned_in_folder} audio files."
+        )
         if progress_cb:
             try:
-                progress_cb(f"[SCAN]  Finished folder: {folder_abs} — {scanned_in_folder} audio files.")
+                progress_cb(
+                    f"[SCAN]  Finished folder: {folder_abs} — {scanned_in_folder} audio files."
+                )
             except Exception:
                 pass
 

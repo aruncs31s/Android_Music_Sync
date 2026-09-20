@@ -1,0 +1,70 @@
+<!-- Custom Audio Player Footer -->
+<div id="audio-player-bar" class="audio-player-bar" style="display: none;">
+  <div class="audio-player-inner">
+    <!-- Hidden Native Audio Element (managed programmatically) -->
+    <audio id="audio-player" preload="metadata"></audio>
+
+    <!-- Track Metadata Info -->
+    <div class="player-info">
+      <span class="player-badge-icon">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+      </span>
+      <div class="player-text-wrap">
+        <div class="now-playing-title" id="player-title">Track Title</div>
+        <div class="now-playing-subtitle" style="display: flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; color: var(--text-muted);">
+          <span id="player-artist" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;">Artist</span>
+          <span id="player-quality-badge" class="badge badge-yellow text-tabular" style="font-size: 0.68rem; padding: 0.1rem 0.35rem; display: none;">320k</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Center Controls & Scrubber -->
+    <div class="player-center">
+      <div class="player-transport-controls">
+        <button class="player-ctrl-btn" id="btn-player-prev" onclick="playPreviousTrack()" title="Previous Track (J)">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2.5"/></svg>
+        </button>
+        <button class="player-ctrl-btn" id="btn-player-seek-back" onclick="seekRelative(-5)" title="Rewind 5s (←)">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+        </button>
+        <button class="player-play-btn" id="btn-player-playpause" onclick="togglePlayPause()" title="Play / Pause (Space)">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </button>
+        <button class="player-ctrl-btn" id="btn-player-seek-fwd" onclick="seekRelative(5)" title="Forward 5s (→)">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+        <button class="player-ctrl-btn" id="btn-player-next" onclick="playNextTrack()" title="Next Track (K)">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2.5"/></svg>
+        </button>
+        <button class="player-ctrl-btn" id="btn-player-loop" onclick="togglePlayerLoop()" title="Toggle Repeat Mode">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+        </button>
+        <button class="player-ctrl-btn" id="btn-player-shuffle" onclick="toggleShuffle()" title="Toggle Shuffle (S)">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+        </button>
+        <button class="player-ctrl-btn" id="btn-player-like" onclick="toggleCurrentTrackLike()" title="Like / Unlike (L)">
+          <svg id="player-like-icon" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+        </button>
+      </div>
+
+      <div class="player-scrubber-wrap">
+        <span class="player-time" id="player-current-time">0:00</span>
+        <div class="player-slider-track" style="flex: 1; position: relative; display: flex; align-items: center;">
+          <input type="range" id="player-scrubber" class="player-slider" min="0" max="100" value="0" step="0.1" oninput="onScrubberInput(this.value)" onchange="onScrubberChange(this.value)">
+        </div>
+        <span class="player-time" id="player-total-time">0:00</span>
+      </div>
+    </div>
+
+    <!-- Right Controls: Volume & Close -->
+    <div class="player-side-controls">
+      <button class="player-ctrl-btn" id="btn-player-mute" onclick="togglePlayerMute()" title="Mute / Unmute (M)">
+        <svg id="player-vol-icon" class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+      </button>
+      <input type="range" id="player-volume" class="player-slider volume-slider" min="0" max="1" step="0.02" value="1" oninput="onVolumeInput(this.value)" title="Volume">
+      <button class="player-ctrl-btn player-close-btn" onclick="closeAudioPlayer()" title="Close Player (Esc)">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,2 +1,9 @@
 __pycache__
 songs
+database/db.db
+.vscode/settings.json
+config.json
+database/db.db-shm
+database/db.db-wal
+logs/
+*.log

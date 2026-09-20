@@ -1,12 +1,17 @@
 """
 Device Repository module with Redis caching for connected ADB & Over-IP devices.
 """
+import os
 from typing import List, Dict, Any, Optional
 
 from repositories.base_repository import BaseRepository
+from repositories.exceptions import ValidationError
 import ui.db_manager as ui_db
 import ui.stats_manager as ui_stats
 import over_ip.db as over_ip_db
+from device_providers.registry import DeviceProviderRegistry
+from services.audio_transcoder import AudioTranscoder
+from model import DeviceRecord, DeviceType
 from utils import get_logger
 
 logger = get_logger()
@@ -30,7 +35,19 @@ class DeviceRepository(BaseRepository):
             logger.info("[DeviceRepository] Redis Cache Hit: Loaded IP hosts.")
             return cached
 
-        hosts = ui_db.get_stored_ip_hosts()
+        raw_hosts = ui_db.get_stored_ip_hosts()
+        hosts = [
+            DeviceRecord(
+                serial=r.get("ip_address", ""),
+                description=r.get("alias", "") or r.get("ip_address", ""),
+                device_type=DeviceType.OVER_IP.value,
+                is_online=bool(r.get("is_online", 1)),
+                last_seen=r.get("last_seen"),
+                ip_address=r.get("ip_address"),
+                port=r.get("port", 5000)
+            ).to_dict()
+            for r in raw_hosts
+        ]
         self._cache_set(self.CACHE_KEY_IP_HOSTS, hosts)
         return hosts
 
@@ -64,147 +81,33 @@ class DeviceRepository(BaseRepository):
         Returns a dictionary containing device metadata and the list of song dicts.
         """
         device_id = (device_id or "local").strip()
+        cache_key = f"cache:device_songs:{device_id.replace(':', '_')}"
 
-        # 1. Local Storage
-        if device_id in ("local", "default", ""):
-            from repositories import song_repo
-            songs = song_repo.get_all_songs(force_refresh=force_refresh, progress_cb=progress_cb)
-            return {
-                "device_id": "local",
-                "device_name": "Local Music Folders",
-                "device_type": "Local Storage",
-                "count": len(songs),
-                "songs": songs
-            }
+        if not force_refresh:
+            cached = self._cache_get(cache_key)
+            if cached is not None:
+                logger.info(f"[DeviceRepository] Cache Hit: Loaded songs for {device_id}.")
+                return cached
 
-        # 2. ADB Device
-        if device_id.startswith("adb_") or device_id.startswith("adb:"):
-            serial = device_id.split("_", 1)[-1] if "_" in device_id else device_id.split(":", 1)[-1]
-            cache_key = f"cache:device_songs:adb_{serial}"
-            if not force_refresh:
-                cached = self._cache_get(cache_key)
-                if cached is not None:
-                    logger.info(f"[DeviceRepository] Cache Hit: Loaded ADB songs for {serial}.")
-                    return cached
+        provider = DeviceProviderRegistry.get_provider(device_id)
+        info = provider.get_device_info()
+        songs = provider.get_songs(force_refresh=force_refresh, progress_cb=progress_cb)
 
-            import config_manager
-            import adb_manager
-            import song_parser
-
-            cfg = config_manager.load_config()
-            redis_cfg = self._get_redis_config()
-            songs = []
-            model = serial
-            try:
-                adb_devs = adb_manager.list_adb_devices()
-                for d in adb_devs:
-                    if d.get("serial") == serial:
-                        model = d.get("model") or serial
-                        break
-            except Exception:
-                pass
-
-            if progress_cb:
-                try:
-                    progress_cb(f"[START] Querying music library from ADB device [{serial}] ({model})...")
-                except Exception:
-                    pass
-
-            try:
-                raw_out = adb_manager.query_songs_from_device(serial, redis_cfg=redis_cfg, refresh_cache=force_refresh)
-                songs = song_parser.parse_songs(raw_out)
-                logger.info(f"[DeviceRepository] Successfully queried {len(songs)} songs from ADB device [{serial}].")
-                if progress_cb:
-                    try:
-                        progress_cb(f"[DONE] Found {len(songs)} song(s) on ADB device [{serial}].")
-                    except Exception:
-                        pass
-            except Exception as e:
-                logger.error(f"[DeviceRepository] Failed to query songs from ADB device {serial}: {e}")
-                if progress_cb:
-                    try:
-                        progress_cb(f"[ERROR] Failed to query ADB device: {e}")
-                    except Exception:
-                        pass
-
-            result = {
-                "device_id": device_id,
-                "device_name": f"Android ADB: {model}",
-                "device_type": "ADB USB/Wi-Fi",
-                "serial": serial,
-                "count": len(songs),
-                "songs": songs
-            }
-            self._cache_set(cache_key, result)
-            return result
-
-        # 3. Over-IP Peer
-        if device_id.startswith("ip_") or device_id.startswith("ip:"):
-            ip_addr = device_id.split("_", 1)[-1] if "_" in device_id else device_id.split(":", 1)[-1]
-            cache_key = f"cache:device_songs:ip_{ip_addr}"
-            if not force_refresh:
-                cached = self._cache_get(cache_key)
-                if cached is not None:
-                    logger.info(f"[DeviceRepository] Redis Cache Hit: Loaded Over-IP songs for {ip_addr}.")
-                    return cached
-
-            import config_manager
-            import over_ip.client as ip_client
-
-            stored = self.get_stored_ip_hosts()
-            port = 5000
-            alias = ip_addr
-            for h in stored:
-                if h["ip_address"] == ip_addr:
-                    port = h.get("port", 5000)
-                    alias = h.get("alias") or ip_addr
-                    break
-
-            redis_cfg = self._get_redis_config()
-            if progress_cb:
-                try:
-                    progress_cb(f"[START] Fetching songs from Over-IP host {ip_addr}:{port} ({alias})...")
-                except Exception:
-                    pass
-            try:
-                songs = ip_client.get_remote_songs(ip_addr, port=port, redis_cfg=redis_cfg, refresh=force_refresh)
-                logger.info(f"[DeviceRepository] Successfully fetched {len(songs)} songs from Over-IP host {ip_addr}.")
-                if progress_cb:
-                    try:
-                        progress_cb(f"[DONE] Found {len(songs)} song(s) on Over-IP host {ip_addr}.")
-                    except Exception:
-                        pass
-            except Exception as e:
-                logger.error(f"[DeviceRepository] Failed to fetch songs from Over-IP host {ip_addr}: {e}")
-                if progress_cb:
-                    try:
-                        progress_cb(f"[ERROR] Failed to fetch songs from Over-IP host {ip_addr}: {e}")
-                    except Exception:
-                        pass
-                songs = []
-
-            result = {
-                "device_id": device_id,
-                "device_name": f"Over-IP Peer: {alias}",
-                "device_type": "Over-IP HTTP",
-                "ip": ip_addr,
-                "port": port,
-                "count": len(songs),
-                "songs": songs
-            }
-            self._cache_set(cache_key, result)
-            return result
-
-        # Fallback to local
-        from repositories import song_repo
-        songs = song_repo.get_all_songs(force_refresh=force_refresh, progress_cb=progress_cb)
-        return {
+        result = {
             "device_id": device_id,
-            "device_name": device_id,
-            "device_type": "Storage",
+            "device_name": info.get("device_name", device_id),
+            "device_type": info.get("device_type", "Connected Device"),
             "count": len(songs),
             "songs": songs
         }
+        if "serial" in info:
+            result["serial"] = info["serial"]
+        if "ip" in info:
+            result["ip"] = info["ip"]
+            result["port"] = info.get("port", 5000)
+
+        self._cache_set(cache_key, result)
+        return result
 
     def delete_device_song(
         self,
@@ -217,65 +120,19 @@ class DeviceRepository(BaseRepository):
         Delete a song from a connected device (Local, ADB, or Over-IP peer)
         and invalidate relevant caches.
         """
-        import os
         if not filepath:
             return {"status": "error", "message": "Missing filepath parameter", "code": 400}
 
-        # 1. Local Storage
-        if not device_id or device_id == "local":
-            from repositories import song_repo
-            return song_repo.delete_song(filepath)
+        device_id = (device_id or "local").strip()
+        provider = DeviceProviderRegistry.get_provider(device_id)
+        del_res = provider.delete_song(filepath_or_id=filepath, filename=filename)
 
-        # 2. ADB Device
-        if device_id.startswith("adb_") or device_id.startswith("adb:"):
-            serial = device_id.split("_", 1)[-1] if "_" in device_id else device_id.split(":", 1)[-1]
-            import adb_manager
-            redis_cfg = self._get_redis_config()
-            try:
-                res = adb_manager.delete_song_from_device(
-                    serial=serial,
-                    filepath=filepath,
-                    song_id=song_id,
-                    redis_cfg=redis_cfg
-                )
-                # Invalidate device cache keys
-                self._cache_delete(f"cache:device_songs:adb_{serial}")
-                self._cache_delete(f"cache:device_songs:adb:{serial}")
-                self._cache_delete("cache:devices:summary")
-                self._cache_delete("cache:dashboard:stats")
+        # Invalidate caches
+        self._cache_delete(f"cache:device_songs:{device_id.replace(':', '_')}")
+        self._cache_delete("cache:devices:summary")
+        self._cache_delete("cache:dashboard:stats")
 
-                # Remove from synced_files history if present
-                clean_filename = filename or os.path.basename(filepath)
-                ui_db.remove_synced_file(serial, clean_filename)
-
-                logger.info(f"[DeviceRepository] Successfully deleted song '{filepath}' from ADB device [{serial}].")
-                return res
-            except Exception as e:
-                logger.error(f"[DeviceRepository] Failed to delete song from ADB device [{serial}]: {e}")
-                return {"status": "error", "message": str(e), "code": 500}
-
-        # 3. Over-IP Peer
-        if device_id.startswith("ip_") or device_id.startswith("ip:"):
-            ip_addr = device_id.split("_", 1)[-1] if "_" in device_id else device_id.split(":", 1)[-1]
-            import over_ip.client as ip_client
-            stored = self.get_stored_ip_hosts()
-            port = 5000
-            for h in stored:
-                if h["ip_address"] == ip_addr:
-                    port = h.get("port", 5000)
-                    break
-            try:
-                res = ip_client.delete_remote_song(ip_addr, filepath, port=port)
-                self._cache_delete(f"cache:device_songs:ip_{ip_addr}")
-                self._cache_delete(f"cache:device_songs:ip:{ip_addr}")
-                self._cache_delete("cache:devices:summary")
-                self._cache_delete("cache:dashboard:stats")
-                return res
-            except Exception as e:
-                logger.error(f"[DeviceRepository] Failed to delete song from Over-IP peer [{ip_addr}]: {e}")
-                return {"status": "error", "message": str(e), "code": 500}
-
-        return {"status": "error", "message": f"Unsupported device: {device_id}", "code": 400}
+        return del_res.to_dict()
 
     def delete_device_songs_batch(
         self,
@@ -285,11 +142,11 @@ class DeviceRepository(BaseRepository):
         """
         Delete multiple audio files from a connected device in batch.
         """
+        device_id = (device_id or "local").strip()
         if not device_id or device_id == "local":
             from repositories import song_repo
             return song_repo.delete_songs_batch(filepaths)
 
-        # For ADB or Over-IP devices, delete iteratively
         deleted_count = 0
         failed = []
         for fp in filepaths:
@@ -311,80 +168,49 @@ class DeviceRepository(BaseRepository):
         device_id: str,
         local_filepath: str,
         remote_dir: Optional[str] = None,
-        force: bool = False
+        force: bool = False,
+        target_bitrate: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Push or upload a single local audio track to a target device (ADB or Over-IP peer).
+        Supports on-the-fly audio downconversion if target_bitrate is provided.
         """
-        import os
         if not local_filepath or not os.path.exists(local_filepath):
             return {"status": "error", "message": f"Local file not found: {local_filepath}", "code": 404}
 
         abs_path = os.path.abspath(local_filepath)
         filename = os.path.basename(abs_path)
+        device_id = (device_id or "local").strip()
+        provider = DeviceProviderRegistry.get_provider(device_id)
 
-        # 1. ADB Device
-        if device_id.startswith("adb_") or device_id.startswith("adb:"):
-            serial = device_id.split("_", 1)[-1] if "_" in device_id else device_id.split(":", 1)[-1]
-            import adb_pusher
-            import config_manager
-            cfg = config_manager.load_config()
-            target_dir = remote_dir or cfg.get("remote_adb_folder", "/storage/emulated/0/Music/ADB")
-            redis_cfg = self._get_redis_config()
+        try:
+            with AudioTranscoder.managed_transcode(abs_path, target_bitrate_kbps=target_bitrate) as (file_to_send, was_transcoded):
+                push_res = provider.push_song(file_to_send, remote_dir=remote_dir, filename=filename)
 
-            try:
-                success = adb_pusher.push_song_to_device(serial, abs_path, target_dir, redis_cfg=redis_cfg)
-                if not success:
-                    return {"status": "error", "message": f"Failed to push {filename} to ADB device [{serial}]", "code": 500}
-
+            if push_res.success:
                 # Invalidate caches
-                self._cache_delete(f"cache:device_songs:adb_{serial}")
-                self._cache_delete(f"cache:device_songs:adb:{serial}")
+                self._cache_delete(f"cache:device_songs:{device_id.replace(':', '_')}")
                 self._cache_delete("cache:devices:summary")
                 self._cache_delete("cache:dashboard:stats")
 
-                dest_path = f"{target_dir}/{filename}"
-                logger.info(f"[DeviceRepository] Successfully pushed '{filename}' to ADB device [{serial}] -> {dest_path}")
+                if hasattr(provider, "serial"):
+                    ui_db.add_synced_file(abs_path, filename, provider.serial, remote_dir or "")
+
                 return {
                     "status": "success",
-                    "message": f"Successfully synced '{filename}' to ADB device [{serial}].",
-                    "dest_path": dest_path
+                    "message": push_res.message or f"Successfully synced '{filename}'.",
+                    "dest_path": push_res.dest_path,
+                    "transcoded": was_transcoded,
+                    "target_bitrate": target_bitrate if was_transcoded else None
                 }
-            except Exception as e:
-                logger.error(f"[DeviceRepository] Error pushing song to ADB device [{serial}]: {e}")
-                return {"status": "error", "message": str(e), "code": 500}
-
-        # 2. Over-IP Peer
-        if device_id.startswith("ip_") or device_id.startswith("ip:"):
-            ip_addr = device_id.split("_", 1)[-1] if "_" in device_id else device_id.split(":", 1)[-1]
-            import over_ip.client as ip_client
-            stored = self.get_stored_ip_hosts()
-            port = 5000
-            for h in stored:
-                if h["ip_address"] == ip_addr:
-                    port = h.get("port", 5000)
-                    break
-            try:
-                uploaded = ip_client.upload_song_to_peer(ip_addr, abs_path, port=port)
-                if not uploaded:
-                    return {"status": "error", "message": f"Failed to upload {filename} to Over-IP peer {ip_addr}:{port}", "code": 500}
-
-                # Invalidate caches
-                self._cache_delete(f"cache:device_songs:ip_{ip_addr}")
-                self._cache_delete(f"cache:device_songs:ip:{ip_addr}")
-                self._cache_delete("cache:devices:summary")
-                self._cache_delete("cache:dashboard:stats")
-
-                logger.info(f"[DeviceRepository] Successfully uploaded '{filename}' to Over-IP peer [{ip_addr}].")
+            else:
                 return {
-                    "status": "success",
-                    "message": f"Successfully synced '{filename}' to Over-IP peer [{ip_addr}:{port}].",
-                    "dest_path": f"Remote host {ip_addr}"
+                    "status": "error",
+                    "message": push_res.error or f"Failed to push {filename} to {device_id}",
+                    "code": 500
                 }
-            except Exception as e:
-                logger.error(f"[DeviceRepository] Error uploading song to Over-IP peer [{ip_addr}]: {e}")
-                return {"status": "error", "message": str(e), "code": 500}
-
-        return {"status": "error", "message": f"Unsupported sync target device: {device_id}", "code": 400}
+        except Exception as e:
+            logger.error(f"[DeviceRepository] Error pushing {filename} to {device_id}: {e}")
+            return {"status": "error", "message": str(e), "code": 500}
 
 

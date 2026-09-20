@@ -1,0 +1,36 @@
+<!-- Deleted Songs Tab -->
+<div id="tab-deleted" class="tab-content" style="display: none;">
+  <div class="panel">
+    <div class="panel-title" style="flex-wrap: wrap; gap: 0.75rem;">
+      <span>Deleted Songs (Trash)</span>
+      <div class="panel-actions" style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+        <button class="btn btn-secondary" onclick="loadDeletedSongs()">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+          Refresh
+        </button>
+        <button class="btn btn-secondary btn-danger" onclick="clearDeletedHistory()">Empty Trash (Delete Files)</button>
+      </div>
+    </div>
+    <small class="text-muted" style="display: block; margin-bottom: 1rem; min-height: 1.2rem;">Deleted songs are kept in <code>tmp/deleted/</code> (metadata: bitrate / created / modified time are optional) until restored or the trash is emptied.</small>
+    <div class="table-responsive">
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 48px;" class="col-center">#</th>
+            <th style="min-width: 200px;">Track</th>
+            <th>Original Path</th>
+            <th style="width: 95px;" class="col-center">Bitrate</th>
+            <th style="width: 90px;" class="col-center">Size</th>
+            <th style="width: 135px;" class="col-center">Created Time</th>
+            <th style="width: 135px;" class="col-center">Modified Time</th>
+            <th style="width: 135px;" class="col-center">Deleted At</th>
+            <th style="width: 110px;" class="col-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="deleted-tbody">
+          <tr><td colspan="9" class="text-muted">Loading deleted songs...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>

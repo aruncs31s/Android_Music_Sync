@@ -1,0 +1,243 @@
+/* ==========================================================================
+   Sticky Bottom Audio Player Bar CSS
+   Transport controls, scrubber, volume slider, mobile responsive styling
+   ========================================================================== */
+
+/* Custom Audio Player Footer */
+.audio-player-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: #050505;
+  border-top: 1px solid var(--border-color);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.8);
+  padding: 0.65rem 1.5rem;
+  z-index: 1000;
+}
+
+.audio-player-inner {
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+}
+
+.player-info {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 280px;
+  flex-shrink: 0;
+}
+
+.player-badge-icon {
+  background: var(--accent-yellow-alpha);
+  border: 1px solid var(--accent-yellow);
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  color: var(--accent-yellow);
+}
+
+.player-text-wrap {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.now-playing-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.now-playing-subtitle {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.15rem;
+}
+
+/* Center Controls & Scrubber */
+.player-center {
+  flex: 1;
+  max-width: 600px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.player-transport-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.player-ctrl-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 0.35rem;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.player-ctrl-btn:hover {
+  color: var(--accent-yellow);
+  background: var(--accent-yellow-alpha);
+}
+
+.player-ctrl-btn.active {
+  color: var(--accent-yellow);
+  background: var(--accent-yellow-alpha);
+}
+
+.player-ctrl-btn.liked {
+  color: #ff0055 !important;
+}
+
+.player-ctrl-btn.liked svg {
+  fill: #ff0055;
+  stroke: #ff0055;
+}
+
+.btn-liked {
+  color: #ff0055 !important;
+  border-color: rgba(255, 0, 85, 0.4) !important;
+}
+
+.btn-liked svg {
+  fill: #ff0055;
+  stroke: #ff0055;
+}
+
+.player-ctrl-btn .icon-svg {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+}
+
+.player-play-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--accent-yellow);
+  color: #000000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.12s ease, background 0.15s ease;
+  flex-shrink: 0;
+}
+
+.player-play-btn:hover {
+  transform: scale(1.08);
+  background: var(--primary-hover);
+}
+
+.player-play-btn .icon-svg {
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0;
+  fill: currentColor;
+}
+
+.player-scrubber-wrap {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.player-time {
+  font-size: 0.72rem;
+  font-family: monospace;
+  color: var(--text-muted);
+  min-width: 34px;
+  user-select: none;
+  text-align: center;
+}
+
+.player-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: #262626;
+  outline: none;
+  cursor: pointer;
+  transition: height 0.15s ease;
+}
+
+.player-slider:hover {
+  height: 6px;
+}
+
+.player-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-yellow);
+  cursor: pointer;
+  transition: transform 0.1s ease;
+  border: none;
+}
+
+.player-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.3);
+}
+
+.player-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--accent-yellow);
+  cursor: pointer;
+  border: none;
+}
+
+.player-side-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 200px;
+  justify-content: flex-end;
+  flex-shrink: 0;
+}
+
+.volume-slider {
+  max-width: 80px;
+}
+
+.player-close-btn {
+  opacity: 0.65;
+}
+
+.player-close-btn:hover {
+  opacity: 1;
+  color: var(--status-offline);
+  background: rgba(239, 68, 68, 0.15);
+}

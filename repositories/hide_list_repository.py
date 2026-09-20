@@ -4,8 +4,9 @@ Hide List Repository module with Redis caching and SQLite fallback.
 from typing import List, Dict, Any
 
 from repositories.base_repository import BaseRepository
-import ui.db_manager as ui_db
-import hide_list_db
+from repositories.exceptions import ValidationError
+import database.db_manager as central_db
+from model import HiddenFileRecord
 from utils import get_logger
 
 logger = get_logger()
@@ -28,7 +29,16 @@ class HideListRepository(BaseRepository):
             logger.info("[HideListRepository] Redis Cache Hit: Loaded hidden files.")
             return cached
 
-        records = ui_db.get_all_hidden_records()
+        raw_records = central_db.get_all_hidden_records()
+        records = [
+            HiddenFileRecord(
+                id=r.get("id"),
+                filepath=r.get("filepath", ""),
+                filename=r.get("filename", ""),
+                hidden_at=r.get("hidden_at")
+            ).to_dict()
+            for r in raw_records
+        ]
         self._cache_set(self.CACHE_KEY_HIDDEN, records)
         return records
 
@@ -36,20 +46,24 @@ class HideListRepository(BaseRepository):
         """
         Hide a file path in SQLite database and clear Redis hide list cache.
         """
-        ui_db.add_hidden_file(filepath)
-        hide_list_db.add_hidden_file(filepath)
-        self._cache_delete(self.CACHE_KEY_HIDDEN)
-        self._cache_delete("cache:songs:all")
-        self._cache_delete("cache:songs:duplicates")
-        return True
+        if not filepath:
+            raise ValidationError("Cannot hide empty filepath")
+        success = central_db.add_hidden_file(filepath)
+        if success:
+            self._cache_delete(self.CACHE_KEY_HIDDEN)
+            self._cache_delete("cache:songs:all")
+            self._cache_delete("cache:songs:duplicates")
+        return success
 
     def unhide_file(self, filepath: str) -> bool:
         """
         Unhide a file path in SQLite database and clear Redis hide list cache.
         """
-        ui_db.remove_hidden_file(filepath)
-        hide_list_db.remove_hidden_file(filepath)
-        self._cache_delete(self.CACHE_KEY_HIDDEN)
-        self._cache_delete("cache:songs:all")
-        self._cache_delete("cache:songs:duplicates")
-        return True
+        if not filepath:
+            raise ValidationError("Cannot unhide empty filepath")
+        success = central_db.remove_hidden_file(filepath)
+        if success:
+            self._cache_delete(self.CACHE_KEY_HIDDEN)
+            self._cache_delete("cache:songs:all")
+            self._cache_delete("cache:songs:duplicates")
+        return success

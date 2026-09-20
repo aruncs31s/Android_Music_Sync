@@ -10,20 +10,17 @@ import subprocess
 import re
 from typing import List, Dict, Any, Tuple, Optional
 
-import adb_manager
+import utils.android.adb.adb_manager as adb_manager
 import song_parser
-import syncer
+import utils.syncer as syncer
 import fuzzy_matcher
+from utils import normalize_string
 import redis_cache
 import ranger_reverse_sync_tui
 import hide_list_db
 from utils import get_logger
 logger = get_logger()
 
-
-def normalize_string(s: str) -> str:
-    """Normalize string for fast comparison (lowercase, alphanumeric only)."""
-    return re.sub(r"[^a-zA-Z0-9]", "", s.lower())
 
 
 def get_local_music_files(
