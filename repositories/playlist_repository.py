@@ -7,7 +7,7 @@ from typing import List, Dict, Any, Optional
 
 from repositories.base_repository import BaseRepository
 import ui.db_manager as ui_db
-import config_manager
+import utils.config_manager as config_manager
 import over_ip.song_scanner as song_scanner
 from model import PlaylistRecord, PlaylistTrackRecord, TrackStatus
 from utils import get_logger

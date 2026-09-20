@@ -10,7 +10,7 @@ import requests
 from typing import List, Dict, Any, Optional
 
 import over_ip.db as ip_db
-import redis_cache
+import database.redis_cache as redis_cache
 from utils import get_logger
 logger = get_logger()
 

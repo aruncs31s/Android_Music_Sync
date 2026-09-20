@@ -60,6 +60,48 @@ function initAudioPlayer() {
     updatePlayerVolumeIcon();
   };
 
+  player.onerror = (e) => {
+    const err = player.error;
+    let codeStr = 'UNKNOWN';
+    let userMsg = 'Audio playback error occurred.';
+    if (err) {
+      switch (err.code) {
+        case 1: // MediaError.MEDIA_ERR_ABORTED
+          codeStr = 'MEDIA_ERR_ABORTED';
+          userMsg = 'Playback was aborted.';
+          break;
+        case 2: // MediaError.MEDIA_ERR_NETWORK
+          codeStr = 'MEDIA_ERR_NETWORK';
+          userMsg = 'Network error while loading audio.';
+          break;
+        case 3: // MediaError.MEDIA_ERR_DECODE
+          codeStr = 'MEDIA_ERR_DECODE';
+          userMsg = 'Audio decoding failed (unsupported codec or corrupt audio stream).';
+          break;
+        case 4: // MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED
+          codeStr = 'MEDIA_ERR_SRC_NOT_SUPPORTED';
+          userMsg = 'Audio format or source URL not supported by browser.';
+          break;
+      }
+    }
+    const trackInfo = currentTrackPath ? `on '${currentTrackPath}'` : '';
+    console.error(`[AudioPlayer] Playback Error (${codeStr}):`, err, trackInfo);
+    showToast(userMsg, 'error', 4000);
+    setPlayerPlayState(false);
+
+    // Send error to server logger so it appears in terminal and server logs
+    fetch('/api/player/log_error', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        error_code: codeStr,
+        message: userMsg,
+        src: player.src,
+        filepath: currentTrackPath
+      })
+    }).catch(() => {});
+  };
+
   setupPlayerKeyboardHotkeys();
 }
 
@@ -352,7 +394,25 @@ function playAudio(filepath, title, artist, queue = null, index = 0, bitrate = n
     }
 
     playerBar.style.display = 'flex';
-    player.play().catch(err => console.warn('Playback error:', err));
+    player.play().catch(err => {
+      console.warn('[AudioPlayer] play() rejected:', err);
+      const isNotAllowed = err.name === 'NotAllowedError';
+      const msg = isNotAllowed
+        ? 'Autoplay blocked by browser. Click Play to start playback.'
+        : `Playback error: ${err.message || 'Unknown error'}`;
+      showToast(msg, 'warning', 3500);
+
+      fetch('/api/player/log_error', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          error_code: err.name || 'PlayRejected',
+          message: err.message,
+          src: player.src,
+          filepath: currentTrackPath
+        })
+      }).catch(() => {});
+    });
 
     // Update queue panel and player-tab song row highlights
     renderQueuePanel();
@@ -428,7 +488,7 @@ async function toggleLikeTrack(filepath, title, artist) {
         body: JSON.stringify({ filepath })
       });
       likedSongPaths.add(filepath);
-      showToast(`Added "${title || 'Track'}" to Liked Music ❤️`, 'success', 2000);
+      showToast(`Added "${title || 'Track'}" to Liked Music`, 'success', 2000);
     }
 
     updateAllLikeButtonsUI();
@@ -521,15 +581,15 @@ async function refreshPlayerLibraryList(reloadSongs = false) {
     const prev = sel.value || playerTabDeviceId || 'local';
 
     // Rebuild options
-    let html = '<option value="local">🏠 Local Storage</option>';
+    let html = '<option value="local">Local Storage</option>';
     if (Array.isArray(devices)) {
       devices.forEach(d => {
         const val = d.device_id || d.serial || d.ip_port;
         if (!val || val === 'local') return;
-        const icon = d.device_type === 'Over-IP' ? '🌐' : '📱';
+        const typeBadge = d.device_type === 'Over-IP' ? '[Over-IP]' : '[USB]';
         const label = d.device_name || d.description || val;
         const online = d.is_online !== false ? '' : ' (offline)';
-        html += `<option value="${escHtml(val)}">${icon} ${escHtml(label)}${online}</option>`;
+        html += `<option value="${escHtml(val)}">${escHtml(label)} ${typeBadge}${online}</option>`;
       });
     }
     sel.innerHTML = html;
@@ -604,7 +664,7 @@ async function loadPlayerLibrary(deviceId, forceRefresh = false) {
     if (countEl) countEl.textContent = `${songs.length.toLocaleString()} songs`;
   } catch (err) {
     console.error('[PlayerTab] Failed to load songs:', err);
-    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--status-offline);text-align:center;padding:2rem;">❌ Failed to load songs: ${escHtml(String(err))}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" style="color:var(--status-offline);text-align:center;padding:2rem;">Failed to load songs: ${escHtml(String(err))}</td></tr>`;
   }
 }
 
@@ -815,3 +875,155 @@ function escHtml(str) {
 }
 
 // ==========================================
+
+// =============================================================================
+// SESSION MANAGEMENT: SSE listener + heartbeat
+// =============================================================================
+
+let _sessionClientId = null;
+let _sessionHeartbeatInterval = null;
+let _sessionEventSource = null;
+
+function startSessionSSE() {
+  if (_sessionEventSource) return; // already connected
+  _sessionClientId = 'web-' + Math.random().toString(36).slice(2);
+  const url = `/api/session/events?client_id=${_sessionClientId}`;
+  _sessionEventSource = new EventSource(url);
+
+  _sessionEventSource.onopen = () => {
+    console.log('[Session] SSE connected');
+  };
+
+  _sessionEventSource.onerror = () => {
+    // Auto-reconnect handled by browser EventSource
+    console.warn('[Session] SSE connection lost, will retry...');
+  };
+
+  _sessionEventSource.addEventListener('session_command', (e) => {
+    try {
+      const payload = JSON.parse(e.data);
+      handleSessionCommand(payload);
+    } catch (err) {
+      console.error('[Session] Bad SSE payload', err);
+    }
+  });
+}
+
+function handleSessionCommand(payload) {
+  const player = document.getElementById('audio-player');
+  if (!player) return;
+  const cmd = payload.cmd;
+  console.log('[Session] Received command:', cmd, payload);
+
+  switch (cmd) {
+    case 'play':
+      player.play().catch(() => {});
+      break;
+    case 'pause':
+      player.pause();
+      break;
+    case 'next':
+      if (typeof handleNextTrack === 'function') handleNextTrack();
+      break;
+    case 'prev':
+      if (typeof handlePrevTrack === 'function') handlePrevTrack();
+      break;
+    case 'seek':
+      if (payload.position_ms != null && player.duration) {
+        player.currentTime = payload.position_ms / 1000;
+      }
+      break;
+    case 'transfer':
+      // Play a specific song (streamed from remote peer or from local path)
+      if (payload.stream_url) {
+        player.src = payload.stream_url;
+        player.load();
+        player.play().catch(() => {});
+        if (payload.position_ms > 2000) {
+          player.addEventListener('loadedmetadata', function seekOnLoad() {
+            player.currentTime = payload.position_ms / 1000;
+            player.removeEventListener('loadedmetadata', seekOnLoad);
+          });
+        }
+        // Update UI if possible
+        const titleEl = document.getElementById('player-title') || document.getElementById('bottom-bar-title');
+        if (titleEl) titleEl.textContent = payload.title || 'Remote Track';
+        const artistEl = document.getElementById('player-artist') || document.getElementById('bottom-bar-artist');
+        if (artistEl) artistEl.textContent = payload.artist || '';
+        if (typeof showToast === 'function') showToast(`Playing: ${payload.title}`);
+      } else if (payload.filepath) {
+        const encoded = encodeURIComponent(payload.filepath);
+        player.src = `/api/song/stream?filepath=${encoded}`;
+        player.load();
+        player.play().catch(() => {});
+        if (payload.position_ms > 2000) {
+          player.addEventListener('loadedmetadata', function seekOnLoad() {
+            player.currentTime = payload.position_ms / 1000;
+            player.removeEventListener('loadedmetadata', seekOnLoad);
+          });
+        }
+        const titleEl = document.getElementById('player-title') || document.getElementById('bottom-bar-title');
+        if (titleEl) titleEl.textContent = payload.title || 'Remote Track';
+        const artistEl = document.getElementById('player-artist') || document.getElementById('bottom-bar-artist');
+        if (artistEl) artistEl.textContent = payload.artist || '';
+        if (typeof showToast === 'function') showToast(`Playing: ${payload.title}`);
+      }
+      break;
+    case 'queue_inject':
+      // Add to queue - use existing queue mechanism if available
+      if (typeof addToQueue === 'function' && payload.filepath) {
+        addToQueue(payload.filepath, payload.title, payload.artist);
+        if (typeof showToast === 'function') showToast(`Queued: ${payload.title}`);
+      }
+      break;
+    default:
+      console.warn('[Session] Unknown command:', cmd);
+  }
+}
+
+function sendSessionHeartbeat() {
+  const player = document.getElementById('audio-player');
+  if (!player) return;
+  
+  // Gather current queue info from window.currentQueue if available
+  const queueSize = (window.activeQueue || []).length;
+  const isShuffled = window.isShuffled || false;
+  const repeatMode = window.repeatMode || 'off';
+
+  // Get current song info from DOM or window globals
+  const titleEl = document.getElementById('player-title') || document.getElementById('bottom-bar-title');
+  const artistEl = document.getElementById('player-artist') || document.getElementById('bottom-bar-artist');
+  const currentTitle = (window.currentSong && window.currentSong.title) || (titleEl && titleEl.textContent) || '';
+  const currentArtist = (window.currentSong && window.currentSong.artist) || (artistEl && artistEl.textContent) || '';
+  const currentFilepath = (window.currentSong && window.currentSong.filepath) || '';
+
+  const data = {
+    is_playing: !player.paused && !player.ended,
+    current_title: currentTitle,
+    current_artist: currentArtist,
+    current_filepath: currentFilepath,
+    position_ms: Math.round((player.currentTime || 0) * 1000),
+    duration_ms: Math.round((player.duration || 0) * 1000),
+    queue_size: queueSize,
+    repeat_mode: repeatMode,
+    is_shuffled: isShuffled,
+  };
+
+  fetch('/api/session/heartbeat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+    keepalive: true,
+  }).catch(() => {}); // silent fail
+}
+
+function startSessionHeartbeat() {
+  if (_sessionHeartbeatInterval) return;
+  _sessionHeartbeatInterval = setInterval(sendSessionHeartbeat, 3000);
+  sendSessionHeartbeat(); // immediate first send
+}
+
+// Export for use by app.js
+window.startSessionSSE = startSessionSSE;
+window.startSessionHeartbeat = startSessionHeartbeat;
+window.handleSessionCommand = handleSessionCommand;

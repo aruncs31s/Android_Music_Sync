@@ -15,13 +15,14 @@ from flask import Flask, jsonify, request, send_file, render_template, Response,
 
 
 import shutil
-import config_manager
+import utils.config_manager as config_manager
 import over_ip.song_scanner as song_scanner
 import ui.db_manager as ui_db
 import ui.stats_manager as ui_stats
-import utils.syncer as syncer
+import services.syncer as syncer
 import utils.android.adb.adb_pusher as adb_pusher
-import sync_checker
+import services.sync_checker as sync_checker
+from utils import audio_metadata
 from repositories import (
     song_repo,
     playlist_repo,
@@ -1254,6 +1255,18 @@ def poweramp_search_library():
                for r in scored[:max_results]]
 
     return jsonify(results)
+
+
+@app.route("/api/player/log_error", methods=["POST"])
+def player_log_error():
+    """Receive client-side player errors from browser Web UI and log them."""
+    data = request.get_json(silent=True) or {}
+    err_code = data.get("error_code", "UNKNOWN")
+    message = data.get("message", "")
+    filepath = data.get("filepath", "")
+    src = data.get("src", "")
+    logger.error(f"[Web Player Error] Code: {err_code} | Msg: {message} | File: {filepath} | URL: {src}")
+    return jsonify({"status": "logged"})
 
 
 def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False):

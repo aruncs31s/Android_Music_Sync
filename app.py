@@ -17,16 +17,15 @@ import os
 import json
 from typing import List, Dict, Any
 
-import song_parser
-import fuzzy_matcher
+import utils.android.adb.song_parser as song_parser
+from utils import fuzzy_matcher, config_manager
 import utils.android.adb.adb_manager as adb_manager
-import fzf_tui
-import config_manager
-import utils.syncer as syncer
-import reverse_syncer
-import redis_cache
-import hide_list_db
-import main_menu_tui
+import tui.fzf_tui as fzf_tui
+import tui.main_menu_tui as main_menu_tui
+import services.syncer as syncer
+import services.reverse_syncer as reverse_syncer
+import database.redis_cache as redis_cache
+import database.hide_list_db as hide_list_db
 import over_ip.workflow as over_ip_workflow
 import over_ip.server as over_ip_server
 import ui.server as ui_server

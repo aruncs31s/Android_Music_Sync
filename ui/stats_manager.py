@@ -12,15 +12,13 @@ import datetime
 from collections import defaultdict
 from typing import List, Dict, Any
 
-import config_manager
-import audio_metadata
+from utils import config_manager, audio_metadata, audio_fingerprint
+import utils.android.adb.song_parser as song_parser
 import over_ip.song_scanner as song_scanner
 import over_ip.client as ip_client
 import utils.android.adb.adb_manager as adb_manager
 import ui.db_manager as ui_db
 import database.db_manager as central_db
-import audio_fingerprint
-import song_parser
 from utils import get_logger
 
 logger = get_logger()

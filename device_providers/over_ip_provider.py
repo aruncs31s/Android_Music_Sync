@@ -7,7 +7,7 @@ import requests
 from typing import List, Dict, Any, Optional, Callable, Tuple
 import over_ip.client as ip_client
 import database.db_manager as ui_db
-import config_manager
+import utils.config_manager as config_manager
 from device_providers.base import DeviceProvider, PushResult, DeleteResult
 from utils import get_logger
 

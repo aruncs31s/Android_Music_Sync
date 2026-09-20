@@ -10,7 +10,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from repositories.exceptions import TrashFileMissingError, FileMoveError
-import audio_metadata
+from utils import audio_metadata
 import ui.db_manager as ui_db
 from model.song import RestoredSongRecord, SongRecord
 from repositories.base_repository import BaseRepository

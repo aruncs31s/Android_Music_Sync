@@ -8,7 +8,7 @@ import datetime
 import os
 from typing import Any
 
-import audio_metadata
+from utils import audio_metadata
 from utils import get_logger
 
 logger = get_logger()

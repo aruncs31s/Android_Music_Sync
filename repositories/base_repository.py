@@ -2,8 +2,8 @@
 Base Repository class providing cache-awareness and fallback mechanisms.
 """
 from typing import Optional, Any, Dict
-import config_manager
-import redis_cache
+import utils.config_manager as config_manager
+import database.redis_cache as redis_cache
 from utils import get_logger
 
 logger = get_logger()

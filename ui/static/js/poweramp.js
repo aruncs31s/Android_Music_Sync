@@ -209,7 +209,7 @@ function filterAbsentSongs() {
         <td class="col-center">
           <button class="btn btn-secondary btn-sm" style="font-size: 0.7rem; padding: 0.25rem 0.5rem; white-space: nowrap;"
             onclick="resolveAbsentSong(${globalIdx}, this)" title="Search local library for a match">
-            🔍 Resolve
+            Resolve
           </button>
         </td>
       </tr>
@@ -243,13 +243,13 @@ async function resolveAbsentSong(globalIdx, btn) {
   // Toggle: close if already open
   if (panelRow.style.display !== 'none') {
     panelRow.style.display = 'none';
-    if (btn) btn.textContent = '🔍 Resolve';
+    if (btn) btn.textContent = 'Resolve';
     return;
   }
 
   // Open panel and start searching
   panelRow.style.display = '';
-  if (btn) btn.textContent = '▲ Close';
+  if (btn) btn.textContent = 'Close';
   if (resultsDiv) resultsDiv.innerHTML = '<span class="text-muted" style="font-size: 0.8rem;">Searching library...</span>';
 
   const query = item.readable_name || item.filename;
@@ -370,7 +370,7 @@ function renderResolveResults(resolveKey, matches, absentItem, playlistName, glo
           </div>
         </div>
         ${isResolved
-          ? `<span style="font-size: 0.7rem; color: var(--accent-green, #4ade80); font-weight: 700; white-space: nowrap;">✓ Resolved</span>`
+          ? `<span style="font-size: 0.7rem; color: var(--accent-green, #4ade80); font-weight: 700; white-space: nowrap; display: inline-flex; align-items: center; gap: 0.2rem;">${SVG_CHECK} Resolved</span>`
           : `<button class="btn btn-sm" style="font-size: 0.7rem; padding: 0.2rem 0.55rem; white-space: nowrap; flex-shrink: 0;"
                onclick="confirmResolveMatch(${globalIdx}, '${escapeJs(fp)}', '${escapeJs(title)}', '${escapeJs(playlistName)}')"
                title="Add this song to the playlist as a replacement">
@@ -474,7 +474,7 @@ async function confirmResolveMatch(globalIdx, filepath, songTitle, playlistName)
       item.status = 'present';
 
       const resolveKey = `resolve-panel-${globalIdx}`;
-      // Re-render the results panel showing ✓ Resolved state
+      // Re-render the results panel showing Resolved state
       const currentQ = currentAbsentSongs[globalIdx].readable_name || currentAbsentSongs[globalIdx].filename;
       const matches = fuzzySearchLocalSongs(currentQ, allSongs, 8);
       renderResolveResults(resolveKey, matches, item, playlistName, globalIdx);
@@ -510,10 +510,10 @@ function updateAbsentRowResolved(globalIdx, songTitle) {
   const row = document.getElementById(`absent-row-${globalIdx}`);
   if (!row) return;
 
-  // Find and update the Resolve button cell to show ✓
+  // Find and update the Resolve button cell to show Resolved
   const resolveCell = row.querySelector('td:last-child');
   if (resolveCell) {
-    resolveCell.innerHTML = `<span style="font-size: 0.72rem; color: var(--accent-green, #4ade80); font-weight: 700;">✓ Resolved</span>`;
+    resolveCell.innerHTML = `<span style="font-size: 0.72rem; color: var(--accent-green, #4ade80); font-weight: 700; display: inline-flex; align-items: center; gap: 0.2rem;">${SVG_CHECK} Resolved</span>`;
   }
 
   // Strike-through the title cell

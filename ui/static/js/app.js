@@ -22,4 +22,5 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof loadLikedMusicSet === 'function') loadLikedMusicSet();
   if (typeof loadSyncDevices === 'function') loadSyncDevices();
   if (typeof loadDeletedSongs === 'function') loadDeletedSongs();
+  if (typeof initSessionsPanel === 'function') initSessionsPanel();
 });
