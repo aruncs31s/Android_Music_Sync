@@ -1286,6 +1286,102 @@ def get_session_state():
     return jsonify(state)
 
 
+@app.route("/api/session/peers", methods=["GET"])
+def get_session_peers():
+    """
+    Unified endpoint for Web UI: returns local desktop session state and queries
+    active Over-IP peers for their current playback state.
+    Bypasses browser Private Network Access (PNA) restrictions.
+    """
+    from over_ip.discovery import is_local_address
+    import socket
+    import requests
+
+    # 1. Local session state
+    local_state = session_state.get_state()
+    if session_state.is_stale():
+        local_state["is_playing"] = False
+    hostname = socket.gethostname()
+    local_session = {
+        "device_name": f"{hostname} (This Desktop)",
+        "device_role": "desktop",
+        "ip": "127.0.0.1",
+        "port": 5000,
+        "is_online": True,
+        "state": local_state
+    }
+
+    # 2. Remote peers
+    stored_hosts = ui_db.get_stored_ip_hosts()
+    peers = []
+    for h in stored_hosts:
+        ip = h.get("ip_address")
+        if not ip or is_local_address(ip):
+            continue
+        port = h.get("port", 5000)
+        alias = h.get("alias") or f"{ip}:{port}"
+        song_count = h.get("song_count", 0)
+
+        peer_entry = {
+            "ip": ip,
+            "port": port,
+            "device_name": alias,
+            "device_role": "android" if "android" in alias.lower() else "desktop",
+            "is_online": False,
+            "song_count": song_count,
+            "state": None
+        }
+
+        # Query peer session state over HTTP (short timeout)
+        try:
+            r = requests.get(f"http://{ip}:{port}/api/session/state", timeout=1.8)
+            if r.status_code == 200:
+                p_state = r.json()
+                peer_entry["is_online"] = True
+                peer_entry["state"] = p_state
+                if p_state.get("device_name"):
+                    peer_entry["device_name"] = p_state.get("device_name")
+                if p_state.get("device_role"):
+                    peer_entry["device_role"] = p_state.get("device_role")
+        except Exception:
+            pass
+
+        peers.append(peer_entry)
+
+    return jsonify({
+        "local": local_session,
+        "peers": peers
+    })
+
+
+@app.route("/api/session/peer-command", methods=["POST"])
+def send_peer_session_command():
+    """
+    Proxy endpoint: relays remote playback commands (play, pause, next, prev, seek, transfer)
+    to a peer device over HTTP, bypassing browser PNA/CORS restrictions.
+    """
+    import requests
+    data = request.get_json(silent=True) or {}
+    peer_ip = data.get("ip")
+    peer_port = int(data.get("port", 5000))
+    cmd = data.get("cmd", "")
+    body = data.get("body")
+
+    if not peer_ip or not cmd:
+        return jsonify({"error": "Missing peer ip or command"}), 400
+
+    target_url = f"http://{peer_ip}:{peer_port}/api/session/{cmd}"
+    try:
+        if body:
+            resp = requests.post(target_url, json=body, timeout=4.0)
+        else:
+            resp = requests.post(target_url, timeout=4.0)
+        return jsonify(resp.json() if resp.headers.get("Content-Type", "").startswith("application/json") else {"ok": True})
+    except Exception as e:
+        logger.error(f"[PeerCommand] Error sending '{cmd}' to {peer_ip}:{peer_port}: {e}")
+        return jsonify({"error": str(e)}), 502
+
+
 @app.route("/api/session/heartbeat", methods=["POST"])
 def session_heartbeat():
     """Browser sends this every 3 seconds with current player state."""

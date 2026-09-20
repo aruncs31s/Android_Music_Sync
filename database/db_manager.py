@@ -233,6 +233,11 @@ def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_playlist_tracks_status ON playlist_tracks(playlist_id, status);"
         )
+        # Ensure ip_hosts has song_count column
+        cursor.execute("PRAGMA table_info(ip_hosts)")
+        ip_cols = {row[1] for row in cursor.fetchall()}
+        if "song_count" not in ip_cols:
+            conn.execute("ALTER TABLE ip_hosts ADD COLUMN song_count INTEGER DEFAULT 0")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS audio_fingerprints (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -482,7 +487,11 @@ def remove_synced_file(
 
 
 def add_ip_host(
-    ip_address: str, port: int = 5000, alias: str |None = "", db_path: str|None = None
+    ip_address: str,
+    port: int = 5000,
+    alias: str | None = "",
+    song_count: int = 0,
+    db_path: str | None = None
 ) -> bool:
     """Add or update an IP host entry in centralized database."""
     ip_address = ip_address.strip()
@@ -494,16 +503,17 @@ def add_ip_host(
         with conn:
             conn.execute(
                 """
-                INSERT INTO ip_hosts (ip_address, port, alias, last_seen)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                INSERT INTO ip_hosts (ip_address, port, alias, song_count, last_seen)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(ip_address) DO UPDATE SET
                     port = excluded.port,
                     alias = CASE WHEN excluded.alias != '' THEN excluded.alias ELSE ip_hosts.alias END,
+                    song_count = CASE WHEN excluded.song_count > 0 THEN excluded.song_count ELSE ip_hosts.song_count END,
                     last_seen = CURRENT_TIMESTAMP
                 """,
-                (ip_address, port, alias),
+                (ip_address, port, alias or "", song_count),
             )
-        logger.info(f"[Central DB] Saved IP host: {ip_address}:{port}")
+        logger.info(f"[Central DB] Saved IP host: {ip_address}:{port} (songs: {song_count})")
         return True
     except Exception as e:
         logger.error(f"[Central DB] Error adding IP host {ip_address}: {e}")
@@ -542,7 +552,7 @@ def get_stored_ip_hosts(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
         conn = get_connection(db_path)
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, ip_address, port, alias, last_seen, is_online FROM ip_hosts ORDER BY last_seen DESC"
+            "SELECT id, ip_address, port, alias, last_seen, is_online, song_count FROM ip_hosts ORDER BY last_seen DESC"
         )
         return [dict(r) for r in cursor.fetchall()]
     except Exception as e:
@@ -554,17 +564,26 @@ def get_stored_ip_hosts(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
 
 
 def update_ip_status(
-    ip_address: str, is_online: bool, db_path: str | None = None
+    ip_address: str,
+    is_online: bool,
+    song_count: Optional[int] = None,
+    db_path: str | None = None
 ) -> bool:
-    """Update online status for an IP host."""
+    """Update online status and optional song count for an IP host."""
     conn = None
     try:
         conn = get_connection(db_path)
         with conn:
-            conn.execute(
-                "UPDATE ip_hosts SET is_online = ?, last_seen = CURRENT_TIMESTAMP WHERE ip_address = ?",
-                (1 if is_online else 0, ip_address.strip()),
-            )
+            if song_count is not None and song_count >= 0:
+                conn.execute(
+                    "UPDATE ip_hosts SET is_online = ?, song_count = ?, last_seen = CURRENT_TIMESTAMP WHERE ip_address = ?",
+                    (1 if is_online else 0, song_count, ip_address.strip()),
+                )
+            else:
+                conn.execute(
+                    "UPDATE ip_hosts SET is_online = ?, last_seen = CURRENT_TIMESTAMP WHERE ip_address = ?",
+                    (1 if is_online else 0, ip_address.strip()),
+                )
         return True
     except Exception as e:
         logger.error(f"[Central DB] Error updating IP status: {e}")

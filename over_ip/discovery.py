@@ -18,6 +18,53 @@ DISCOVERY_PORT = 5005
 MAGIC_HEADER = "AndroidMusicSync"
 
 
+def is_local_address(ip: str) -> bool:
+    """Check if the given IP belongs to this local machine or loopback."""
+    if not ip:
+        return True
+    ip = ip.strip()
+    if ip in ("127.0.0.1", "::1", "localhost", "0.0.0.0"):
+        return True
+    try:
+        hostname = socket.gethostname()
+        local_ips = socket.gethostbyname_ex(hostname)[2]
+        if ip in local_ips:
+            return True
+    except Exception:
+        pass
+    try:
+        if ip == socket.gethostbyname(socket.gethostname()):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def is_self_payload(ip: str, payload: dict) -> bool:
+    """Check if an incoming discovery probe or announcement originated from this machine."""
+    if is_local_address(ip):
+        return True
+    role = payload.get("role")
+    hostname = payload.get("hostname", "")
+    if role == "desktop" and hostname == socket.gethostname():
+        return True
+    return False
+
+
+def cleanup_loopback_hosts():
+    """Remove any stored IP hosts that match local machine interfaces or loopback."""
+    try:
+        stored = ui_db.get_stored_ip_hosts()
+        for h in stored:
+            ip = h.get("ip_address")
+            alias = h.get("alias", "")
+            if ip and (is_local_address(ip) or (socket.gethostname() in alias and "Desktop" in alias)):
+                logger.info(f"[Discovery] Purged loopback host from database: {ip} ({alias})")
+                ui_db.remove_ip_host(ip)
+    except Exception as e:
+        logger.debug(f"[Discovery] Cleanup loopback error: {e}")
+
+
 class PeerDiscoveryService:
     """
     Background UDP service that announces this Desktop server on the local Wi-Fi
@@ -41,6 +88,7 @@ class PeerDiscoveryService:
 
     def start(self):
         """Start listening for incoming peer discovery probes in background."""
+        cleanup_loopback_hosts()
         if self._listener_thread and self._listener_thread.is_alive():
             return
 
@@ -89,6 +137,9 @@ class PeerDiscoveryService:
                 payload = json.loads(data.decode("utf-8", errors="ignore"))
 
                 if payload.get("magic") != MAGIC_HEADER:
+                    continue
+
+                if is_self_payload(ip, payload):
                     continue
 
                 cmd = payload.get("cmd")
@@ -202,11 +253,10 @@ class PeerDiscoveryService:
                     payload = json.loads(data.decode("utf-8", errors="ignore"))
 
                     if payload.get("magic") == MAGIC_HEADER and payload.get("cmd") == "ANNOUNCE":
-                        peer_role = payload.get("role", "unknown")
-                        # Ignore self-reflection
-                        if peer_role == "desktop" and payload.get("hostname") == socket.gethostname():
+                        if is_self_payload(ip, payload):
                             continue
 
+                        peer_role = payload.get("role", "unknown")
                         peer_hostname = payload.get("hostname", ip)
                         peer_port = payload.get("port", 5000)
 

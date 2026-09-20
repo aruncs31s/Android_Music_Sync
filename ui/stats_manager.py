@@ -321,6 +321,7 @@ def scan_over_ip_hosts_info(live_ping: bool = False) -> List[Dict[str, Any]]:
     Ping and scan Over-IP peer hosts stored in database/db.db ip_hosts table.
     If live_ping is False, uses stored last-known online status to avoid blocking page loads.
     """
+    from over_ip.discovery import is_local_address
     cfg = config_manager.load_config()
     redis_cfg = cfg.get("redis")
     stored_ips = ui_db.get_stored_ip_hosts()
@@ -328,18 +329,34 @@ def scan_over_ip_hosts_info(live_ping: bool = False) -> List[Dict[str, Any]]:
     ip_list = []
     for r in stored_ips:
         ip_addr = r["ip_address"]
+        if is_local_address(ip_addr):
+            continue
+
         port = r["port"]
         alias = r["alias"] or ip_addr
         is_online = bool(r.get("is_online", 0))
-        song_cnt = 0
+        song_cnt = int(r.get("song_count") or 0)
         hostname = alias
 
         if live_ping:
-            ping_res = ip_client.ping_host(ip_addr, port=port, timeout=1.5, redis_cfg=redis_cfg)
+            ping_res = ip_client.ping_host(ip_addr, port=port, timeout=3.5, redis_cfg=redis_cfg)
             is_online = ping_res.get("online", False)
-            song_cnt = ping_res.get("song_count", 0)
+            if ping_res.get("song_count", 0) > 0:
+                song_cnt = ping_res.get("song_count", 0)
             hostname = ping_res.get("hostname") or alias
-            ui_db.update_ip_status(ip_addr, is_online)
+            ui_db.update_ip_status(ip_addr, is_online, song_count=song_cnt)
+        elif song_cnt == 0 and redis_cfg:
+            # Check if songs were cached in Redis
+            try:
+                import database.redis_cache as r_cache
+                import json
+                cached_data = r_cache.get_cache(redis_cfg, f"cache:device_songs:ip_{ip_addr.replace(':', '_')}")
+                if cached_data:
+                    parsed = json.loads(cached_data) if isinstance(cached_data, str) else cached_data
+                    if isinstance(parsed, dict) and parsed.get("count", 0) > 0:
+                        song_cnt = parsed["count"]
+            except Exception:
+                pass
 
         ip_list.append({
             "id": f"ip_{ip_addr}",
