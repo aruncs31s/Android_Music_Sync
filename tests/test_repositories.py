@@ -11,9 +11,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-import config_manager
+import utils.config_manager as config_manager
 import database.db_manager as db_manager
-import redis_cache
+import database.redis_cache as redis_cache
 import repositories.deleted_song_repository as deleted_song_repository
 from repositories import song_repo, playlist_repo, hide_repo, device_repo, deleted_repo
 
@@ -111,7 +111,7 @@ class TestRepositories(unittest.TestCase):
         self.assertIn("songs", local_data)
 
         # 2. Test song parser with date_added, date_modified, and bitrate
-        import song_parser
+        import utils.android.adb.song_parser as song_parser
         raw_adb_line = "Row: 0 _id=101, _display_name=TestTrack.mp3, title=Test Track, artist=Robots, album=Cyber, duration=240000, _size=9600000, _data=/sdcard/Music/TestTrack.mp3, date_added=1693500000, date_modified=1693600000, bitrate=320000"
         parsed = song_parser.parse_song_line(raw_adb_line)
         self.assertIsNotNone(parsed)

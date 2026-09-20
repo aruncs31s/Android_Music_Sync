@@ -99,10 +99,15 @@ cat songs.txt | python app.py -s "Mareez" --format path
 
 ## Project Structure
 
-- `app.py`: Main CLI entry point.
-- `adb_manager.py`: Handles ADB device discovery, interactive device selection, and running content provider queries.
-- `song_parser.py`: Robust parser for ADB MediaStore `content query` format.
-- `fuzzy_matcher.py`: Subsequence lazy matching engine and relevance scoring algorithm.
-- `fzf_tui.py`: Curses-based interactive terminal user interface for device picker & fzf song search.
-- `adb_pusher.py`: Duplicate detection, remote folder verification (`/storage/emulated/0/Music/ADB`), and file pushing via ADB.
-- `downloader/`: Package for downloading songs to `songs/download/` via direct engine or Telegram Deezload bot.
+- `app.py`: Main CLI & TUI entry point.
+- `cmd/`: Command line argument definitions (`args.py`).
+- `database/`: Centralized SQLite database (`db_manager.py`), Redis caching (`redis_cache.py`), and hide list DB.
+- `device_providers/`: Strategy pattern device providers (ADB, Local Storage, Over-IP).
+- `downloader/`: Package for downloading songs via direct engine or Telegram Deezload bot.
+- `model/`: Data models and dataclasses (`song.py`, `playlist.py`, `device.py`, etc.).
+- `over_ip/`: Wireless Over-IP HTTP synchronization client, server, and discovery.
+- `repositories/`: Cache-aware repository abstractions for songs, playlists, devices, and trash.
+- `services/`: Business services for audio transcoding, audio streaming, forward/reverse sync, and sync verification.
+- `tui/`: Curses-based interactive Terminal User Interfaces (`fzf_tui.py`, `ranger_sync_tui.py`, `main_menu_tui.py`).
+- `ui/`: Flask Web Dashboard with modular JavaScript frontend, CSS themes, and HTML templates.
+- `utils/`: Common utilities including logging, string normalization, time formatting, audio metadata/fingerprinting, and ADB helpers.

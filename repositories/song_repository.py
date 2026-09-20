@@ -11,8 +11,7 @@ import threading
 import time
 from typing import Any, Dict, List, Optional
 
-import audio_metadata
-import config_manager
+from utils import audio_metadata, config_manager
 import over_ip.song_scanner as song_scanner
 import ui.db_manager as ui_db
 import ui.stats_manager as ui_stats

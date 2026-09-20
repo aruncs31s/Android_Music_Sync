@@ -9,8 +9,7 @@ import os
 import sys
 from typing import Any
 
-import audio_metadata
-import fuzzy_matcher
+from utils import audio_metadata, fuzzy_matcher
 
 
 def run_with_tty(func, *args, **kwargs):

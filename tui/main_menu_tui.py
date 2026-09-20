@@ -7,7 +7,7 @@ import os
 import curses
 from typing import Optional
 
-import fzf_tui
+import tui.fzf_tui as fzf_tui
 
 MENU_OPTIONS = [
     ("1", "Search", "Device File Search (FZF Real-time Fuzzy Search)"),

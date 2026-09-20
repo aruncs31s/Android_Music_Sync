@@ -7,7 +7,7 @@ import sys
 import subprocess
 import shutil
 from typing import List, Dict, Any, Optional
-import redis_cache
+import database.redis_cache as redis_cache
 
 MEDIA_URI = "content://media/external/audio/media"
 MEDIA_PROJECTION = "_id:_display_name:title:artist:album:album_artist:composer:track:year:duration:mime_type:_size:_data:date_added:date_modified"

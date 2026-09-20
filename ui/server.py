@@ -15,13 +15,14 @@ from flask import Flask, jsonify, request, send_file, render_template, Response,
 
 
 import shutil
-import config_manager
+import utils.config_manager as config_manager
 import over_ip.song_scanner as song_scanner
 import ui.db_manager as ui_db
 import ui.stats_manager as ui_stats
-import utils.syncer as syncer
+import services.syncer as syncer
 import utils.android.adb.adb_pusher as adb_pusher
-import sync_checker
+import services.sync_checker as sync_checker
+from utils import audio_metadata
 from repositories import (
     song_repo,
     playlist_repo,
@@ -1254,6 +1255,237 @@ def poweramp_search_library():
                for r in scored[:max_results]]
 
     return jsonify(results)
+
+
+@app.route("/api/player/log_error", methods=["POST"])
+def player_log_error():
+    """Receive client-side player errors from browser Web UI and log them."""
+    data = request.get_json(silent=True) or {}
+    err_code = data.get("error_code", "UNKNOWN")
+    message = data.get("message", "")
+    filepath = data.get("filepath", "")
+    src = data.get("src", "")
+    logger.error(f"[Web Player Error] Code: {err_code} | Msg: {message} | File: {filepath} | URL: {src}")
+    return jsonify({"status": "logged"})
+
+
+# ==============================================================================
+# SESSION MANAGEMENT (Spotify Connect-style multi-device playback control)
+# ==============================================================================
+import uuid
+import over_ip.session_state as session_state
+import over_ip.session_sse as session_sse
+
+
+@app.route("/api/session/state", methods=["GET"])
+def get_session_state():
+    """Return current desktop player state for remote session discovery."""
+    state = session_state.get_state()
+    if session_state.is_stale():
+        state["is_playing"] = False
+    return jsonify(state)
+
+
+@app.route("/api/session/peers", methods=["GET"])
+def get_session_peers():
+    """
+    Unified endpoint for Web UI: returns local desktop session state and queries
+    active Over-IP peers for their current playback state.
+    Bypasses browser Private Network Access (PNA) restrictions.
+    """
+    from over_ip.discovery import is_local_address
+    import socket
+    import requests
+
+    # 1. Local session state
+    local_state = session_state.get_state()
+    if session_state.is_stale():
+        local_state["is_playing"] = False
+    hostname = socket.gethostname()
+    local_session = {
+        "device_name": f"{hostname} (This Desktop)",
+        "device_role": "desktop",
+        "ip": "127.0.0.1",
+        "port": 5000,
+        "is_online": True,
+        "state": local_state
+    }
+
+    # 2. Remote peers
+    stored_hosts = ui_db.get_stored_ip_hosts()
+    peers = []
+    for h in stored_hosts:
+        ip = h.get("ip_address")
+        if not ip or is_local_address(ip):
+            continue
+        port = h.get("port", 5000)
+        alias = h.get("alias") or f"{ip}:{port}"
+        song_count = h.get("song_count", 0)
+
+        peer_entry = {
+            "ip": ip,
+            "port": port,
+            "device_name": alias,
+            "device_role": "android" if "android" in alias.lower() else "desktop",
+            "is_online": False,
+            "song_count": song_count,
+            "state": None
+        }
+
+        # Query peer session state over HTTP (short timeout)
+        try:
+            r = requests.get(f"http://{ip}:{port}/api/session/state", timeout=1.8)
+            if r.status_code == 200:
+                p_state = r.json()
+                peer_entry["is_online"] = True
+                peer_entry["state"] = p_state
+                if p_state.get("device_name"):
+                    peer_entry["device_name"] = p_state.get("device_name")
+                if p_state.get("device_role"):
+                    peer_entry["device_role"] = p_state.get("device_role")
+        except Exception:
+            pass
+
+        peers.append(peer_entry)
+
+    return jsonify({
+        "local": local_session,
+        "peers": peers
+    })
+
+
+@app.route("/api/session/peer-command", methods=["POST"])
+def send_peer_session_command():
+    """
+    Proxy endpoint: relays remote playback commands (play, pause, next, prev, seek, transfer)
+    to a peer device over HTTP, bypassing browser PNA/CORS restrictions.
+    """
+    import requests
+    data = request.get_json(silent=True) or {}
+    peer_ip = data.get("ip")
+    peer_port = int(data.get("port", 5000))
+    cmd = data.get("cmd", "")
+    body = data.get("body")
+
+    if not peer_ip or not cmd:
+        return jsonify({"error": "Missing peer ip or command"}), 400
+
+    target_url = f"http://{peer_ip}:{peer_port}/api/session/{cmd}"
+    try:
+        if body:
+            resp = requests.post(target_url, json=body, timeout=4.0)
+        else:
+            resp = requests.post(target_url, timeout=4.0)
+        return jsonify(resp.json() if resp.headers.get("Content-Type", "").startswith("application/json") else {"ok": True})
+    except Exception as e:
+        logger.error(f"[PeerCommand] Error sending '{cmd}' to {peer_ip}:{peer_port}: {e}")
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/api/session/heartbeat", methods=["POST"])
+def session_heartbeat():
+    """Browser sends this every 3 seconds with current player state."""
+    data = request.get_json(silent=True) or {}
+    session_state.update_state(
+        is_playing=data.get("is_playing", False),
+        current_title=data.get("current_title", ""),
+        current_artist=data.get("current_artist", ""),
+        current_filepath=data.get("current_filepath", ""),
+        position_ms=int(data.get("position_ms", 0)),
+        duration_ms=int(data.get("duration_ms", 0)),
+        queue_size=int(data.get("queue_size", 0)),
+        repeat_mode=data.get("repeat_mode", "off"),
+        is_shuffled=bool(data.get("is_shuffled", False)),
+    )
+    return jsonify({"ok": True})
+
+
+@app.route("/api/session/events")
+def session_events():
+    """SSE endpoint — browser subscribes here to receive remote playback commands."""
+    client_id = request.args.get("client_id") or str(uuid.uuid4())
+    return Response(
+        stream_with_context(session_sse.sse_stream(client_id)),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+def _push_session_command(cmd: str, params: dict = None):
+    """Helper to push a session command SSE event and return JSON response."""
+    session_sse.push_event("session_command", {"cmd": cmd, **(params or {})})
+    return jsonify({"ok": True, "cmd": cmd})
+
+
+@app.route("/api/session/play", methods=["POST"])
+def session_play():
+    """Remote: tell desktop browser player to play/resume."""
+    return _push_session_command("play")
+
+
+@app.route("/api/session/pause", methods=["POST"])
+def session_pause():
+    """Remote: tell desktop browser player to pause."""
+    return _push_session_command("pause")
+
+
+@app.route("/api/session/next", methods=["POST"])
+def session_next():
+    """Remote: tell desktop browser player to skip to next track."""
+    return _push_session_command("next")
+
+
+@app.route("/api/session/prev", methods=["POST"])
+def session_prev():
+    """Remote: tell desktop browser player to go to previous track."""
+    return _push_session_command("prev")
+
+
+@app.route("/api/session/seek", methods=["POST"])
+def session_seek():
+    """Remote: tell desktop browser player to seek to a position."""
+    data = request.get_json(silent=True) or {}
+    pos_ms = int(request.args.get("position_ms", data.get("position_ms", 0)))
+    return _push_session_command("seek", {"position_ms": pos_ms})
+
+
+@app.route("/api/session/transfer", methods=["POST"])
+def session_transfer():
+    """Remote: transfer playback to desktop — play a specific song at a given position."""
+    data = request.get_json(silent=True) or {}
+    filepath = data.get("filepath", "")
+    if not filepath:
+        return jsonify({"error": "Missing filepath"}), 400
+    title = data.get("title", "")
+    artist = data.get("artist", "")
+    pos_ms = int(data.get("position_ms", 0))
+    stream_url = data.get("stream_url", "")
+    return _push_session_command("transfer", {
+        "filepath": filepath,
+        "title": title,
+        "artist": artist,
+        "position_ms": pos_ms,
+        "stream_url": stream_url,
+    })
+
+
+@app.route("/api/session/queue_inject", methods=["POST"])
+def session_queue_inject():
+    """Remote: inject a song into the desktop queue."""
+    data = request.get_json(silent=True) or {}
+    filepath = data.get("filepath", "")
+    if not filepath:
+        return jsonify({"error": "Missing filepath"}), 400
+    return _push_session_command("queue_inject", {
+        "filepath": filepath,
+        "title": data.get("title", ""),
+        "artist": data.get("artist", ""),
+        "stream_url": data.get("stream_url", ""),
+    })
 
 
 def start_server(host: str = "0.0.0.0", port: int = 5000, debug: bool = False):

@@ -11,13 +11,12 @@ import re
 from typing import List, Dict, Any, Tuple, Optional
 
 import utils.android.adb.adb_manager as adb_manager
-import song_parser
-import utils.syncer as syncer
-import fuzzy_matcher
-from utils import normalize_string
-import redis_cache
-import ranger_reverse_sync_tui
-import hide_list_db
+import utils.android.adb.song_parser as song_parser
+import services.syncer as syncer
+from utils import normalize_string, fuzzy_matcher
+import database.redis_cache as redis_cache
+import tui.ranger_reverse_sync_tui as ranger_reverse_sync_tui
+import database.hide_list_db as hide_list_db
 from utils import get_logger
 logger = get_logger()
 

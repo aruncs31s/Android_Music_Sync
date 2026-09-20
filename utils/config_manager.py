@@ -3,8 +3,10 @@ Configuration Manager for loading and saving settings from config.json.
 """
 import os
 import json
-import sys
 from typing import Dict, Any
+from utils.singleton_logger import get_logger
+
+logger = get_logger()
 
 DEFAULT_CONFIG_FILENAME = "config.json"
 
@@ -29,7 +31,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
 def get_default_config_path() -> str:
     """Get absolute path to config.json in project root."""
-    base_dir = os.path.dirname(os.path.abspath(__file__))
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base_dir, DEFAULT_CONFIG_FILENAME)
 
 
@@ -42,7 +44,7 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
         config_path = get_default_config_path()
 
     if not os.path.exists(config_path):
-        logger.info(f"[ConfigManager] Configuration file not found. Creating default: {config_path}", file=sys.stderr)
+        logger.info(f"[ConfigManager] Configuration file not found. Creating default: {config_path}")
         save_config(DEFAULT_CONFIG, config_path)
         return dict(DEFAULT_CONFIG)
 
@@ -54,7 +56,7 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
         merged_config.update(data)
         return merged_config
     except Exception as e:
-        logger.info(f"[ConfigManager] Error reading config from {config_path}: {e}. Using defaults.", file=sys.stderr)
+        logger.info(f"[ConfigManager] Error reading config from {config_path}: {e}. Using defaults.")
         return dict(DEFAULT_CONFIG)
 
 
@@ -67,7 +69,7 @@ def save_config(config_data: Dict[str, Any], config_path: str = None):
         with open(config_path, "w", encoding="utf-8") as f:
             json.dump(config_data, f, indent=2)
     except Exception as e:
-        logger.info(f"[ConfigManager] Error writing config to {config_path}: {e}", file=sys.stderr)
+        logger.info(f"[ConfigManager] Error writing config to {config_path}: {e}")
 
 
 def get_local_sync_folders(cfg: Dict[str, Any]) -> list[str]:

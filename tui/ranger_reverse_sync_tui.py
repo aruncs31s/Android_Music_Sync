@@ -19,10 +19,9 @@ import subprocess
 import sys
 from typing import Any, Callable, Dict, List, Optional
 
-import audio_metadata
-import fuzzy_matcher
-import fzf_tui
-import hide_list_db
+from utils import audio_metadata, fuzzy_matcher
+import tui.fzf_tui as fzf_tui
+import database.hide_list_db as hide_list_db
 from utils import get_logger
 
 logger = get_logger()
