@@ -21,12 +21,10 @@ import re
 import sys
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-import config_manager
-import song_parser
 import ui.stats_manager as ui_stats
 from repositories import song_repo
-from utils import get_logger
-from utils.android.adb import adb_manager
+from utils import config_manager, get_logger
+from utils.android.adb import adb_manager, song_parser
 
 logger = get_logger()
 
@@ -436,4 +434,3 @@ def run_dupes_workflow(
         return
 
     print_report(plan, device_filename_set, total_dup, freed)
-
