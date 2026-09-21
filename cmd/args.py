@@ -1,5 +1,5 @@
-
 import argparse
+import sys
 
 
 def parse_args():
@@ -62,164 +62,166 @@ def _parse(argv):
 
    6. Launch Interactive Main Menu:
      python app.py
-"""
+""",
     )
-    parser.add_argument(
-        "--config",
-        type=str,
-        help="Path to custom config.json file."
-    )
+    parser.add_argument("--config", type=str, help="Path to custom config.json file.")
     parser.add_argument(
         "--web",
         action="store_true",
-        help="Launch Flask Web Dashboard Interface on http://localhost:5000."
+        help="Launch Flask Web Dashboard Interface on http://localhost:5000.",
     )
     parser.add_argument(
         "--ip",
         nargs="?",
         const="",
         type=str,
-        help="Sync music across devices over HTTP IP address (e.g. --ip 192.168.1.50)."
+        help="Sync music across devices over HTTP IP address (e.g. --ip 192.168.1.50).",
     )
     parser.add_argument(
         "--serve-ip",
         action="store_true",
-        help="Start Flask REST API server to serve local music library over HTTP."
+        help="Start Flask REST API server to serve local music library over HTTP.",
     )
     parser.add_argument(
         "--sync",
         action="store_true",
-        help="Synchronize local music folder with ADB device."
+        help="Synchronize local music folder with ADB device.",
     )
     parser.add_argument(
         "--reverse-sync",
         action="store_true",
-        help="Reverse sync: Pull missing songs from ADB device into local music folder."
+        help="Reverse sync: Pull missing songs from ADB device into local music folder.",
     )
     parser.add_argument(
-        "-i", "--interactive",
+        "-i",
+        "--interactive",
         action="store_true",
-        help="Launch Ranger-style interactive dual-pane TUI during folder sync or reverse sync."
+        help="Launch Ranger-style interactive dual-pane TUI during folder sync or reverse sync.",
     )
     parser.add_argument(
         "--show-hidden",
         action="store_true",
-        help="Include files hidden in SQLite database during sync operations."
+        help="Include files hidden in SQLite database during sync operations.",
     )
     parser.add_argument(
         "--list-hidden",
         action="store_true",
-        help="List all files stored in the SQLite hide list database (sync_hide_list.db) and exit."
+        help="List all files stored in the SQLite hide list database (sync_hide_list.db) and exit.",
     )
     parser.add_argument(
         "--list-synced",
         action="store_true",
-        help="List all files recorded in the SQLite synced history database (sync_hide_list.db) and exit."
+        help="List all files recorded in the SQLite synced history database (sync_hide_list.db) and exit.",
     )
     parser.add_argument(
         "--unhide",
         type=str,
-        help="Remove specified file path (or 'all') from the SQLite hide list database and exit."
+        help="Remove specified file path (or 'all') from the SQLite hide list database and exit.",
     )
     parser.add_argument(
         "--sync-folder",
         type=str,
-        help="Local music folder to sync (overrides config.json local_sync_folder)."
+        help="Local music folder to sync (overrides config.json local_sync_folder).",
     )
     parser.add_argument(
         "--remote-dir",
         type=str,
-        help="Target folder on ADB device (overrides config.json remote_adb_folder)."
+        help="Target folder on ADB device (overrides config.json remote_adb_folder).",
     )
     parser.add_argument(
         "--force-sync",
         action="store_true",
-        help="Include songs already present on device in sync upload list."
+        help="Include songs already present on device in sync upload list.",
     )
     parser.add_argument(
-        "-y", "--yes",
+        "-y",
+        "--yes",
         action="store_true",
-        help="Automatically confirm sync, reverse-sync, and push operations without prompting."
+        help="Automatically confirm sync, reverse-sync, and push operations without prompting.",
     )
     parser.add_argument(
         "--refresh-cache",
         action="store_true",
-        help="Bypass Redis cache and re-query live ADB device."
+        help="Bypass Redis cache and re-query live ADB device.",
     )
     parser.add_argument(
-        "-dl", "--download",
+        "-dl",
+        "--download",
         type=str,
-        help="Spotify track/album URL or song query to download into songs/download/ directory."
+        help="Spotify track/album URL or song query to download into songs/download/ directory.",
     )
     parser.add_argument(
         "--download-dir",
         type=str,
-        help="Target folder for downloaded songs (overrides config.json download_folder)."
+        help="Target folder for downloaded songs (overrides config.json download_folder).",
     )
     parser.add_argument(
         "--use-telegram",
         action="store_true",
-        help="Force using Telegram Deezload bot for Spotify link downloading."
+        help="Force using Telegram Deezload bot for Spotify link downloading.",
     )
     parser.add_argument(
         "--push-adb",
         action="store_true",
         default=None,
-        help="Automatically push downloaded song to ADB device."
+        help="Automatically push downloaded song to ADB device.",
     )
     parser.add_argument(
         "--no-push-adb",
         action="store_false",
         dest="push_adb",
-        help="Skip pushing downloaded song to ADB device."
+        help="Skip pushing downloaded song to ADB device.",
     )
     parser.add_argument(
-        "-d", "--device",
-        type=str,
-        help="ADB device serial number (or index)."
+        "-d", "--device", type=str, help="ADB device serial number (or index)."
     )
     parser.add_argument(
-        "-s", "--search",
+        "-s",
+        "--search",
         type=str,
-        help="Non-interactive search query (lazy fuzzy match)."
+        help="Non-interactive search query (lazy fuzzy match).",
     )
     parser.add_argument(
-        "-f", "--file",
+        "-f",
+        "--file",
         type=str,
-        help="Path to file containing ADB content query data (e.g., songs.txt)."
+        help="Path to file containing ADB content query data (e.g., songs.txt).",
     )
     parser.add_argument(
         "--format",
         choices=["text", "json", "path", "csv"],
         default="text",
-        help="Output format (default: text)."
+        help="Output format (default: text).",
     )
     parser.add_argument(
-        "-l", "--list-devices",
+        "-l",
+        "--list-devices",
         action="store_true",
-        help="List connected ADB devices and exit."
+        help="List connected ADB devices and exit.",
     )
     parser.add_argument(
-        "-n", "--limit",
+        "-n",
+        "--limit",
         type=int,
         default=None,
-        help="Limit number of search results printed in non-interactive mode."
+        help="Limit number of search results printed in non-interactive mode.",
     )
     parser.add_argument(
         "--dupes",
         action="store_true",
-        help="Detect duplicate songs across the local music library and print a report."
+        help="Detect duplicate songs across the local music library and print a report.",
     )
     parser.add_argument(
         "--dupes-delete",
         action="store_true",
-        help="With --dupes: immediately delete all but one copy per duplicate cluster (short form: -d)."
+        help="With --dupes: immediately delete all but one copy per duplicate cluster (short form: -d).",
     )
     parser.add_argument(
-        "-af", "--dupes-fingerprint",
+        "-af",
+        "--dupes-fingerprint",
         action="store_true",
         dest="dupes_fingerprint",
-        help="With --dupes: use acoustic audio fingerprinting for duplicate detection."
+        help="With --dupes: use acoustic audio fingerprinting for duplicate detection.",
     )
 
     args = parser.parse_args(argv)
@@ -231,5 +233,3 @@ def _parse(argv):
         )
 
     return args
-
-
