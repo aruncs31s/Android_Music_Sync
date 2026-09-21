@@ -95,6 +95,11 @@ python app.py -f songs.txt -s "Kesariya"
 cat songs.txt | python app.py -s "Mareez" --format path
 ```
 
+### 7. Removing Duplicates using `dupes cli`
+This uses `fpcalc` and check for duplicates that is harder to find using string matching alone
+```
+python app.py --dupes -af
+```
 ---
 
 ## Project Structure

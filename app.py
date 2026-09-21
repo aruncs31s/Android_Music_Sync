@@ -29,6 +29,7 @@ import database.hide_list_db as hide_list_db
 import over_ip.workflow as over_ip_workflow
 import over_ip.server as over_ip_server
 import ui.server as ui_server
+import dupes_cli
 from downloader import DownloadManager
 from utils import get_logger
 from cmd.args import parse_args
@@ -122,6 +123,18 @@ def main():
             for r in records:
                 logger.info(f"  [{r['id']}] {r['filename']} | Device: {r['device_serial']} | Remote: {r['remote_dir']} (Synced: {r['synced_at']})")
         return
+
+    # Handle --dupes duplicate detection & interactive/immediate cleanup
+    if args.dupes:
+        dupes_cli.run_dupes_workflow(
+            interactive=args.interactive,
+            immediate_delete=args.dupes_delete,
+            use_fingerprint=args.dupes_fingerprint,
+            device_serial=target_device_serial,
+            auto_confirm=args.yes,
+            config_path=args.config,
+        )
+        sys.exit(0)
 
     # Handle --web Flask Web Interface & Dashboard
     if args.web:
