@@ -7,13 +7,13 @@ import os
 import sys
 from typing import List, Dict, Any, Optional
 
-import config_manager
-import hide_list_db
-import redis_cache
+import utils.config_manager as config_manager
+import database.hide_list_db as hide_list_db
+import database.redis_cache as redis_cache
 import over_ip.db as ip_db
 import over_ip.client as ip_client
 import over_ip.song_scanner as song_scanner
-import ranger_reverse_sync_tui
+import tui.ranger_reverse_sync_tui as ranger_reverse_sync_tui
 from utils import get_logger
 logger = get_logger()
 

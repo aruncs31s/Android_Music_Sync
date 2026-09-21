@@ -106,7 +106,13 @@ class DeviceRepository(BaseRepository):
             result["ip"] = info["ip"]
             result["port"] = info.get("port", 5000)
 
-        self._cache_set(cache_key, result)
+        if len(songs) > 0:
+            self._cache_set(cache_key, result)
+            if "ip" in info:
+                try:
+                    ui_db.update_ip_status(info["ip"], is_online=True, song_count=len(songs))
+                except Exception:
+                    pass
         return result
 
     def delete_device_song(

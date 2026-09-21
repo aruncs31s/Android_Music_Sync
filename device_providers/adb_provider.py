@@ -6,8 +6,8 @@ import os
 from typing import List, Dict, Any, Optional, Callable
 import utils.android.adb.adb_manager as adb_manager
 import utils.android.adb.adb_pusher as adb_pusher
-import config_manager
-import song_parser
+import utils.config_manager as config_manager
+import utils.android.adb.song_parser as song_parser
 from device_providers.base import DeviceProvider, PushResult, DeleteResult
 from utils import get_logger
 

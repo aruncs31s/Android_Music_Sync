@@ -83,7 +83,9 @@ function renderPlaylistSidebar() {
   sorted.forEach(p => {
     const isSelected = selectedPlaylist && selectedPlaylist.id === p.id;
     const isLikedMusic = (p.name === 'Liked Music');
-    const icon = isLikedMusic ? '❤️' : '🎵';
+    const icon = isLikedMusic
+      ? `<span style="color:#ff0055;display:inline-flex;">${SVG_HEART_FILLED}</span>`
+      : `<span style="display:inline-flex;">${SVG_LIST}</span>`;
 
     html += `
       <div onclick="selectPlaylist(${p.id}, '${escapeJs(p.name)}')"
@@ -92,7 +94,7 @@ function renderPlaylistSidebar() {
                   background: ${isSelected ? 'var(--accent-primary, #6366f1)' : 'transparent'};
                   color: ${isSelected ? '#ffffff' : 'var(--text-main)'};">
         <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden;">
-          <span style="font-size: 0.85rem; flex-shrink: 0;">${icon}</span>
+          <span style="font-size: 0.85rem; flex-shrink: 0; display: inline-flex; align-items: center;">${icon}</span>
           <span style="font-size: 0.82rem; font-weight: ${isSelected ? '700' : '500'}; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
             ${escapeHtml(p.name)}
           </span>
@@ -133,7 +135,7 @@ async function selectPlaylist(playlistId, playlistName) {
     const isLiked = playlistName === 'Liked Music';
     nameTitle.innerHTML = isLiked
       ? `<span style="color:#ff0055; display:inline-flex;">${SVG_HEART_FILLED}</span> ${escapeHtml(playlistName)}`
-      : `<span style="color:var(--accent-yellow); font-size: 1.1rem;">🎵</span> ${escapeHtml(playlistName)}`;
+      : `<span style="color:var(--accent-yellow); display:inline-flex; align-items: center;">${SVG_LIST}</span> ${escapeHtml(playlistName)}`;
   }
 
   // 3. Render Left Sidebar
@@ -238,7 +240,7 @@ function filterPlaylistPageAbsentSongs() {
   if (matchingAbsent.length === 0) {
     container.innerHTML = `
       <div style="font-size: 0.8rem; color: var(--accent-green, #4ade80); padding: 0.5rem 0; display: flex; align-items: center; gap: 0.4rem;">
-        <span>✓</span> All songs matched in this playlist!
+        <span style="display:inline-flex;">${SVG_CHECK}</span> All songs matched in this playlist!
       </div>`;
     return;
   }
@@ -263,10 +265,10 @@ function filterPlaylistPageAbsentSongs() {
             </div>
           </div>
           ${isResolved
-            ? `<span style="font-size: 0.68rem; color: var(--accent-green, #4ade80); font-weight: 700; white-space: nowrap;">✓ Resolved</span>`
+            ? `<span style="font-size: 0.68rem; color: var(--accent-green, #4ade80); font-weight: 700; white-space: nowrap; display: inline-flex; align-items: center; gap: 0.2rem;">${SVG_CHECK} Resolved</span>`
             : `<button class="btn btn-secondary btn-sm" style="font-size: 0.68rem; padding: 0.2rem 0.45rem; white-space: nowrap; flex-shrink: 0;"
                  onclick="resolveRightAbsentSong(${globalIdx}, this)" title="Fuzzy search local library">
-                 🔍 Resolve
+                 Resolve
                </button>`
           }
         </div>
@@ -294,12 +296,12 @@ async function resolveRightAbsentSong(globalIdx, btn) {
 
   if (panel.style.display !== 'none') {
     panel.style.display = 'none';
-    if (btn) btn.textContent = '🔍 Resolve';
+    if (btn) btn.textContent = 'Resolve';
     return;
   }
 
   panel.style.display = 'block';
-  if (btn) btn.textContent = '▲ Close';
+  if (btn) btn.textContent = 'Close';
   if (resultsDiv) resultsDiv.innerHTML = '<span class="text-muted" style="font-size: 0.72rem;">Searching library...</span>';
 
   const query = item.readable_name || item.filename;
@@ -412,7 +414,7 @@ function renderPlaylistTracks() {
 
     const actionsHtml = isAbsent
       ? `<div class="action-btn-group">
-           <button class="btn btn-secondary btn-sm" onclick="openResolveForTrack(${idx})" title="Resolve absent track in right panel">🔍 Resolve</button>
+           <button class="btn btn-secondary btn-sm" onclick="openResolveForTrack(${idx})" title="Resolve absent track in right panel">Resolve</button>
            <button class="btn btn-secondary btn-danger btn-sm" onclick="removeTrackFromPlaylist(${selectedPlaylist.id}, '${escapeJs(s.filepath)}')" title="Remove from playlist">${SVG_TRASH} Remove</button>
          </div>`
       : `<div class="action-btn-group">

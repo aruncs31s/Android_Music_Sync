@@ -1,4 +1,4 @@
-from reverse_syncer import *
+from services.reverse_syncer import *
 
 def test_listing_device():
     list =adb_manager.list_adb_devices()

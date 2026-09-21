@@ -10,23 +10,15 @@ import subprocess
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Optional, Tuple, Generator
-import audio_metadata
+from utils import audio_metadata
 from utils import get_logger
+import model
 
 logger = get_logger()
 
 
-@dataclass
-class TranscodeResult:
-    """Result of an audio transcode operation."""
-    success: bool
-    output_path: str
-    original_path: str
-    original_bitrate: Optional[int] = None
-    target_bitrate: Optional[int] = None
-    original_size: int = 0
-    new_size: int = 0
-    error: Optional[str] = None
+
+from model.transcoder import TranscodeResult
 
 
 class AudioTranscoder:
@@ -42,7 +34,7 @@ class AudioTranscoder:
         return shutil.which("ffmpeg") is not None
 
     @classmethod
-    def detect_bitrate(cls, filepath: str) -> Optional[int]:
+    def detect_bitrate(cls, filepath: str) -> int |None:
         """
         Extract numeric audio bitrate in kbps.
         Returns integer kbps (e.g. 320, 256, 128) or 999 for lossless FLAC/WAV.
@@ -111,14 +103,14 @@ class AudioTranscoder:
         cls,
         input_path: str,
         target_bitrate_kbps: int,
-        output_path: Optional[str] = None
-    ) -> TranscodeResult:
+        output_path: str |None = None
+    ) -> model.TranscodeResult:
         """
         Transcode an audio file to target bitrate MP3 using ffmpeg.
         Preserves all metadata (-map_metadata 0).
         """
         if not os.path.exists(input_path):
-            return TranscodeResult(
+            return model.TranscodeResult(
                 success=False,
                 output_path="",
                 original_path=input_path,
@@ -126,7 +118,7 @@ class AudioTranscoder:
             )
 
         if not cls.is_ffmpeg_available():
-            return TranscodeResult(
+            return model.TranscodeResult(
                 success=False,
                 output_path=input_path,
                 original_path=input_path,

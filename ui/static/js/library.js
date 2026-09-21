@@ -125,6 +125,11 @@ async function loadDeviceSongs(deviceId = 'local', forceRefresh = false) {
     return;
   }
 
+  const tbody = document.getElementById('songs-tbody');
+  if (tbody) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-muted" style="text-align:center;padding:2rem;">Loading library from ${escapeHtml(currentDeviceName || deviceId)}…</td></tr>`;
+  }
+
   // Fast direct load from SQLite / in-memory cache (< 5ms)
   try {
     const res = await fetch(`/api/devices/${encodeURIComponent(deviceId)}/songs`);

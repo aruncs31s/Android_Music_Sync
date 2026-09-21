@@ -11,10 +11,10 @@ import subprocess
 from typing import Optional, Dict, Any, List
 
 import utils.android.adb.adb_manager as adb_manager
-import song_parser
-import fuzzy_matcher
-import redis_cache
-import hide_list_db
+from utils.android.adb import song_parser
+from utils import fuzzy_matcher
+import database.redis_cache as redis_cache
+import database.hide_list_db as hide_list_db
 from utils import get_logger
 logger = get_logger()
 

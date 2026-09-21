@@ -104,6 +104,21 @@ def get_stored_ip_hosts(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     return central_db.get_stored_ip_hosts(db_path)
 
 
+def add_ip_host(ip_address: str, port: int = 5000, alias: str | None = None, song_count: int = 0, db_path: Optional[str] = None) -> bool:
+    return central_db.add_ip_host(ip_address, port, alias, song_count, db_path)
+
+
+save_ip_host = add_ip_host
+
+
+def remove_ip_host(ip_address: str, db_path: str | None = None) -> bool:
+    return central_db.remove_ip_host(ip_address, db_path)
+
+
+def update_ip_status(ip_address: str, is_online: bool, song_count: Optional[int] = None, db_path: str | None = None) -> bool:
+    return central_db.update_ip_status(ip_address, is_online, song_count, db_path)
+
+
 def add_deleted_song(record: SongRecord, db_path: Optional[str] = None) -> bool:
     return central_db.add_deleted_song(record, db_path)
 

@@ -10,7 +10,7 @@ import requests
 from typing import List, Dict, Any, Optional
 
 import over_ip.db as ip_db
-import redis_cache
+import database.redis_cache as redis_cache
 from utils import get_logger
 logger = get_logger()
 
@@ -26,7 +26,7 @@ def get_base_url(ip_address: str, port: int = 5000) -> str:
 def ping_host(
     ip_address: str,
     port: int = 5000,
-    timeout: float = 2.5,
+    timeout: float = 4.0,
     redis_cfg: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
@@ -62,7 +62,7 @@ def ping_host(
             result["online"] = True
             result["hostname"] = data.get("hostname", "Unknown")
             result["song_count"] = data.get("song_count", 0)
-            ip_db.update_ip_status(ip_address, is_online=True)
+            ip_db.update_ip_status(ip_address, is_online=True, song_count=result["song_count"])
         else:
             result["error"] = f"HTTP {resp.status_code}"
             ip_db.update_ip_status(ip_address, is_online=False)
@@ -85,7 +85,7 @@ def get_remote_songs(
     port: int = 5000,
     redis_cfg: Optional[Dict[str, Any]] = None,
     refresh: bool = False,
-    timeout: float = 5.0
+    timeout: float = 20.0
 ) -> List[Dict[str, Any]]:
     """
     Acquire available songs from remote peer over HTTP.
@@ -110,8 +110,11 @@ def get_remote_songs(
         resp = requests.get(url, timeout=timeout)
         if resp.status_code == 200:
             songs = resp.json()
-            if redis_cfg and isinstance(songs, list):
-                redis_cache.set_cache(redis_cfg, cache_key, json.dumps(songs))
+            if isinstance(songs, list):
+                if len(songs) > 0:
+                    ip_db.update_ip_status(ip_address, is_online=True, song_count=len(songs))
+                if redis_cfg:
+                    redis_cache.set_cache(redis_cfg, cache_key, json.dumps(songs))
             return songs
         else:
             logger.error(f"[Over-IP Client] Failed to fetch songs from {ip_address}: HTTP {resp.status_code}")

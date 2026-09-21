@@ -9,7 +9,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-import audio_fingerprint
+from utils import audio_fingerprint
 import database.db_manager as db_manager
 import ui.stats_manager as stats_manager
 from repositories.song_repository import SongRepository
@@ -90,7 +90,7 @@ class TestAudioFingerprint(unittest.TestCase):
         self.assertIn(self.song_a, fp_map)
         self.assertEqual(fp_map[self.song_a]["fingerprint"], test_fp)
 
-    @patch("audio_fingerprint.is_fpcalc_available", return_value=False)
+    @patch("utils.audio_fingerprint.is_fpcalc_available", return_value=False)
     def test_detect_duplicates_fpcalc_missing_fallback(self, mock_avail):
         # When fpcalc is missing and user requests fingerprinting,
         # it must set warning and fall back to metadata matching.
@@ -107,7 +107,7 @@ class TestAudioFingerprint(unittest.TestCase):
         self.assertEqual(result["cluster_count"], 1)
         self.assertEqual(result["clusters"][0]["match_type"], "title_artist")
 
-    @patch("audio_fingerprint.is_fpcalc_available", return_value=True)
+    @patch("utils.audio_fingerprint.is_fpcalc_available", return_value=True)
     def test_detect_duplicates_acoustic_waveform_clustering(self, mock_avail):
         # Mock generate_audio_fingerprint to return identical fingerprint for song_a and song_b
         # even though their filenames and titles differ!
@@ -122,7 +122,7 @@ class TestAudioFingerprint(unittest.TestCase):
             {"filepath": self.song_c, "title": "Solo Track", "artist": "Artist 3", "filename": "song_c.flac"},
         ]
 
-        with patch("audio_fingerprint.generate_audio_fingerprint", side_effect=fake_fp):
+        with patch("utils.audio_fingerprint.generate_audio_fingerprint", side_effect=fake_fp):
             result = stats_manager.detect_duplicate_songs(songs, use_fingerprint=True)
 
         self.assertTrue(result["fpcalc_available"])

@@ -38,16 +38,180 @@ async function loadDashboardStats() {
   }
 }
 
+// Filter state for Connected Devices table
+var currentDeviceCategoryFilter = 'all'; // 'all' | 'adb' | 'overip' | 'local'
+var deviceOnlineOnlyFilter = false;
+var deviceSearchQuery = '';
+
+function getDeviceCategory(d) {
+  if (!d) return 'other';
+  const id = (d.id || '').toLowerCase();
+  const type = (d.type || '').toLowerCase();
+  if (id === 'local' || type.includes('local') || type.includes('storage')) {
+    return 'local';
+  }
+  if (id.startsWith('adb') || type.includes('adb')) {
+    return 'adb';
+  }
+  if (id.startsWith('ip') || id.startsWith('http') || type.includes('over-ip') || type.includes('http') || type.includes('peer')) {
+    return 'overip';
+  }
+  return 'other';
+}
+
+function updateDeviceFilterCounts(devices) {
+  const list = devices || [];
+  const total = list.length;
+  const adbCount = list.filter(d => getDeviceCategory(d) === 'adb').length;
+  const overipCount = list.filter(d => getDeviceCategory(d) === 'overip').length;
+  const localCount = list.filter(d => getDeviceCategory(d) === 'local').length;
+
+  const elAll = document.getElementById('count-dev-all');
+  const elAdb = document.getElementById('count-dev-adb');
+  const elOverip = document.getElementById('count-dev-overip');
+  const elLocal = document.getElementById('count-dev-local');
+
+  if (elAll) elAll.textContent = total;
+  if (elAdb) elAdb.textContent = adbCount;
+  if (elOverip) elOverip.textContent = overipCount;
+  if (elLocal) elLocal.textContent = localCount;
+}
+
+function filterDevices(devices) {
+  if (!devices || !Array.isArray(devices)) return [];
+  return devices.filter(d => {
+    // 1. Category Filter
+    if (currentDeviceCategoryFilter !== 'all') {
+      if (getDeviceCategory(d) !== currentDeviceCategoryFilter) return false;
+    }
+    // 2. Online Only Filter
+    if (deviceOnlineOnlyFilter) {
+      const isOnline = d.status === 'online' || d.status === 'active';
+      if (!isOnline) return false;
+    }
+    // 3. Search Query Filter
+    if (deviceSearchQuery) {
+      const q = deviceSearchQuery.toLowerCase();
+      const name = (d.name || '').toLowerCase();
+      const details = (d.details || '').toLowerCase();
+      const serial = (d.serial || '').toLowerCase();
+      const ip = (d.ip || '').toLowerCase();
+      const type = (d.type || '').toLowerCase();
+      const matches = name.includes(q) || details.includes(q) || serial.includes(q) || ip.includes(q) || type.includes(q);
+      if (!matches) return false;
+    }
+    return true;
+  });
+}
+
+function setDeviceCategoryFilter(category, btnEl) {
+  currentDeviceCategoryFilter = category;
+
+  document.querySelectorAll('.device-filter-chips .filter-chip[id^="chip-filter-dev-"]').forEach(chip => {
+    if (chip.id !== 'chip-filter-dev-online') {
+      chip.classList.remove('active');
+    }
+  });
+
+  if (btnEl) {
+    btnEl.classList.add('active');
+  } else {
+    const targetChip = document.getElementById(`chip-filter-dev-${category}`);
+    if (targetChip) targetChip.classList.add('active');
+  }
+
+  renderDeviceListTable();
+}
+
+function toggleDeviceOnlineFilter(btnEl) {
+  deviceOnlineOnlyFilter = !deviceOnlineOnlyFilter;
+  if (btnEl) {
+    btnEl.classList.toggle('active', deviceOnlineOnlyFilter);
+  }
+  renderDeviceListTable();
+}
+
+function onDeviceSearchInput(val) {
+  deviceSearchQuery = (val || '').trim();
+  const clearBtn = document.getElementById('device-search-clear');
+  if (clearBtn) {
+    clearBtn.style.display = deviceSearchQuery ? 'block' : 'none';
+  }
+  renderDeviceListTable();
+}
+
+function clearDeviceSearch() {
+  const input = document.getElementById('device-search-query');
+  if (input) input.value = '';
+  deviceSearchQuery = '';
+  const clearBtn = document.getElementById('device-search-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+  renderDeviceListTable();
+}
+
+function resetDeviceFilters() {
+  currentDeviceCategoryFilter = 'all';
+  deviceOnlineOnlyFilter = false;
+  deviceSearchQuery = '';
+
+  const input = document.getElementById('device-search-query');
+  if (input) input.value = '';
+  const clearBtn = document.getElementById('device-search-clear');
+  if (clearBtn) clearBtn.style.display = 'none';
+
+  const onlineChip = document.getElementById('chip-filter-dev-online');
+  if (onlineChip) onlineChip.classList.remove('active');
+
+  document.querySelectorAll('.device-filter-chips .filter-chip[id^="chip-filter-dev-"]').forEach(chip => {
+    if (chip.id === 'chip-filter-dev-all') {
+      chip.classList.add('active');
+    } else if (chip.id !== 'chip-filter-dev-online') {
+      chip.classList.remove('active');
+    }
+  });
+
+  renderDeviceListTable();
+}
+
 function renderDeviceBreakdown(devices) {
   availableDevicesList = devices || [];
   updateLibraryDeviceSelectOptions();
+  updateDeviceFilterCounts(availableDevicesList);
+  renderDeviceListTable();
+}
 
+function renderDeviceListTable() {
   const container = document.getElementById('device-list');
   const fullContainer = document.getElementById('devices-full-list');
 
-  if (!devices || devices.length === 0) {
-    if (container) container.innerHTML = '<p class="text-muted">No devices connected.</p>';
-    if (fullContainer) fullContainer.innerHTML = '<p class="text-muted">No available devices.</p>';
+  if (!availableDevicesList || availableDevicesList.length === 0) {
+    const emptyHtml = '<p class="text-muted">No devices connected.</p>';
+    if (container) container.innerHTML = emptyHtml;
+    if (fullContainer) fullContainer.innerHTML = emptyHtml;
+    return;
+  }
+
+  const filteredDevices = filterDevices(availableDevicesList);
+
+  if (filteredDevices.length === 0) {
+    const catLabels = { adb: 'ADB Devices', overip: 'Over-IP Peers', local: 'Local Storage' };
+    const activeFilters = [];
+    if (currentDeviceCategoryFilter !== 'all') {
+      activeFilters.push(catLabels[currentDeviceCategoryFilter] || currentDeviceCategoryFilter);
+    }
+    if (deviceOnlineOnlyFilter) activeFilters.push('Online Only');
+    if (deviceSearchQuery) activeFilters.push(`"${deviceSearchQuery}"`);
+
+    const noMatchHtml = `
+      <div style="text-align: center; padding: 2.5rem 1rem; color: var(--text-muted);">
+        <p style="font-size: 0.95rem; margin-bottom: 0.85rem; color: var(--text-main);">
+          No devices found matching: <strong style="color: var(--accent-yellow);">${escapeHtml(activeFilters.join(' + ') || 'criteria')}</strong>
+        </p>
+        <button class="btn btn-secondary btn-sm" onclick="resetDeviceFilters()">Reset Filters</button>
+      </div>
+    `;
+    if (container) container.innerHTML = noMatchHtml;
+    if (fullContainer) fullContainer.innerHTML = noMatchHtml;
     return;
   }
 
@@ -56,7 +220,7 @@ function renderDeviceBreakdown(devices) {
       <thead>
         <tr>
           <th style="min-width: 220px;">Device / Source</th>
-          <th style="width: 130px;">Type</th>
+          <th style="width: 140px;">Type</th>
           <th style="width: 140px;" class="col-center">Song Count</th>
           <th style="width: 120px;" class="col-center">Status</th>
           <th style="width: 150px;" class="col-right">Action</th>
@@ -65,11 +229,18 @@ function renderDeviceBreakdown(devices) {
       <tbody>
   `;
 
-  devices.forEach(d => {
+  filteredDevices.forEach(d => {
     const isOnline = d.status === 'online' || d.status === 'active';
     const statusBadge = isOnline 
       ? '<span class="badge badge-online">ONLINE</span>' 
       : '<span class="badge badge-offline">OFFLINE</span>';
+    
+    // Distinguish badge color by device category
+    const cat = getDeviceCategory(d);
+    let typeBadgeClass = 'badge-purple';
+    if (cat === 'local') typeBadgeClass = 'badge-yellow';
+    else if (cat === 'adb') typeBadgeClass = 'badge-blue';
+    else if (cat === 'overip') typeBadgeClass = 'badge-purple';
     
     html += `
       <tr onclick="openDeviceLibrary('${escapeJs(d.id)}', '${escapeJs(d.name)}')" style="cursor: pointer;" title="Click to open ${escapeHtml(d.name)} Song Library">
@@ -77,7 +248,7 @@ function renderDeviceBreakdown(devices) {
           <strong style="color: var(--accent-orange); font-size: 0.92rem;">${escapeHtml(d.name)}</strong>
           <br><small class="text-muted">${escapeHtml(d.details || d.serial || '')}</small>
         </td>
-        <td><span class="badge badge-purple">${escapeHtml(d.type)}</span></td>
+        <td><span class="badge ${typeBadgeClass}">${escapeHtml(d.type)}</span></td>
         <td class="col-center text-tabular"><strong>${d.count}</strong> songs</td>
         <td class="col-center">${statusBadge}</td>
         <td class="col-right">
@@ -97,9 +268,47 @@ function renderDeviceBreakdown(devices) {
 function updateLibraryDeviceSelectOptions() {
   const sel = document.getElementById('library-device-select');
   if (!sel || availableDevicesList.length === 0) return;
-  sel.innerHTML = availableDevicesList.map(d => 
-    `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)} (${d.count} songs)</option>`
-  ).join('');
+
+  const localDevs = availableDevicesList.filter(d => getDeviceCategory(d) === 'local');
+  const adbDevs = availableDevicesList.filter(d => getDeviceCategory(d) === 'adb');
+  const ipDevs = availableDevicesList.filter(d => getDeviceCategory(d) === 'overip');
+  const otherDevs = availableDevicesList.filter(d => getDeviceCategory(d) === 'other');
+
+  let optionsHtml = '';
+
+  if (localDevs.length > 0) {
+    optionsHtml += `<optgroup label="Local Storage">`;
+    localDevs.forEach(d => {
+      optionsHtml += `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)} (${d.count} songs)</option>`;
+    });
+    optionsHtml += `</optgroup>`;
+  }
+
+  if (adbDevs.length > 0) {
+    optionsHtml += `<optgroup label="ADB Devices">`;
+    adbDevs.forEach(d => {
+      optionsHtml += `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)} (${d.count} songs)</option>`;
+    });
+    optionsHtml += `</optgroup>`;
+  }
+
+  if (ipDevs.length > 0) {
+    optionsHtml += `<optgroup label="Over-IP Peers">`;
+    ipDevs.forEach(d => {
+      optionsHtml += `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)} (${d.count} songs)</option>`;
+    });
+    optionsHtml += `</optgroup>`;
+  }
+
+  if (otherDevs.length > 0) {
+    optionsHtml += `<optgroup label="Other Devices">`;
+    otherDevs.forEach(d => {
+      optionsHtml += `<option value="${escapeHtml(d.id)}">${escapeHtml(d.name)} (${d.count} songs)</option>`;
+    });
+    optionsHtml += `</optgroup>`;
+  }
+
+  sel.innerHTML = optionsHtml;
   sel.value = currentDeviceId;
 }
 

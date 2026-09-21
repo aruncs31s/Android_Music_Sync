@@ -111,7 +111,7 @@ class TestLocalSongsDb(unittest.TestCase):
         }
 
         # Patch mutagen to fail if called, verifying mutagen is NOT invoked when cached
-        with patch("audio_metadata.extract_audio_metadata", side_effect=RuntimeError("Mutagen should not be called!")):
+        with patch("utils.audio_metadata.extract_audio_metadata", side_effect=RuntimeError("Mutagen should not be called!")):
             scanned = scan_songs_from_paths(
                 [self.tmp_dir.name],
                 existing_metadata_map=cached_metadata

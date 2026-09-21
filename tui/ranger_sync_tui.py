@@ -17,11 +17,10 @@ import os
 import curses
 from typing import List, Dict, Any, Optional
 
-import fuzzy_matcher
+from utils import fuzzy_matcher, audio_metadata
 import utils.android.adb.adb_pusher as adb_pusher
-import fzf_tui
-import audio_metadata
-import hide_list_db
+import tui.fzf_tui as fzf_tui
+import database.hide_list_db as hide_list_db
 from utils import get_logger
 logger = get_logger()
 
