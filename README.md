@@ -2,6 +2,7 @@
 
 A cli + web tool that queries audio tracks from connected Android devices via ADB (`adb shell content query`) or local files Features real-time FZF-style fuzzy matching with lazy match scoring, Spotify/query song downloading, duplicate detection, and post-download pushing to Android devices.
 
+Use this [FlowPlayer](https://github.com/aruncs31s/FlowPlayer) Which connects with this Android Music Sync api and help to sync songs without using termux in android
 ## For MAC OS Users(12)
 
 
