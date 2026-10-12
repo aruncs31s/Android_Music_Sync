@@ -6,6 +6,56 @@
 
 let selectedDuplicatePaths = new Set();
 let currentDupKeepStrategy = 'best_quality';
+let currentDupDeviceId = 'local';
+
+async function refreshDuplicateDeviceList() {
+  const sel = document.getElementById('dup-device-select');
+  if (!sel) return;
+
+  try {
+    const res = await fetch('/api/devices');
+    if (!res.ok) return;
+    const devices = await res.json();
+
+    const prev = sel.value || currentDupDeviceId || 'local';
+    let html = '<option value="local">Local Storage</option>';
+
+    if (Array.isArray(devices)) {
+      devices.forEach(d => {
+        const val = d.id || d.device_id || (d.serial ? `adb_${d.serial}` : null) || d.ip_port;
+        if (!val || val === 'local') return;
+        const typeBadge = (d.type && d.type.includes('ADB')) || (d.device_type && d.device_type.includes('ADB')) ? '[ADB]' : '[Over-IP]';
+        const label = d.name || d.device_name || d.description || val;
+        const online = d.status === 'online' || d.is_online !== false ? '' : ' (offline)';
+        html += `<option value="${escapeHtml(val)}">${typeBadge} ${escapeHtml(label)}${online}</option>`;
+      });
+    }
+
+    sel.innerHTML = html;
+    const opts = Array.from(sel.options).map(o => o.value);
+    sel.value = opts.includes(prev) ? prev : 'local';
+    currentDupDeviceId = sel.value;
+  } catch (err) {
+    console.warn('[Duplicates] Could not refresh device list:', err);
+  }
+}
+
+function onDuplicateDeviceChange() {
+  const sel = document.getElementById('dup-device-select');
+  if (sel) {
+    currentDupDeviceId = sel.value || 'local';
+  }
+  selectedDuplicatePaths.clear();
+  updateDuplicatesSelectionUI();
+
+  // If acoustic fingerprinting is checked and device is remote, show polite notice
+  const fpToggle = document.getElementById('toggle-use-fingerprints');
+  if (fpToggle && currentDupDeviceId !== 'local' && fpToggle.checked) {
+    showToast('Acoustic waveform analysis is optimized for local storage. Remote device will be matched by metadata tags & filenames.', 'info');
+  }
+
+  loadDuplicates(true);
+}
 
 function findKeeperInCluster(cluster, strategy = 'best_quality') {
   if (!cluster || !cluster.songs || cluster.songs.length === 0) return null;
@@ -45,16 +95,16 @@ function onToggleFingerprintMatching(checked) {
 function _dupTerminalLineClass(msg) {
   const tag = msg.slice(0, 7).toUpperCase();
   if (tag.startsWith('[CACHE]')) return 'log-cache';
-  if (tag.startsWith('[FP]'))    return 'log-fp';
-  if (tag.startsWith('[SCAN]'))  return 'log-scan';
-  if (tag.startsWith('[TAG]'))   return 'log-tag';
+  if (tag.startsWith('[FP]')) return 'log-fp';
+  if (tag.startsWith('[SCAN]')) return 'log-scan';
+  if (tag.startsWith('[TAG]')) return 'log-tag';
   if (tag.startsWith('[MATCH]')) return 'log-match';
-  if (tag.startsWith('[SKIP]'))  return 'log-skip';
-  if (tag.startsWith('[FAIL]'))  return 'log-fail';
-  if (tag.startsWith('[WARN]'))  return 'log-warn';
+  if (tag.startsWith('[SKIP]')) return 'log-skip';
+  if (tag.startsWith('[FAIL]')) return 'log-fail';
+  if (tag.startsWith('[WARN]')) return 'log-warn';
   if (tag.startsWith('[START]')) return 'log-start';
-  if (tag.startsWith('[INFO]'))  return 'log-info';
-  if (tag.startsWith('[DONE]'))  return 'log-done';
+  if (tag.startsWith('[INFO]')) return 'log-info';
+  if (tag.startsWith('[DONE]')) return 'log-done';
   if (tag.startsWith('[ERROR]')) return 'log-error';
   return '';
 }
@@ -105,6 +155,7 @@ function streamDuplicates() {
 
   const params = new URLSearchParams();
   params.set('fingerprint', useAudioFingerprinting ? 'true' : 'false');
+  params.set('device_id', currentDupDeviceId);
 
   const evtSource = new EventSource(`/api/duplicates/stream?${params.toString()}`);
   dupEventSource = evtSource;
@@ -198,6 +249,7 @@ async function loadDuplicates(forceRefresh = false) {
   try {
     const params = new URLSearchParams();
     params.set('fingerprint', useAudioFingerprinting ? 'true' : 'false');
+    params.set('device_id', currentDupDeviceId);
     if (forceRefresh) {
       params.set('refresh', 'true');
     }
@@ -437,8 +489,8 @@ function renderDuplicatesPage() {
     const matchBadge = c.match_type === 'audio_fingerprint'
       ? `<span class="badge badge-yellow" style="font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="Acoustic waveform match via Chromaprint fpcalc">${SVG_WAVEFORM} Waveform Fingerprint</span>`
       : (c.match_type === 'filename'
-          ? '<span class="badge badge-yellow" style="font-size: 0.72rem;">Filename</span>'
-          : '<span class="badge badge-yellow" style="font-size: 0.72rem;">Tag Match</span>');
+        ? `<span class="badge badge-yellow" style="font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="Filename match">${SVG_FILE} Filename</span>`
+        : `<span class="badge badge-yellow" style="font-size: 0.72rem; display: inline-flex; align-items: center; gap: 0.25rem;" title="Metadata tag match">${SVG_TAG} Tag Match</span>`);
 
     html += `
       <div class="duplicate-cluster-card">
@@ -495,7 +547,7 @@ function renderDuplicatesPage() {
           </div>
           <div class="action-btn-group">
             <button class="btn btn-secondary btn-sm" onclick="playAudio('${escapeJs(s.filepath)}', '${escapeJs(s.title)}', '${escapeJs(s.artist)}')" title="Play track">${SVG_PLAY} Play</button>
-            <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event)" title="Delete track">${SVG_TRASH} Delete</button>
+            <button class="btn btn-secondary btn-danger btn-sm" onclick="deleteSong('${escapeJs(s.filepath)}', event, '${escapeJs(currentDupDeviceId)}', '${escapeJs(s._id || s.id || '')}', '${escapeJs(s.filename || '')}')" title="Delete track">${SVG_TRASH} Delete</button>
           </div>
         </li>
       `;
@@ -525,8 +577,9 @@ function openBatchDeleteDuplicatesModal() {
   const previewEl = document.getElementById('batch-delete-files-preview');
   if (!modal) return;
 
+  const devText = (currentDupDeviceId && currentDupDeviceId !== 'local') ? ` on <strong>${escapeHtml(currentDupDeviceId)}</strong>` : ' across your duplicate song clusters';
   if (summaryEl) {
-    summaryEl.innerHTML = `You have selected <strong>${selectedDuplicatePaths.size}</strong> duplicate files for deletion across your duplicate song clusters.`;
+    summaryEl.innerHTML = `You have selected <strong>${selectedDuplicatePaths.size}</strong> duplicate files for deletion${devText}.`;
   }
 
   if (previewEl) {
@@ -560,7 +613,7 @@ async function executeBatchDeleteDuplicates() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         filepaths: pathsToDelete,
-        device_id: 'local'
+        device_id: currentDupDeviceId
       })
     });
     const data = await res.json();
@@ -569,7 +622,11 @@ async function executeBatchDeleteDuplicates() {
       showToast(`Deleted ${data.deleted_count} duplicate files. Exactly 1 copy in each cluster preserved!`, 'success');
       selectedDuplicatePaths.clear();
       updateDuplicatesSelectionUI();
-      loadDuplicates();
+      loadDuplicates(true);
+      if (currentDupDeviceId === 'local') {
+        loadSongs();
+        loadDashboardStats();
+      }
       loadSongs();
       loadDashboardStats();
     } else {
@@ -585,4 +642,17 @@ async function executeBatchDeleteDuplicates() {
     }
   }
 }
+
+function printDuplicatesReport() {
+  if (!allClusters || allClusters.length === 0) {
+    showToast('No duplicate clusters available to print. Please run duplicate analysis first.', 'info');
+    return;
+  }
+  const device = currentDupDeviceId || 'local';
+  const strat = currentDupKeepStrategy || 'best_quality';
+  const fp = (typeof useAudioFingerprinting !== 'undefined' && useAudioFingerprinting) ? 'true' : 'false';
+  const url = `/api/duplicates/report?device_id=${encodeURIComponent(device)}&strategy=${encodeURIComponent(strat)}&fingerprint=${fp}&autoprint=true`;
+  window.open(url, '_blank');
+}
+
 

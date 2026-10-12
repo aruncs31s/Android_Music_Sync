@@ -62,7 +62,9 @@
         <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3" cy="6" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="12" r="1" fill="currentColor" stroke="none"/><circle cx="3" cy="18" r="1" fill="currentColor" stroke="none"/></svg>
         Play Queue
         <span id="player-queue-count" class="player-lib-status" style="margin-left:auto;"></span>
-        <button class="player-ctrl-btn" onclick="clearPlayerQueue()" title="Clear queue" style="margin-left:0.5rem;font-size:0.75rem;opacity:0.6;">✕</button>
+        <button class="player-ctrl-btn" onclick="clearPlayerQueue()" title="Clear queue" style="margin-left:0.5rem;font-size:0.75rem;opacity:0.6;display:inline-flex;align-items:center;justify-content:center;">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>
       <div class="player-queue-list" id="player-queue-list">
         <div class="text-muted" style="padding:1.5rem 1rem;text-align:center;font-size:0.85rem;">No tracks in queue yet.</div>

@@ -77,7 +77,7 @@ def detect_duplicate_songs(
         cached_map = central_db.get_all_cached_fingerprints_map()
         logger.info(f"[DupScan] Loaded {len(cached_map)} cached fingerprint(s)")
 
-        by_fingerprint = defaultdict(list)
+        fp_entries: List[Dict[str, Any]] = []
         cache_hits = 0
         fp_computed = 0
         fp_failed = 0
@@ -146,7 +146,7 @@ def detect_duplicate_songs(
                 s_copy = dict(s)
                 s_copy["audio_fingerprint"] = fp
                 s_copy["audio_duration"] = dur
-                by_fingerprint[fp].append(s_copy)
+                fp_entries.append(s_copy)
 
         logger.info(
             f"[DupScan] Fingerprint pass done — "
@@ -154,9 +154,28 @@ def detect_duplicate_songs(
             f"failed: {fp_failed}, skipped: {fp_skipped}"
         )
 
-        # Build acoustic clusters from fingerprint groups
-        logger.info(f"[DupScan] Building acoustic clusters from {len(by_fingerprint)} unique fingerprint(s)...")
-        for fp, song_group in by_fingerprint.items():
+        # Build acoustic clusters by *similarity*, not exact string equality.
+        # Chromaprint fingerprints are fuzzy: the same song re-encoded or with a
+        # slightly different intro produces a different string. group_fingerprints
+        # uses an inverted index + similarity scoring so this stays fast.
+        sim_available = audio_fingerprint.is_similarity_available()
+        if not sim_available:
+            logger.warning(
+                "[DupScan] Similarity comparison unavailable — grouping by exact fingerprint string only."
+            )
+            _emit("[WARN]  Similarity comparison unavailable — using exact fingerprint matching")
+
+        logger.info(
+            f"[DupScan] Building acoustic clusters from {len(fp_entries)} fingerprint(s) "
+            f"(threshold={audio_fingerprint.SIMILARITY_THRESHOLD}, similarity={sim_available})..."
+        )
+        grouped_indices = audio_fingerprint.group_fingerprints(
+            [e.get("audio_fingerprint") for e in fp_entries],
+            [e.get("audio_duration") for e in fp_entries],
+        )
+        logger.info(f"[DupScan] Acoustic clustering produced {len(grouped_indices)} group(s)")
+        for group_indices in grouped_indices:
+            song_group = [fp_entries[i] for i in group_indices]
             if len(song_group) > 1:
                 cluster_paths = set(s.get("filepath") for s in song_group if s.get("filepath"))
                 if len(cluster_paths) > 1:

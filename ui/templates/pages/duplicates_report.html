@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Duplicate Songs Report - {{ device_name }}</title>
+  <link rel="stylesheet" href="/static/base.css">
+  <style>
+    body {
+      background: var(--bg-dark, #000000);
+      color: var(--text-main, #f8f8f2);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    /* Screen Action Bar (hidden on print) */
+    .report-action-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10, 10, 10, 0.95);
+      backdrop-filter: blur(8px);
+      border-bottom: 1px solid var(--border-color, #222222);
+      padding: 0.65rem 1.25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    }
+
+    .report-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.25rem 1.25rem 3rem;
+    }
+
+    /* Compact Header */
+    .report-header {
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border-color, #222222);
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+
+    .report-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+      margin: 0;
+      color: var(--accent-yellow, #facc15);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
+
+    .report-meta-bar {
+      font-size: 0.82rem;
+      color: var(--text-muted, #a1a1aa);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
+    }
+
+    .report-meta-bar strong {
+      color: var(--text-main, #f8f8f2);
+    }
+
+    /* Master Table: Pure Rows & Columns */
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      text-align: left;
+    }
+
+    .report-table thead {
+      position: sticky;
+      top: 50px;
+      z-index: 10;
+    }
+
+    .report-table th {
+      padding: 0.55rem 0.75rem;
+      background: #111116;
+      color: var(--accent-yellow, #facc15);
+      font-weight: 700;
+      font-size: 0.74rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-top: 1px solid var(--border-color, #222222);
+      border-bottom: 1px solid var(--border-color, #333333);
+    }
+
+    /* Cluster Group Body */
+    .cluster-group {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+
+    /* Cluster Header Row */
+    .cluster-row td {
+      background: rgba(250, 204, 21, 0.06);
+      border-top: 1px solid var(--border-color, #2a2a2a);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      padding: 0.45rem 0.75rem;
+      font-size: 0.82rem;
+      color: var(--text-main, #ffffff);
+      border-left: 3px solid var(--accent-yellow, #facc15);
+    }
+
+    .cluster-name {
+      font-weight: 700;
+      color: var(--accent-yellow, #facc15);
+    }
+
+    .cluster-sub {
+      font-size: 0.75rem;
+      color: var(--text-muted, #a1a1aa);
+      margin-left: 0.4rem;
+    }
+
+    /* Song Item Row */
+    .song-row td {
+      padding: 0.45rem 0.75rem;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      vertical-align: middle;
+      background: transparent;
+    }
+
+    .song-row:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .col-idx {
+      width: 35px;
+      text-align: center;
+      color: var(--text-muted, #71717a);
+      font-weight: 600;
+      font-size: 0.78rem;
+    }
+
+    .col-path {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.8rem;
+      word-break: break-all;
+      color: var(--text-main, #f8f8f2);
+      line-height: 1.35;
+    }
+
+    .col-size {
+      width: 75px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-main, #f8f8f2);
+      white-space: nowrap;
+    }
+
+    .col-bitrate {
+      width: 75px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted, #a1a1aa);
+      white-space: nowrap;
+    }
+
+    .col-mtime {
+      width: 140px;
+      text-align: center;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted, #71717a);
+      font-size: 0.78rem;
+      white-space: nowrap;
+    }
+
+    /* Print Styles */
+    @media print {
+      @page {
+        margin: 10mm 12mm;
+        size: auto;
+      }
+
+      .no-print {
+        display: none !important;
+      }
+
+      body {
+        background: #ffffff !important;
+        color: #111827 !important;
+        font-size: 8.5pt !important;
+      }
+
+      .report-container {
+        max-width: 100% !important;
+        padding: 0 !important;
+        margin: 0 !important;
+      }
+
+      .report-header {
+        border-bottom: 1.5pt solid #000000 !important;
+        padding-bottom: 4pt !important;
+        margin-bottom: 8pt !important;
+      }
+
+      .report-title {
+        color: #000000 !important;
+        font-size: 13pt !important;
+      }
+
+      .report-meta-bar {
+        color: #374151 !important;
+        font-size: 8.5pt !important;
+      }
+
+      .report-meta-bar strong {
+        color: #000000 !important;
+      }
+
+      .report-table {
+        font-size: 8pt !important;
+      }
+
+      .report-table thead {
+        display: table-header-group !important;
+        position: static !important;
+      }
+
+      .report-table th {
+        background: #f3f4f6 !important;
+        color: #000000 !important;
+        border-top: 1pt solid #000000 !important;
+        border-bottom: 1pt solid #000000 !important;
+        padding: 3pt 6pt !important;
+        font-size: 7.5pt !important;
+      }
+
+      .cluster-group {
+        break-inside: avoid !important;
+        page-break-inside: avoid !important;
+      }
+
+      .cluster-row td {
+        background: #f3f4f6 !important;
+        color: #000000 !important;
+        border-top: 1pt solid #9ca3af !important;
+        border-bottom: 0.5pt solid #d1d5db !important;
+        border-left: 2pt solid #000000 !important;
+        padding: 3pt 6pt !important;
+        font-size: 8pt !important;
+      }
+
+      .cluster-name {
+        color: #000000 !important;
+        font-weight: 700 !important;
+      }
+
+      .cluster-sub {
+        color: #4b5563 !important;
+      }
+
+      .song-row td {
+        border-bottom: 0.5pt solid #e5e7eb !important;
+        padding: 3pt 6pt !important;
+        color: #111827 !important;
+      }
+
+      .col-path {
+        color: #111827 !important;
+        font-size: 7.5pt !important;
+      }
+
+      .col-idx, .col-size, .col-bitrate, .col-mtime {
+        color: #111827 !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Screen Top Bar -->
+  <div class="report-action-bar no-print">
+    <div style="display: flex; align-items: center; gap: 0.75rem;">
+      <a href="/" class="btn btn-secondary btn-sm" style="text-decoration: none;">&larr; Back to App</a>
+      <span style="font-weight: 700; font-size: 0.9rem;">Duplicate Songs Audit</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 0.6rem;">
+      <button class="btn btn-sm" onclick="window.print()" style="background: var(--accent-yellow, #facc15); color: #000; font-weight: 700; border: none; cursor: pointer; display: flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.9rem; border-radius: 6px;">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 15px; height: 15px;">
+          <polyline points="6 9 6 2 18 2 18 9"/>
+          <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+          <rect x="6" y="14" width="12" height="8"/>
+        </svg>
+        Print / Save as PDF
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="window.close()" style="cursor: pointer;">Close</button>
+    </div>
+  </div>
+
+  <div class="report-container">
+    <!-- Compact Header -->
+    <div class="report-header">
+      <h1 class="report-title">
+        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 20px; height: 20px;"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        <span>Duplicate Songs Report</span>
+      </h1>
+      <div class="report-meta-bar">
+        <span>Device: <strong>{{ device_name }}</strong></span>
+        <span>&bull;</span>
+        <span>Clusters: <strong>{{ cluster_count }}</strong></span>
+        <span>&bull;</span>
+        <span>Total Files: <strong>{{ total_files_in_clusters }}</strong></span>
+        <span>&bull;</span>
+        <span>Redundant Copies: <strong>{{ total_duplicates }}</strong></span>
+        <span>&bull;</span>
+        <span>Method: <strong>{{ detection_mode }}</strong></span>
+        <span>&bull;</span>
+        <span>{{ generated_at }}</span>
+      </div>
+    </div>
+
+    <!-- Master Rows & Columns Table -->
+    <table class="report-table">
+      <thead>
+        <tr>
+          <th style="width: 35px; text-align: center;">#</th>
+          <th>Audio File Path</th>
+          <th style="width: 80px; text-align: right;">Size</th>
+          <th style="width: 80px; text-align: right;">Bitrate</th>
+          <th style="width: 140px; text-align: center;">Modified</th>
+        </tr>
+      </thead>
+      {% for c in clusters %}
+      <tbody class="cluster-group">
+        <tr class="cluster-row">
+          <td colspan="5">
+            <span class="cluster-name">Cluster #{{ c.index }}: {{ c.cluster_name }}</span>
+            <span class="cluster-sub">({{ c.count }} files &bull; {{ c.match_type | replace('_', ' ') }})</span>
+          </td>
+        </tr>
+        {% for s in c.songs %}
+        <tr class="song-row">
+          <td class="col-idx">{{ loop.index }}</td>
+          <td class="col-path">{{ s.filepath }}</td>
+          <td class="col-size">{{ s.size_formatted or '—' }}</td>
+          <td class="col-bitrate">{{ s.bitrate_kbps or '—' }}</td>
+          <td class="col-mtime">{{ s.mtime_str or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% endfor %}
+    </table>
+
+    <div style="margin-top: 2rem; text-align: center; font-size: 0.75rem; color: var(--text-muted, #71717a); border-top: 1px solid var(--border-color, #222222); padding-top: 1rem;">
+      Report generated automatically by Music Sync &bull; Total {{ cluster_count }} duplicate clusters ({{ total_files_in_clusters }} files)
+    </div>
+  </div>
+
+  <script>
+    // Auto-trigger print dialog if 'autoprint=true' in URL query
+    window.addEventListener('DOMContentLoaded', () => {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('autoprint') === 'true') {
+        setTimeout(() => {
+          window.print();
+        }, 400);
+      }
+    });
+  </script>
+</body>
+</html>

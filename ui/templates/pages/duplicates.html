@@ -7,10 +7,23 @@
         <span id="duplicates-summary-badge" class="badge badge-purple" style="font-size: 0.8rem;">Scanning...</span>
       </div>
       <div class="panel-actions" style="display: flex; gap: 0.75rem; align-items: center; flex-wrap: wrap;">
+        <div style="display: flex; align-items: center; gap: 0.4rem;">
+          <label for="dup-device-select" style="font-size: 0.82rem; font-weight: 600; color: var(--text-muted); display: inline-flex; align-items: center; gap: 0.3rem;">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 14px; height: 14px;"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            Device:
+          </label>
+          <select id="dup-device-select" class="search-bar" style="padding: 0.35rem 0.65rem; font-size: 0.82rem; min-width: 175px;" onchange="onDuplicateDeviceChange()">
+            <option value="local">Local Storage</option>
+          </select>
+        </div>
         <input type="text" id="duplicates-search" class="search-bar" placeholder="Search duplicate clusters or files..." oninput="onDuplicatesSearchInput()">
         <button class="btn btn-secondary" id="btn-rescan-duplicates" onclick="streamDuplicates()">
           <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
           Analyze
+        </button>
+        <button class="btn btn-secondary" id="btn-print-duplicates" onclick="printDuplicatesReport()" title="Export / Print duplicate clusters as PDF">
+          <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+          Print PDF
         </button>
       </div>
     </div>

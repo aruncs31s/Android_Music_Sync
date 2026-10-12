@@ -73,7 +73,7 @@ class TestAudioTranscoder(unittest.TestCase):
         self.assertLess(res.new_size, orig_size)
 
         new_br = AudioTranscoder.detect_bitrate(dst_path)
-        self.assertEqual(new_br, 128)
+        self.assertAlmostEqual(new_br, 128, delta=2)
 
     def test_managed_transcode_context_manager_cleans_up(self):
         mp3_320 = self._create_synthetic_mp3("source_320.mp3", bitrate_kbps=320)

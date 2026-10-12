@@ -103,6 +103,110 @@ function initAudioPlayer() {
   };
 
   setupPlayerKeyboardHotkeys();
+  initSpectrumAnalyzer();
+}
+
+// --- BESPOKE SPECTRUM ANALYZER (Web Audio API) ---
+
+let _spectrumCtx = null;
+let _spectrumAnalyser = null;
+let _spectrumSource = null;
+let _spectrumRAF = null;
+let _spectrumData = null;
+let _spectrumCanvas = null;
+let _spectrumGCtx = null;
+
+function initSpectrumAnalyzer() {
+  const player = document.getElementById('audio-player');
+  _spectrumCanvas = document.getElementById('player-spectrum');
+  if (!player || !_spectrumCanvas) return;
+  if (!(window.AudioContext || window.webkitAudioContext)) return;
+
+  const AC = window.AudioContext || window.webkitAudioContext;
+  try {
+    _spectrumCtx = new AC();
+    _spectrumSource = _spectrumCtx.createMediaElementSource(player);
+    _spectrumAnalyser = _spectrumCtx.createAnalyser();
+    _spectrumAnalyser.fftSize = 512;
+    _spectrumAnalyser.smoothingTimeConstant = 0.8;
+    _spectrumSource.connect(_spectrumAnalyser);
+    _spectrumAnalyser.connect(_spectrumCtx.destination);
+    _spectrumData = new Uint8Array(_spectrumAnalyser.frequencyBinCount);
+    _spectrumGCtx = _spectrumCanvas.getContext('2d');
+  } catch (err) {
+    console.warn('[Spectrum] Analyzer init failed:', err);
+    _spectrumCtx = null;
+    _spectrumAnalyser = null;
+    return;
+  }
+
+  player.addEventListener('play', startSpectrumAnalyzer);
+  player.addEventListener('play', resumeSpectrumContext);
+  player.addEventListener('pause', stopSpectrumAnalyzer);
+  player.addEventListener('ended', stopSpectrumAnalyzer);
+  player.addEventListener('waiting', stopSpectrumAnalyzer);
+}
+
+function resumeSpectrumContext() {
+  if (_spectrumCtx && _spectrumCtx.state === 'suspended') {
+    _spectrumCtx.resume().catch(() => {});
+  }
+}
+
+function startSpectrumAnalyzer() {
+  if (!_spectrumCtx || !_spectrumAnalyser || !_spectrumCanvas) return;
+  stopSpectrumAnalyzer();
+  const draw = () => {
+    if (!_spectrumAnalyser) return;
+    _spectrumAnalyser.getByteFrequencyData(_spectrumData);
+    renderSpectrumFrame();
+    _spectrumRAF = requestAnimationFrame(draw);
+  };
+  _spectrumRAF = requestAnimationFrame(draw);
+}
+
+function stopSpectrumAnalyzer() {
+  if (_spectrumRAF) {
+    cancelAnimationFrame(_spectrumRAF);
+    _spectrumRAF = null;
+  }
+  if (_spectrumCanvas && _spectrumGCtx) {
+    _spectrumGCtx.clearRect(0, 0, _spectrumCanvas.width, _spectrumCanvas.height);
+  }
+}
+
+function renderSpectrumFrame() {
+  const canvas = _spectrumCanvas;
+  const g = _spectrumGCtx;
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  if (!w || !h) return;
+
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+
+  const barCount = 48;
+  const total = w - (barCount - 1) * 2;
+  const barW = Math.max(1, total / barCount);
+  const gap = barCount > 1 ? 2 : 0;
+
+  for (let i = 0; i < barCount; i++) {
+    const bin = Math.floor((i / barCount) * _spectrumData.length * 0.98);
+    const v = _spectrumData[bin] / 255;
+    const bh = Math.max(2, Math.pow(v, 1.4) * h);
+    const x = i * (barW + gap);
+
+    const gradient = g.createLinearGradient(0, h, 0, h - bh);
+    gradient.addColorStop(0, 'rgba(250, 204, 21, 0.35)');
+    gradient.addColorStop(1, '#facc15');
+    g.fillStyle = gradient;
+    g.fillRect(x, h - bh, barW, bh);
+  }
 }
 
 function updateScrubberProgress(current, total) {

@@ -124,11 +124,98 @@ def get_songs():
 
 @app.route("/api/duplicates", methods=["GET"])
 def get_duplicates():
-    """Return duplicate song clusters with optional acoustic fingerprinting."""
+    """Return duplicate song clusters with optional acoustic fingerprinting and device selection."""
     use_fp = request.args.get("fingerprint", "false").lower() in ("true", "1", "yes")
     refresh = request.args.get("refresh", "false").lower() in ("true", "1", "yes")
-    dups = song_repo.get_duplicates(force_refresh=refresh, use_fingerprint=use_fp)
+    device_id = (request.args.get("device_id") or "local").strip()
+
+    if not device_id or device_id.lower() == "local":
+        dups = song_repo.get_duplicates(force_refresh=refresh, use_fingerprint=use_fp)
+        return jsonify(dups)
+
+    # Remote device
+    cache_key = f"cache:duplicates:{device_id}:{'fp' if use_fp else 'tag'}"
+    if not refresh:
+        cached = song_repo._cache_get(cache_key)
+        if cached is not None:
+            return jsonify(cached)
+
+    from device_providers.registry import DeviceProviderRegistry
+    provider = DeviceProviderRegistry.get_provider(device_id)
+    songs = provider.get_songs(force_refresh=refresh)
+    dups = ui_stats.detect_duplicate_songs(songs, use_fingerprint=False)
+    if use_fp:
+        info = provider.get_device_info()
+        dev_name = info.get("device_name", device_id)
+        dups["warning"] = f"Acoustic waveform fingerprinting is supported for local storage. Remote device [{dev_name}] duplicate scan completed using tag & filename matching."
+
+    song_repo._cache_set(cache_key, dups)
     return jsonify(dups)
+
+@app.route("/api/duplicates/report", methods=["GET"])
+@app.route("/duplicates/report", methods=["GET"])
+def duplicates_report():
+    """Render a standalone, print-optimized duplicate songs audit report for PDF export."""
+    device_id = (request.args.get("device_id") or "local").strip()
+    strategy = request.args.get("strategy", "best_quality")
+    use_fp = request.args.get("fingerprint", "false").lower() in ("true", "1", "yes")
+
+    # Fetch duplicate data
+    if not device_id or device_id.lower() == "local":
+        dups = song_repo.get_duplicates(force_refresh=False, use_fingerprint=use_fp)
+        dev_name = "Local Storage"
+    else:
+        from device_providers.registry import DeviceProviderRegistry
+        provider = DeviceProviderRegistry.get_provider(device_id)
+        dev_info = provider.get_device_info()
+        dev_name = dev_info.get("device_name", device_id)
+        cache_key = f"cache:duplicates:{device_id}:{'fp' if use_fp else 'tag'}"
+        cached = song_repo._cache_get(cache_key)
+        if cached is not None:
+            dups = cached
+        else:
+            songs = provider.get_songs(force_refresh=False)
+            dups = ui_stats.detect_duplicate_songs(songs, use_fingerprint=False)
+
+    clusters = dups.get("clusters", [])
+    processed_clusters = []
+    total_files_in_clusters = 0
+    total_redundant_copies = 0
+    total_duplicate_bytes = 0
+
+    for idx, c in enumerate(clusters, 1):
+        songs = c.get("songs", [])
+        total_files_in_clusters += len(songs)
+        if len(songs) > 1:
+            total_redundant_copies += (len(songs) - 1)
+            # Add sizes of redundant copies (all except the first/largest)
+            sorted_sizes = sorted([(s.get("size") or 0) for s in songs], reverse=True)
+            total_duplicate_bytes += sum(sorted_sizes[1:])
+
+        processed_clusters.append({
+            "index": idx,
+            "cluster_name": c.get("cluster_name", f"Cluster #{idx}"),
+            "match_type": c.get("match_type", "tag"),
+            "count": c.get("count", len(songs)),
+            "songs": songs,
+        })
+
+    redundant_size_formatted = format_size(total_duplicate_bytes)
+    total_duplicates = dups.get("total_duplicates", total_redundant_copies)
+    detection_mode = "Acoustic Fingerprint" if use_fp else "Tags & Filenames"
+
+    return render_template(
+        "pages/duplicates_report.html",
+        device_id=device_id,
+        device_name=dev_name,
+        detection_mode=detection_mode,
+        clusters=processed_clusters,
+        cluster_count=len(clusters),
+        total_files_in_clusters=total_files_in_clusters,
+        total_duplicates=total_duplicates,
+        redundant_size=redundant_size_formatted,
+        generated_at=datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    )
 
 @app.route("/api/duplicates/stream", methods=["GET"])
 def stream_duplicates():
@@ -140,8 +227,9 @@ def stream_duplicates():
       {"type": "error", "msg": "..."}         — on exception
     """
     use_fp = request.args.get("fingerprint", "false").lower() in ("true", "1", "yes")
+    device_id = (request.args.get("device_id") or "local").strip()
     client_ip = request.remote_addr
-    logger.info(f"[SSE] Client {client_ip} opened duplicate analysis stream (fingerprint={use_fp})")
+    logger.info(f"[SSE] Client {client_ip} opened duplicate analysis stream (device={device_id}, fingerprint={use_fp})")
 
     # Shared queue between the background analysis thread and the SSE generator.
     # Sentinel value None signals the generator that the thread has finished.
@@ -153,23 +241,47 @@ def stream_duplicates():
         msg_queue.put(json.dumps({"type": "log", "msg": msg}))
 
     def run_analysis():
-        logger.info(f"[SSE] Analysis thread started (fingerprint={use_fp})")
+        logger.info(f"[SSE] Analysis thread started (device={device_id}, fingerprint={use_fp})")
         try:
-            progress_cb(f"[START] Initializing duplicate scan ({'acoustic audio fingerprinting' if use_fp else 'tag & filename matching'})...")
-            progress_cb("[INFO] Scanning configured music library paths...")
-            logger.info("[SSE] Fetching song library...")
-            songs = song_repo.get_all_songs(force_refresh=True, progress_cb=progress_cb)
-            progress_cb(f"[INFO] Loaded {len(songs)} song(s) from local library.")
-            logger.info(f"[SSE] Got {len(songs)} songs, starting duplicate detection...")
+            if not device_id or device_id.lower() == "local":
+                progress_cb(f"[START] Initializing duplicate scan on Local Library ({'acoustic audio fingerprinting' if use_fp else 'tag & filename matching'})...")
+                progress_cb("[INFO] Scanning configured music library paths...")
+                logger.info("[SSE] Fetching song library...")
+                songs = song_repo.get_all_songs(force_refresh=True, progress_cb=progress_cb)
+                progress_cb(f"[INFO] Loaded {len(songs)} song(s) from local library.")
+                logger.info(f"[SSE] Got {len(songs)} songs, starting duplicate detection...")
 
-            if not songs:
-                progress_cb("[WARN] No audio tracks found in local folders. Check your config.json sync paths.")
+                if not songs:
+                    progress_cb("[WARN] No audio tracks found in local folders. Check your config.json sync paths.")
 
-            result = ui_stats.detect_duplicate_songs(
-                songs,
-                use_fingerprint=use_fp,
-                progress_cb=progress_cb,
-            )
+                result = ui_stats.detect_duplicate_songs(
+                    songs,
+                    use_fingerprint=use_fp,
+                    progress_cb=progress_cb,
+                )
+                cache_key = f"{song_repo.CACHE_KEY_DUPLICATES}:{'fp' if use_fp else 'tag'}"
+            else:
+                from device_providers.registry import DeviceProviderRegistry
+                provider = DeviceProviderRegistry.get_provider(device_id)
+                dev_info = provider.get_device_info()
+                dev_name = dev_info.get("device_name", device_id)
+                progress_cb(f"[START] Initializing duplicate scan on remote device [{dev_name}]...")
+                if use_fp:
+                    progress_cb(f"[INFO] Notice: Remote tracks are analyzed using metadata tags & filenames.")
+                songs = provider.get_songs(force_refresh=True, progress_cb=progress_cb)
+                progress_cb(f"[INFO] Loaded {len(songs)} song(s) from [{dev_name}].")
+
+                if not songs:
+                    progress_cb(f"[WARN] No audio tracks found on [{dev_name}].")
+
+                result = ui_stats.detect_duplicate_songs(
+                    songs,
+                    use_fingerprint=False,
+                    progress_cb=progress_cb,
+                )
+                if use_fp:
+                    result["warning"] = f"Acoustic waveform fingerprinting is supported for local storage. Remote device [{dev_name}] duplicate scan completed using tag & filename matching."
+                cache_key = f"cache:duplicates:{device_id}:{'fp' if use_fp else 'tag'}"
 
             logger.info(
                 f"[SSE] Detection complete: {result.get('cluster_count', 0)} cluster(s), "
@@ -179,7 +291,6 @@ def stream_duplicates():
             # Write result into the repo cache (optional — silently skipped if Redis is
             # disabled or unavailable) so subsequent /api/duplicates calls are instant.
             try:
-                cache_key = f"{song_repo.CACHE_KEY_DUPLICATES}:{'fp' if use_fp else 'tag'}"
                 song_repo._cache_set(cache_key, result)
                 logger.info(f"[SSE] Cached result under key '{cache_key}'")
             except Exception as cache_err:

@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeof loadDashboardStats === 'function') loadDashboardStats();
   if (typeof loadSongs === 'function') loadSongs();
   if (typeof loadDuplicates === 'function') loadDuplicates();
+  if (typeof refreshDuplicateDeviceList === 'function') refreshDuplicateDeviceList();
   if (typeof loadHiddenFiles === 'function') loadHiddenFiles();
   if (typeof loadSyncedHistory === 'function') loadSyncedHistory();
   if (typeof loadPlaylists === 'function') loadPlaylists();

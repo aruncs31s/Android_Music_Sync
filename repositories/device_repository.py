@@ -137,6 +137,8 @@ class DeviceRepository(BaseRepository):
         self._cache_delete(f"cache:device_songs:{device_id.replace(':', '_')}")
         self._cache_delete("cache:devices:summary")
         self._cache_delete("cache:dashboard:stats")
+        self._cache_delete_pattern(f"cache:duplicates:{device_id}*")
+        self._cache_delete_pattern(f"cache:duplicates:{device_id.replace(':', '_')}*")
 
         return del_res.to_dict()
 

@@ -36,13 +36,15 @@ class DeviceProviderRegistry:
             if clean_id.lower().startswith(prefix):
                 return factory(clean_id)
 
-        # ADB Device
-        if clean_id.startswith("adb_") or clean_id.startswith("adb:"):
-            return AdbDeviceProvider(clean_id)
-
         # Over-IP Peer
-        if clean_id.startswith("ip_") or clean_id.startswith("ip:") or clean_id.startswith("http://") or clean_id.startswith("https://"):
+        if (
+            clean_id.startswith("ip_")
+            or clean_id.startswith("ip:")
+            or clean_id.startswith("http://")
+            or clean_id.startswith("https://")
+            or (clean_id.count(".") >= 3 and any(c.isdigit() for c in clean_id))
+        ):
             return OverIpDeviceProvider(clean_id)
 
-        # Fallback to local if unknown format
-        return LocalDeviceProvider(clean_id)
+        # ADB Device (prefixed with adb_ / adb: or raw serial string)
+        return AdbDeviceProvider(clean_id)

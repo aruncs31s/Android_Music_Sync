@@ -1,6 +1,9 @@
 import os
 import sys
 import shutil
+import struct
+import wave
+import random
 import unittest
 import tempfile
 from unittest.mock import patch, MagicMock
@@ -54,6 +57,113 @@ class TestAudioFingerprint(unittest.TestCase):
         self.assertFalse(audio_fingerprint.are_fingerprints_equal("AQAA...", "BBAA..."))
         self.assertFalse(audio_fingerprint.are_fingerprints_equal("", "AQAA..."))
         self.assertFalse(audio_fingerprint.are_fingerprints_equal(None, "AQAA..."))
+
+    def test_get_fingerprint_similarity(self):
+        # Exact match is a fast path and always scores 1.0.
+        self.assertEqual(audio_fingerprint.get_fingerprint_similarity("AQAA", "AQAA"), 1.0)
+        self.assertEqual(audio_fingerprint.get_fingerprint_similarity("  AQAA  ", "AQAA"), 1.0)
+        # Missing fingerprints never match.
+        self.assertEqual(audio_fingerprint.get_fingerprint_similarity(None, "AQAA"), 0.0)
+        self.assertEqual(audio_fingerprint.get_fingerprint_similarity("", "AQAA"), 0.0)
+        # Invalid/garbage fingerprints degrade gracefully to no-match.
+        self.assertEqual(audio_fingerprint.get_fingerprint_similarity("AQAA", "BBAA"), 0.0)
+
+    def test_durations_are_compatible(self):
+        self.assertTrue(audio_fingerprint.durations_are_compatible(None, 200.0))
+        self.assertTrue(audio_fingerprint.durations_are_compatible(200.0, 201.0))
+        self.assertTrue(audio_fingerprint.durations_are_compatible(200.0, 208.0))
+        self.assertFalse(audio_fingerprint.durations_are_compatible(200.0, 260.0))
+
+    def test_fingerprints_match_applies_duration_guard(self):
+        # Identical fingerprints but wildly different lengths => not the same recording.
+        self.assertFalse(
+            audio_fingerprint.fingerprints_match("AQAA", "AQAA", 120.0, 240.0)
+        )
+        self.assertTrue(
+            audio_fingerprint.fingerprints_match("AQAA", "AQAA", 120.0, 121.0)
+        )
+
+    @patch("utils.audio_fingerprint.is_fpcalc_available", return_value=True)
+    @patch("utils.audio_fingerprint.generate_audio_fingerprint")
+    @patch("utils.audio_fingerprint.fingerprints_match")
+    def test_detect_duplicates_similar_not_identical_fingerprints(
+        self, mock_match, mock_gen, mock_avail
+    ):
+        # Two *different* fingerprint strings that similarity considers a match
+        # (as happens for the same song re-encoded) must still cluster together.
+        variants = {"FINGERPRINT_VARIANT_A", "FINGERPRINT_VARIANT_B"}
+        mock_match.side_effect = lambda fp1, fp2, *a, **kw: {fp1, fp2} <= variants
+
+        def fake_fp(filepath, *args, **kwargs):
+            if filepath == self.song_a:
+                return {"duration": 200.0, "fingerprint": "FINGERPRINT_VARIANT_A"}
+            if filepath == self.song_b:
+                return {"duration": 200.0, "fingerprint": "FINGERPRINT_VARIANT_B"}
+            return {"duration": 200.0, "fingerprint": "OTHER_SONG"}
+
+        mock_gen.side_effect = fake_fp
+
+        songs = [
+            {"filepath": self.song_a, "title": "", "artist": "", "filename": "a.mp3"},
+            {"filepath": self.song_b, "title": "", "artist": "", "filename": "b.m4a"},
+            {"filepath": self.song_c, "title": "Solo", "artist": "", "filename": "c.flac"},
+        ]
+
+        result = stats_manager.detect_duplicate_songs(songs, use_fingerprint=True)
+
+        self.assertTrue(result["fpcalc_available"])
+        self.assertEqual(result["cluster_count"], 1)
+        cluster = result["clusters"][0]
+        self.assertEqual(cluster["match_type"], "audio_fingerprint")
+        cluster_paths = [s["filepath"] for s in cluster["songs"]]
+        self.assertIn(self.song_a, cluster_paths)
+        self.assertIn(self.song_b, cluster_paths)
+        self.assertNotIn(self.song_c, cluster_paths)
+
+    def test_group_fingerprints_exact_and_none(self):
+        groups = audio_fingerprint.group_fingerprints(
+            ["AAAA", "AAAA", None, "BBBB", ""]
+        )
+        self.assertEqual(groups, [[0, 1], [3]])
+
+    def _make_noise_wav(self, path, seed, seconds=30, rate=8000):
+        random.seed(seed)
+        with wave.open(path, "wb") as w:
+            w.setnchannels(1)
+            w.setsampwidth(2)
+            w.setframerate(rate)
+            frames = b"".join(
+                struct.pack("<h", random.randint(-30000, 30000))
+                for _ in range(rate * seconds)
+            )
+            w.writeframes(frames)
+
+    @unittest.skipUnless(
+        audio_fingerprint.is_fpcalc_available()
+        and audio_fingerprint.is_similarity_available(),
+        "fpcalc/libchromaprint not available",
+    )
+    def test_group_fingerprints_real_audio_similarity(self):
+        # Two fingerprints of the SAME audio (full track vs first 10s) must group
+        # even though their strings differ; a different recording must not.
+        wav_a = os.path.join(self.temp_dir, "noise_a.wav")
+        wav_b = os.path.join(self.temp_dir, "noise_b.wav")
+        self._make_noise_wav(wav_a, seed=1)
+        self._make_noise_wav(wav_b, seed=2)
+
+        full = audio_fingerprint.generate_audio_fingerprint(wav_a)
+        short = audio_fingerprint.generate_audio_fingerprint(wav_a, length=10)
+        other = audio_fingerprint.generate_audio_fingerprint(wav_b)
+
+        self.assertIsNotNone(full)
+        self.assertIsNotNone(short)
+        self.assertIsNotNone(other)
+        self.assertNotEqual(full["fingerprint"], short["fingerprint"])
+
+        groups = audio_fingerprint.group_fingerprints(
+            [full["fingerprint"], short["fingerprint"], other["fingerprint"]]
+        )
+        self.assertEqual(groups, [[0, 1], [2]])
 
     def test_sqlite_fingerprint_caching(self):
         st = os.stat(self.song_a)
